@@ -8,6 +8,7 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
+import { releaseStorageIfUnreferenced } from "./projectCascade";
 
 /**
  * Copies a project's file tree into another project. Shared by project
@@ -20,9 +21,10 @@ export const MAX_COPY_FILES = 5000;
 
 /**
  * Inserts a copy of every file and folder of `sourceId` into `targetId`,
- * keeping the tree shape. Binary files briefly share the source's storage
- * blob; `copyBlobs` then gives each copy its own, so deleting either project
- * never removes a blob the other still uses.
+ * keeping the tree shape. Binary files share the source's storage blob until
+ * `copyBlobs` gives each copy its own. Blob deletes are reference-checked
+ * (`releaseStorageIfUnreferenced`), so deleting either side meanwhile, or a
+ * `copyBlobs` run that never finishes, can't remove a blob the other uses.
  */
 export async function copyProjectFiles(
   ctx: MutationCtx,
@@ -110,7 +112,8 @@ export const getStorageId = internalQuery({
 
 /**
  * Points the file at its own blob, unless it changed or was deleted while the
- * blob was being copied; then the unused copy is dropped instead.
+ * blob was being copied; then the unused copy is dropped instead. The old blob
+ * is freed if nothing else uses it any more (the source was deleted meanwhile).
  */
 export const swapStorageId = internalMutation({
   args: {
@@ -122,6 +125,7 @@ export const swapStorageId = internalMutation({
     const file = await ctx.db.get("files", fileId);
     if (file?.storageId === from) {
       await ctx.db.patch("files", fileId, { storageId: to });
+      await releaseStorageIfUnreferenced(ctx, from);
     } else {
       await ctx.storage.delete(to);
     }

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import { releaseFileStorage } from "./checkpoints";
+import { releaseStorageIfUnreferenced } from "./projectCascade";
 import { Doc, Id } from "./_generated/dataModel";
 
 export const getFiles = query({
@@ -380,13 +380,13 @@ export const deleteFile = mutation({
           }
        }
 
-       // Delete storage file if it exists
-       if (item.storageId) {
-        await releaseFileStorage(ctx, item.storageId);
-      }
-
       // Delete the file/folder itself
       await ctx.db.delete("files", fileId);
+
+      // Then its blob, unless another file or checkpoint still uses it
+      if (item.storageId) {
+        await releaseStorageIfUnreferenced(ctx, item.storageId);
+      }
     };
 
     await deleteRecursive(args.id);
