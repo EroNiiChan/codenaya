@@ -68,7 +68,10 @@ test.describe("first build preview", () => {
         await page.screenshot({ path: testInfo.outputPath(`building-${name}.png`) });
       }
 
-      // package.json alone doesn't boot it: the run is still writing.
+      // No package.json, nothing to boot yet.
+      expect(sandboxRequests).toBe(0);
+
+      // package.json boots the sandbox under the build card while the run is still writing.
       await system.mutation(api.system.createFile, {
         internalKey,
         projectId,
@@ -76,13 +79,12 @@ test.describe("first build preview", () => {
         content: "{}\n",
       });
       await expect(building).toContainText("package.json");
-      await page.waitForTimeout(3_000);
-      expect(sandboxRequests).toBe(0);
+      await expect.poll(() => sandboxRequests, { timeout: 30_000 }).toBeGreaterThan(0);
+      await expect(building).toBeVisible();
 
       await system.mutation(api.system.updateMessageStatus, { internalKey, messageId, status: "completed" });
       await expect(page.locator('iframe[title="Preview"]')).toBeVisible({ timeout: 30_000 });
       await expect(building).toBeHidden();
-      expect(sandboxRequests).toBeGreaterThan(0);
       await page.screenshot({ path: testInfo.outputPath("booted-desktop.png") });
     } finally {
       await system.mutation(api.system.updateMessageStatus, { internalKey, messageId, status: "cancelled" });
