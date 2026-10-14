@@ -186,7 +186,23 @@ describe("showcase.getFeatured", () => {
     expect(titles(await t.query(api.showcase.getFeatured, { limit: 1 }))).toEqual(["new pick"]);
   });
 
-  test("is empty when nothing is featured", async () => {
+  test("falls back to the most upvoted entries with a screenshot when nothing is featured", async () => {
+    const t = convexTest(schema, modules);
+    const imageId = await storeImage(t);
+    await seed(t, [
+      { title: "popular, no image", publishedAt: 1, upvotes: 99 },
+      { title: "liked", publishedAt: 2, upvotes: 5, previewImageId: imageId },
+      { title: "loved", publishedAt: 3, upvotes: 9, previewImageId: imageId },
+      { title: "unlisted", publishedAt: 4, upvotes: 50, previewImageId: imageId, status: "unlisted" },
+    ]);
+
+    const fallback = await t.query(api.showcase.getFeatured, {});
+    expect(titles(fallback)).toEqual(["loved", "liked"]);
+    expect(fallback[0].previewUrl).toEqual(expect.any(String));
+    expect(titles(await t.query(api.showcase.getFeatured, { limit: 1 }))).toEqual(["loved"]);
+  });
+
+  test("is empty when nothing is featured and no entry has a screenshot", async () => {
     const t = convexTest(schema, modules);
     await seed(t, [{ title: "popular", publishedAt: 1, upvotes: 99 }]);
 
@@ -209,7 +225,8 @@ describe("showcase.setFeatured", () => {
     expect(titles(await t.query(api.showcase.getFeatured, {}))).toEqual(["pick"]);
 
     await t.mutation(internal.showcase.setFeatured, { id, featured: false });
-    expect(await t.query(api.showcase.getFeatured, {})).toEqual([]);
+    const stored = await t.run((ctx) => ctx.db.get(id));
+    expect(stored?.featured).toBe(false);
   });
 
   test("rejects entries without a screenshot or not published", async () => {

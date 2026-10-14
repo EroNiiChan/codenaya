@@ -195,17 +195,35 @@ export const getTrending = query({
   },
 });
 
-/** Hand-picked entries for the landing page strip, most recently published first. */
+/** How many top-voted entries the landing strip fallback looks through for covers. */
+const FALLBACK_WINDOW = 50;
+
+/**
+ * Entries for the landing page strip: the hand-picked ones, most recently
+ * published first. Until something is featured, the most upvoted entries
+ * with a screenshot stand in, so the strip never shows placeholder art.
+ */
 export const getFeatured = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const results = await ctx.db
+    const limit = args.limit ?? 6;
+
+    let results = await ctx.db
       .query("showcaseProjects")
       .withIndex("by_status_and_featured_and_publishedAt", (q) =>
         q.eq("status", "published").eq("featured", true)
       )
       .order("desc")
-      .take(args.limit ?? 6);
+      .take(limit);
+
+    if (results.length === 0) {
+      const topVoted = await ctx.db
+        .query("showcaseProjects")
+        .withIndex("by_status_and_upvotes", (q) => q.eq("status", "published"))
+        .order("desc")
+        .take(FALLBACK_WINDOW);
+      results = topVoted.filter((item) => item.previewImageId).slice(0, limit);
+    }
 
     return await Promise.all(results.map((item) => toPublicEntry(ctx, item)));
   },
