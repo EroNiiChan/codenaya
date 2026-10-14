@@ -546,12 +546,11 @@ export const AgentRun = ({
                   ? `Worked for ${formatDuration(endedAt - startedAt)}`
                   : "Worked"}
             </span>
-            <span
-              className={cn("min-w-0 truncate text-muted-foreground", settle)}
-              title={status !== "cancelled" ? summary : undefined}
-            >
-              {status !== "cancelled" && `· ${summary}`}
-            </span>
+            {status !== "cancelled" && (
+              <span className={cn("min-w-0 truncate text-muted-foreground", settle)} title={summary}>
+                · {summary}
+              </span>
+            )}
             {/* Outside the truncating summary, so the summary is cut first and
                 the only text signal that a step failed stays visible (#264). */}
             {errors > 0 && (

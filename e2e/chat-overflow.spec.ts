@@ -33,14 +33,17 @@ test.describe("chat panel overflow", () => {
       const liveRun = page.locator('[data-run-status="running"]');
       await expect(liveRun.getByText("Read 17 files")).toBeVisible({ timeout: 60_000 });
 
-      // At the default chat width the failed step's count stays in the
-      // collapsed header instead of being truncated away (#264).
-      const doneRun = page.locator('[data-run-status="completed"]');
-      const errorCount = doneRun.getByText("· 1 error", { exact: true });
+      // Where the summary truncates, the failed step's count stays in the
+      // collapsed header instead of being cut off with it (#264).
+      await setChatPanelWidth(page, 320);
+      const header = page
+        .locator('[data-run-status="completed"]')
+        .getByRole("button", { name: /Worked for/ });
+      const errorCount = header.getByText("· 1 error", { exact: true });
       await expect(errorCount).toBeVisible();
       const countBox = (await errorCount.boundingBox())!;
-      const headerBox = (await doneRun.getByRole("button", { name: /Worked for/ }).boundingBox())!;
-      expect(countBox.x + countBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width);
+      const chevronBox = (await header.locator("svg").last().boundingBox())!;
+      expect(countBox.x + countBox.width).toBeLessThanOrEqual(chevronBox.x);
 
       for (const width of [320, 480]) {
         await setChatPanelWidth(page, width);
