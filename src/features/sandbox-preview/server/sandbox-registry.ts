@@ -3,6 +3,8 @@ import { Sandbox } from "e2b";
 interface OwnedSandbox {
   sandbox: Sandbox;
   userId: string;
+  /** Re-runs the install through the boot stream; only on the instance that booted it. */
+  reinstall?: () => void;
 }
 
 /**
@@ -18,8 +20,22 @@ const globalForSandboxes = globalThis as typeof globalThis & {
 };
 const sandboxes = (globalForSandboxes.__codenayaSandboxes ??= new Map());
 
-export const rememberSandbox = (sandbox: Sandbox, userId: string) => {
-  sandboxes.set(sandbox.sandboxId, { sandbox, userId });
+export const rememberSandbox = (
+  sandbox: Sandbox,
+  userId: string,
+  reinstall?: () => void,
+) => {
+  sandboxes.set(sandbox.sandboxId, { sandbox, userId, reinstall });
+};
+
+/**
+ * Asks the instance that booted the sandbox to re-run its install, so the
+ * output reaches the preview terminal. `false` when this instance didn't boot it.
+ */
+export const requestReinstall = (sandboxId: string) => {
+  const reinstall = sandboxes.get(sandboxId)?.reinstall;
+  reinstall?.();
+  return Boolean(reinstall);
 };
 
 export const forgetSandbox = (sandboxId: string) => {

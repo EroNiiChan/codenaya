@@ -61,6 +61,15 @@ describe("scaffoldViteApp tool", () => {
     expect(result).toMatch(/Folders: src \(id\d+\), src\/lib \(id\d+\)/);
   });
 
+  it("writes package.json after every file outside the root", async () => {
+    await scaffold();
+
+    const files = db.rows.filter((row) => row.type === "file");
+    const packageJson = files.findIndex((row) => row.name === "package.json");
+    const lastNested = files.findLastIndex((row) => row.parentId !== undefined);
+    expect(packageJson).toBeGreaterThan(lastNested);
+  });
+
   it("keeps files and reuses folders that already exist", async () => {
     db.rows = [
       { _id: "src", name: "src", type: "folder" },

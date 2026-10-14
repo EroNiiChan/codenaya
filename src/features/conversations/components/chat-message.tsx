@@ -1,6 +1,7 @@
 "use client";
 
 import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import {
   BookOpenIcon,
   CheckIcon,
@@ -139,6 +140,29 @@ export const UserMessage = ({
 };
 
 /**
+ * Reveals text a few characters per frame, so a reply that arrives while the
+ * user is watching types out instead of appearing all at once. Text already
+ * complete on mount (history) shows in full.
+ */
+const useTypewriter = (text: string, animate: boolean) => {
+  const [shown, setShown] = useState(animate ? 0 : text.length);
+  useEffect(() => {
+    if (shown >= text.length) return;
+    // One character per frame when close, up to 8 when far behind, so a long
+    // reply catches up in seconds rather than minutes.
+    const frame = requestAnimationFrame(() =>
+      setShown((s) => {
+        const step = Math.min(8, Math.max(1, Math.ceil((text.length - s) / 40)));
+        return Math.min(text.length, s + step);
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [shown, text.length]);
+  // Animation turned off mid-reply (e.g. reduced motion): show it all.
+  return animate ? text.slice(0, shown) : text;
+};
+
+/**
  * Plan replies are checklists (#263). Their checkboxes are display-only, so
  * screen readers skip them and read the step text instead.
  */
@@ -184,6 +208,8 @@ export const AssistantMessage = ({
   const [startedProcessing] = useState(status === "processing");
   const settle = startedProcessing && "animate-fade-up motion-reduce:animate-none";
   const isPlan = message.mode === "plan";
+  const reduceMotion = useReducedMotion();
+  const shown = useTypewriter(content, startedProcessing && !reduceMotion);
 
   const restoreAction = onRestore && status !== "processing" && (
     <MessageAction
@@ -247,7 +273,7 @@ export const AssistantMessage = ({
             controls={{ code: { copy: true, download: false } }}
             components={replyComponents}
           >
-            {content}
+            {shown}
           </MessageResponse>
           {isPlan && isLast && onBuildPlan && (
             <Button
