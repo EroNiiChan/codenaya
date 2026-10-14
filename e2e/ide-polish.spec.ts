@@ -42,7 +42,6 @@ test.describe("IDE polish", () => {
 
     await page.getByRole("button", { name: "Publish" }).click();
     const dialog = page.getByRole("dialog", { name: "Publish to Showcase" });
-    await expect(dialog.getByText(/can't be featured on the home page/)).toBeVisible();
     await expect(dialog.getByText("Add some files to this project before publishing it.")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Publish" })).toBeDisabled();
   });

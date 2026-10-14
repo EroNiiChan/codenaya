@@ -7,7 +7,7 @@ import { ArrowRight } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import { ShowcaseCard } from "@/features/showcase/components/showcase-card";
-import { useShowcaseFeatured } from "@/features/showcase/hooks/use-showcase";
+import { useShowcaseTrending } from "@/features/showcase/hooks/use-showcase";
 
 const STRIP_SIZE = 6;
 
@@ -35,15 +35,15 @@ export const LandingCommunityStrip = () => (
 );
 
 /**
- * Proof from real usage: the live "N projects built" total and the featured
- * showcase projects, each linking to its /showcase page. Renders nothing
- * until there is a real number or project to show.
+ * Proof from real usage: the live "N projects built" total and the top
+ * public showcase projects, each linking to its /showcase page. Renders
+ * nothing until there is a real number or project to show.
  */
 const CommunityStrip = () => {
-  const featured = useShowcaseFeatured(STRIP_SIZE);
+  const trending = useShowcaseTrending(STRIP_SIZE);
   const projectsBuilt = useQuery(api.stats.projectsBuilt);
 
-  const hasProjects = !!featured && featured.length > 0;
+  const hasProjects = !!trending && trending.length > 0;
   if (!hasProjects && !projectsBuilt) return null;
 
   return (
@@ -72,7 +72,7 @@ const CommunityStrip = () => {
         {hasProjects && (
           // Flex rather than grid so a short last row stays centred.
           <div className="flex flex-wrap justify-center gap-5">
-            {featured.map((project) => (
+            {trending.map((project) => (
               <div
                 key={project._id}
                 className="w-full sm:w-[calc((100%-1.25rem)/2)] lg:w-[calc((100%-2.5rem)/3)]"
