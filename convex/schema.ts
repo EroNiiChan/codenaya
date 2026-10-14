@@ -106,7 +106,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_parent", ["parentId"])
-    .index("by_project_parent", ["projectId", "parentId"]),
+    .index("by_project_parent", ["projectId", "parentId"])
+    .index("by_storageId", ["storageId"]),
 
   /**
    * The project's files just before an agent run (#43), restorable from the
@@ -218,6 +219,7 @@ export default defineSchema({
     .index("by_status_and_importCount", ["status", "importCount"])
     .index("by_owner", ["ownerId"])
     .index("by_projectId", ["projectId"])
+    .index("by_previewImageId", ["previewImageId"])
     .index("by_status_and_category_and_publishedAt", ["status", "category", "publishedAt"])
     .index("by_status_and_category_and_upvotes", ["status", "category", "upvotes"])
     .index("by_status_and_category_and_importCount", ["status", "category", "importCount"])
