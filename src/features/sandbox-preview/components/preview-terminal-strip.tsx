@@ -60,7 +60,6 @@ export const PreviewTerminalStrip = ({
     <button
       type="button"
       onClick={onExpand}
-      aria-label="Show logs"
       aria-expanded={false}
       title={line || undefined}
       data-status={status}
@@ -72,7 +71,7 @@ export const PreviewTerminalStrip = ({
       </span>
       <span className="shrink-0 flex items-center gap-1 font-medium text-muted-foreground transition-colors group-hover:text-foreground">
         <TerminalSquareIcon aria-hidden="true" className="size-3.5" />
-        <span className="hidden @sm:inline">Show logs</span>
+        <span className="sr-only @sm:not-sr-only">Show logs</span>
         <ChevronUpIcon aria-hidden="true" className="size-3.5" />
       </span>
     </button>

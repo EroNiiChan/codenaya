@@ -53,6 +53,15 @@ import { Id } from "../../../../convex/_generated/dataModel";
 
 type PreviewEngine = "sandbox" | "webcontainer";
 
+const WAITING_FOR_BUILD = "Waiting for the first build...";
+
+/** What the collapsed terminal shows until the engine writes its first line. */
+const stripPlaceholder = (building: boolean, isLoading: boolean) => {
+  if (building) return WAITING_FOR_BUILD;
+  if (isLoading) return "Starting...";
+  return "No output yet";
+};
+
 export const PreviewView = ({
   projectId,
   firstBuild,
@@ -280,7 +289,7 @@ export const PreviewView = ({
           )}
           {previewUrl && <span className="truncate">{previewUrl}</span>}
           {!isLoading && !previewUrl && !error && (
-            <span>{building ? "Waiting for the first build..." : "Ready to preview"}</span>
+            <span>{building ? WAITING_FOR_BUILD : "Ready to preview"}</span>
           )}
         </div>
 
@@ -392,13 +401,7 @@ export const PreviewView = ({
             <PreviewTerminalStrip
               status={status}
               output={terminalOutput}
-              placeholder={
-                building
-                  ? "Waiting for the first build..."
-                  : isLoading
-                    ? "Starting..."
-                    : "No output yet"
-              }
+              placeholder={stripPlaceholder(Boolean(building), isLoading)}
               onExpand={toggleTerminal}
             />
           </div>

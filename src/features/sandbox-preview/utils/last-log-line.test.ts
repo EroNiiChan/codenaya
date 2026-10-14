@@ -18,6 +18,10 @@ describe("lastLogLine", () => {
     expect(lastLogLine("progress 10%\rprogress 90%\rdone\r\n")).toBe("done");
   });
 
+  it("finds the last line at the end of a long buffer", () => {
+    expect(lastLogLine(`${"added 1 package\n".repeat(10_000)}ready\n`)).toBe("ready");
+  });
+
   it("returns an empty string when there is no output", () => {
     expect(lastLogLine("")).toBe("");
     expect(lastLogLine("\n\x1b[2K\n")).toBe("");
