@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@/lib/utils";
-import { formatDuration, useNow } from "@/features/conversations/components/agent-run";
-import { BOOT_PHASES, type BootPhase } from "@/features/sandbox-preview/utils/boot-phase";
+import { formatDuration } from "@/lib/format-duration";
+import { useNow } from "@/hooks/use-now";
+import { BOOT_PHASES, type BootHistory, type BootPhase } from "@/features/sandbox-preview/utils/boot-phase";
 
 const STEPS: { phase: BootPhase; label: string }[] = [
   { phase: "create", label: "Create sandbox" },
@@ -59,7 +60,7 @@ const MorphText = ({ text, from }: { text: string; from: string }) => {
 
   return (
     <>
-      <span aria-hidden="true" className="whitespace-pre">
+      <span aria-hidden="true" className="whitespace-pre-wrap break-words">
         {chars.map(({ char, settled }, index) => (
           <span
             key={index}
@@ -108,13 +109,15 @@ const TypedLine = ({ text }: { text: string }) => {
  */
 export const PreviewBootSteps = ({
   phase,
+  history,
   log,
   firstStepLabel,
   onShowLogs,
-  variant = "morph",
+  variant = "stream",
 }: {
   /** The phase in progress; `null` before the first one is reported. */
   phase: BootPhase | null;
+  history?: BootHistory;
   /** The boot's terminal output. */
   log: string;
   /** WebContainer boots in the page, so its first step isn't a sandbox. */
@@ -125,12 +128,15 @@ export const PreviewBootSteps = ({
 }) => {
   const [startedAt] = useState(() => Date.now());
   const now = useNow(true);
+  const reduceMotion = useReducedMotion();
   const key = phase ?? "create";
   const current = Math.min(BOOT_PHASES.indexOf(key), STEPS.length - 1);
   // When each phase was first seen and how much log there was by then, for
   // the per-step times and log excerpts.
-  const [marks, setMarks] = useState<Partial<Record<BootPhase, { at: number; logAt: number }>>>({});
-  if (marks[key] === undefined) setMarks({ ...marks, [key]: { at: now, logAt: log.length } });
+  const [observedMarks, setMarks] = useState<Partial<Record<BootPhase, { at: number; logAt: number }>>>({});
+  if (!history && observedMarks[key] === undefined)
+    setMarks({ ...observedMarks, [key]: { at: now, logAt: log.length } });
+  const marks = history ?? observedMarks;
   const [expanded, setExpanded] = useState<BootPhase | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -181,7 +187,7 @@ export const PreviewBootSteps = ({
                 </span>
                 Starting preview
               </span>
-              <span className="tabular-nums">{formatDuration(now - startedAt)}</span>
+              <span className="tabular-nums">{formatDuration(now - (marks.create?.at ?? startedAt))}</span>
             </div>
             <div aria-hidden="true" className="relative h-px w-full overflow-hidden bg-border">
               <motion.div
@@ -192,8 +198,8 @@ export const PreviewBootSteps = ({
               />
               <motion.div
                 className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-brand to-transparent"
-                animate={{ left: ["-6rem", `${progress * 100}%`] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                animate={reduceMotion ? { left: "0%" } : { left: ["-6rem", `${progress * 100}%`] }}
+                transition={{ duration: 1.6, repeat: reduceMotion ? 0 : Infinity, ease: "easeInOut" }}
               />
             </div>
           </div>
@@ -270,7 +276,7 @@ export const PreviewBootSteps = ({
                 key={active.phase}
                 ref={stageRef}
                 initial={{ scale: 0.94, opacity: 0.6 }}
-                animate={{ scale: [0.94, 1.03, 1], opacity: 1 }}
+                animate={{ scale: reduceMotion ? 1 : [0.94, 1.03, 1], opacity: 1 }}
                 transition={{ duration: 0.7, ease: EASE_OUT }}
                 style={{ originX: 0 }}
                 className={cn(
