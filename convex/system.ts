@@ -7,7 +7,8 @@ import {
   messageStepValidator,
   runModelValidator,
 } from "./schema";
-import { createCheckpoint, releaseFileStorage } from "./checkpoints";
+import { createCheckpoint } from "./checkpoints";
+import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
 import { assertOwnedImages, withImageUrls } from "./chatImages";
 import { resolveProjectSkills } from "./skills";
 import { countProjectBuilt } from "./stats";
@@ -568,13 +569,13 @@ export const deleteFile = mutation({
         }
       }
 
-      // Delete storage file if it exists
-      if (item.storageId) {
-        await releaseFileStorage(ctx, item.storageId);
-      }
-
       // Delete the file/folder itself
       await ctx.db.delete(fileId);
+
+      // Then its blob, unless another file or checkpoint still uses it
+      if (item.storageId) {
+        await releaseStorageIfUnreferenced(ctx, item.storageId);
+      }
     };
 
     await deleteRecursive(args.fileId);
@@ -597,13 +598,9 @@ export const cleanup = mutation({
       .collect();
 
     for (const file of files) {
-      // Delete storage file if it exists
-      if (file.storageId) {
-        await releaseFileStorage(ctx, file.storageId);
-      }
-
       await ctx.db.delete(file._id);
     }
+    await releaseBlobs(ctx, files.map((file) => file.storageId));
 
     return { deleted: files.length };
   },
