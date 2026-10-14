@@ -239,7 +239,10 @@ export const useSandbox = ({
           fetch(`/api/sandbox/${sandboxId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ files: changedFiles }),
+            body: JSON.stringify({
+              files: changedFiles,
+              installCommand: settings?.installCommand,
+            }),
           })
         )
         .catch(() => {
@@ -249,7 +252,7 @@ export const useSandbox = ({
     }, 300); // Short enough to feel instant, long enough to batch a burst of writes
 
     return () => clearTimeout(timeoutId);
-  }, [files, status]);
+  }, [files, status, settings?.installCommand]);
 
   // Cleanup sandbox on unmount or when disabled
   useEffect(() => {

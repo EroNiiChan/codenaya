@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Allotment } from "allotment";
 import {
   Loader2Icon,
@@ -26,6 +26,7 @@ import {
   type PreviewDevice,
 } from "@/features/sandbox-preview/components/preview-device-toggle";
 import type { SandboxErrorKind } from "@/features/sandbox-preview/utils/sandbox-error";
+import { hasRootPackageJson } from "@/features/sandbox-preview/utils/file-tree";
 
 import { Button } from "@/components/ui/button";
 
@@ -44,7 +45,14 @@ import { Id } from "../../../../convex/_generated/dataModel";
 
 type PreviewEngine = "sandbox" | "webcontainer";
 
-export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
+export const PreviewView = ({
+  projectId,
+  firstBuild,
+}: {
+  projectId: Id<"projects">;
+  /** The agent is writing a new project's first build (see ProjectIdView). */
+  firstBuild: boolean;
+}) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
@@ -58,21 +66,18 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const engineParam = searchParams.get("engine") as PreviewEngine | null;
   const activeEngine = engineParam === "webcontainer" ? "webcontainer" : "sandbox";
 
-  // A run that starts before package.json exists is writing the first build.
-  // Booting against it would install a half-written project, so hold the boot
-  // until that run ends; the engine's own gate then starts it.
+  // During the first build the E2B sandbox boots as soon as package.json
+  // exists, so it is warm when the run ends: later files reach it through the
+  // file sync, and a changed package.json re-runs the install (#254).
+  // WebContainer doesn't re-install, so it still waits for the run to end.
   const activeRun = useActiveRun(projectId);
-  const hasPackageJson = files?.some(
-    (file) => file.type === "file" && !file.parentId && file.name === "package.json",
-  );
-  const [firstBuild, setFirstBuild] = useState(false);
-  if (!firstBuild && activeRun && files && !hasPackageJson) setFirstBuild(true);
-  if (firstBuild && activeRun === null) setFirstBuild(false);
-  const holdBoot = activeRun === undefined || firstBuild;
+  const hasPackageJson = files ? hasRootPackageJson(files) : false;
+  const holdSandbox = activeRun === undefined || (firstBuild && !hasPackageJson);
+  const holdWebContainer = activeRun === undefined || firstBuild;
 
   const sandbox = useSandbox({
     files,
-    enabled: activeEngine === "sandbox" && !holdBoot,
+    enabled: activeEngine === "sandbox" && !holdSandbox,
     projectId,
     settings: project?.settings,
   });
@@ -84,7 +89,7 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
 
   const webcontainer = useWebContainer({
     files,
-    enabled: activeEngine === "webcontainer" && !holdBoot,
+    enabled: activeEngine === "webcontainer" && !holdWebContainer,
     publicEnv,
     settings: project?.settings,
   });
@@ -92,6 +97,14 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const activeInstance = activeEngine === "sandbox" ? sandbox : webcontainer;
   const { status, previewUrl, error, restart, terminalOutput } = activeInstance;
   const errorKind = activeEngine === "sandbox" ? sandbox.errorKind : null;
+
+  // A boot that started mid-build can fail on files the agent hadn't written
+  // yet; boot once more against the finished build.
+  const wasFirstBuild = useRef(firstBuild);
+  useEffect(() => {
+    if (wasFirstBuild.current && !firstBuild && status === "error") restart();
+    wasFirstBuild.current = firstBuild;
+  }, [firstBuild, status, restart]);
 
   // Only ever called from a user action. WebContainer needs the COOP/COEP headers
   // next.config.ts sets for `?engine=webcontainer`, so switching is a full page
@@ -380,13 +393,14 @@ const PreviewContent = ({
   restart: () => void;
   errorKind: SandboxErrorKind | null;
   onUseWebContainer: () => void;
-  /** The first-build placeholder; the engine stays idle while it's shown. */
+  /** The first-build placeholder, shown over the engine until the run ends. */
   building: ReactNode;
 }) => (
   <div className="size-full rounded-xl overflow-hidden relative isolate">
     <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50 pointer-events-none z-50" />
 
-    {building}
+    {/* Laid over the engine so a pre-warmed preview loads underneath it. */}
+    {building && <div className="absolute inset-0 z-10">{building}</div>}
 
     {error && (
       <div className="size-full flex items-center justify-center text-muted-foreground bg-background p-4">
