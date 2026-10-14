@@ -22,6 +22,12 @@ export const getFilePath = (
   return parts.join("/");
 };
 
+/** Whether the project has a root package.json, i.e. something to boot. */
+export const hasRootPackageJson = (files: FileDoc[]) =>
+  files.some(
+    (file) => file.type === "file" && !file.parentId && file.name === "package.json",
+  );
+
 /**
  * Convert flat Convex files to a flat list of { path, content } for E2B.
  * Only includes text files (skips folders and binary/storage files).

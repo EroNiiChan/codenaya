@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Allotment } from "allotment";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,6 +16,7 @@ import {
   SparklesIcon,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { HelpMenu } from "@/components/help-menu";
@@ -34,6 +35,9 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { PreviewView } from "./preview-view";
 import { ExportPopover } from "./export-popover";
 import { useProject } from "../hooks/use-projects";
+import { useFiles } from "../hooks/use-files";
+import { useActiveRun } from "@/features/conversations/hooks/use-conversations";
+import { hasRootPackageJson } from "@/features/sandbox-preview/utils/file-tree";
 import { useProjectRename } from "../hooks/use-project-rename";
 import { DeleteProjectDialog, ProjectActionsMenu } from "./project-actions";
 import { PublishDialog } from "@/features/showcase/components/publish-dialog";
@@ -103,9 +107,52 @@ export const ProjectIdView = ({
   // mount it on first open and keep it mounted so tab switches don't reboot it.
   const [previewOpened, setPreviewOpened] = useState(openOnPreview);
 
+  // A run that starts before package.json exists is writing the first build.
+  // The preview mounts (hidden) once package.json lands so the sandbox boots
+  // during the run, and the IDE switches to it when the run ends, unless the
+  // user picked a tab meanwhile. Phones keep the chat and get a toast (#254).
+  const activeRun = useActiveRun(projectId);
+  const files = useFiles(projectId);
+  const hasPackageJson = files ? hasRootPackageJson(files) : false;
+  const [firstBuild, setFirstBuild] = useState(false);
+  const [viewPickedDuringBuild, setViewPickedDuringBuild] = useState(false);
+  const [previewReadyToasts, setPreviewReadyToasts] = useState(0);
+  if (!firstBuild && activeRun && files && !hasPackageJson) {
+    setFirstBuild(true);
+    setViewPickedDuringBuild(false);
+  }
+  if (firstBuild && hasPackageJson && !previewOpened) setPreviewOpened(true);
+  if (firstBuild && activeRun === null) {
+    setFirstBuild(false);
+    if (hasPackageJson && !viewPickedDuringBuild) {
+      if (isMobile) {
+        setPreviewReadyToasts((count) => count + 1);
+      } else {
+        setSelectedView("preview");
+        setPreviewOpened(true);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (previewReadyToasts === 0) return;
+    toast.success("Preview ready", {
+      // Clear of the phone tab bar at the bottom.
+      position: "top-center",
+      action: {
+        label: "Open",
+        onClick: () => {
+          setSelectedView("preview");
+          setPreviewOpened(true);
+        },
+      },
+    });
+  }, [previewReadyToasts]);
+
   const selectView = (view: IdeView) => {
     setSelectedView(view);
     if (view === "preview") setPreviewOpened(true);
+    if (firstBuild) setViewPickedDuringBuild(true);
   };
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
@@ -322,7 +369,9 @@ export const ProjectIdView = ({
             activeView !== "preview" && "invisible"
           )}
         >
-          {previewOpened && <PreviewView projectId={projectId} />}
+          {previewOpened && (
+            <PreviewView projectId={projectId} firstBuild={firstBuild} />
+          )}
         </div>
       </div>
 
