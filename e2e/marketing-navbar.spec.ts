@@ -36,7 +36,7 @@ test.describe("marketing navbar (signed out)", () => {
         const header = page.locator("header").first();
         await expect(header.getByRole("link", { name: "Codenaya" })).toBeVisible();
         const bar = await header.getByRole("navigation", { name: "Main" }).boundingBox();
-        expect(bar?.height, `${path} bar height`).toBeCloseTo(64, 0);
+        expect(bar?.height, `${path} bar height`).toBeCloseTo(56, 0);
 
         // Below md the links live in the sheet behind the menu button.
         if (mobile) await header.getByRole("button", { name: "Toggle menu" }).click();

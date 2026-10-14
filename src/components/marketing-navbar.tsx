@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
@@ -32,22 +31,36 @@ const NAV_LINKS = [
 const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`);
 
+/**
+ * The bar's surface: a glass pill floating over the page. Only these classes
+ * differ between the floating and the full-width variant of the header.
+ */
+const SURFACE = {
+  header: "px-3 pt-3 md:pt-4",
+  nav: "max-w-5xl rounded-full pl-5 pr-2 bg-card/70 dark:bg-card/55 backdrop-blur-xl backdrop-saturate-150 border border-border shadow-[0_8px_32px_-12px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]",
+};
+
+const pillButton = "h-9 rounded-full px-4 text-sm font-medium";
+const solidButton = "bg-foreground text-background hover:bg-foreground/85";
+
+/** The current section is marked with the accent: a 6px dot, as status is elsewhere. */
+const ActiveDot = () => <span aria-hidden className="inline-block size-1.5 shrink-0 rounded-full bg-brand" />;
+
 const Brand = () => (
-  <Link href="/" className="flex items-center gap-3 group">
-    <img
-      src="/logo-alt.svg"
-      alt="Codenaya"
-      className="size-7 dark:invert-0 invert transition-transform duration-300 group-hover:rotate-12"
-    />
-    <span className="text-lg font-semibold tracking-tight text-foreground">codenaya</span>
+  <Link
+    href="/"
+    className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  >
+    <img src="/logo-alt.svg" alt="Codenaya" className="size-6 dark:invert-0 invert" />
+    <span className="text-[15px] font-semibold tracking-tight text-foreground">codenaya</span>
   </Link>
 );
 
 type MarketingNavbarProps = {
   /**
-   * The landing page sets this: the bar is fixed over the hero and stays
-   * transparent until the page scrolls. Other pages get a sticky bar that
-   * takes up its own space, so content never sits under it.
+   * The landing page sets this: the bar is fixed over the hero, which has its
+   * own top padding. Other pages get a sticky bar that takes up its own space,
+   * so content never sits under it.
    */
   overlay?: boolean;
 };
@@ -56,38 +69,21 @@ type MarketingNavbarProps = {
 export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    if (!overlay) return;
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [overlay]);
-
-  const solid = !overlay || scrolled;
 
   return (
     <motion.header
-      initial={overlay ? { y: -100, opacity: 0 } : false}
+      initial={overlay ? { y: -8, opacity: 0 } : false}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "top-0 z-50 transition-[background-color,border-color,box-shadow] duration-500",
-        overlay ? "fixed inset-x-0" : "sticky",
-        solid
-          ? "bg-background/80 backdrop-blur-xl border-b border-border/50"
-          : "bg-transparent border-b border-transparent",
-        overlay && scrolled && "shadow-sm",
-      )}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+      className={cn("top-0 z-50", overlay ? "fixed inset-x-0" : "sticky", SURFACE.header)}
     >
       <nav
         aria-label="Main"
-        className="max-w-7xl mx-auto px-6 md:px-8 h-16 flex items-center justify-between"
+        className={cn("mx-auto h-14 flex items-center justify-between", SURFACE.nav)}
       >
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-5">
           <Brand />
+          <span aria-hidden className="hidden md:block h-4 w-px bg-border" />
 
           <ul className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map(({ href, label }) => {
@@ -98,17 +94,12 @@ export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
                     href={href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative flex h-16 items-center px-3 text-sm font-medium transition-colors outline-none focus-visible:text-foreground",
+                      "flex h-8 items-center gap-2 rounded-full px-3 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
+                    {active && <ActiveDot />}
                     {label}
-                    {active && (
-                      <span
-                        aria-hidden
-                        className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-brand"
-                      />
-                    )}
                   </Link>
                 </li>
               );
@@ -116,10 +107,10 @@ export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
           </ul>
         </div>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-1.5">
           {isSignedIn === true && (
             <>
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild variant="ghost" className={pillButton}>
                 <Link href="/">Dashboard</Link>
               </Button>
               <UserMenu avatarClassName="size-7" />
@@ -130,52 +121,58 @@ export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
               <Button
                 asChild
                 variant="ghost"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                className={cn(pillButton, "text-muted-foreground hover:text-foreground")}
               >
                 <Link href={SIGN_IN_URL}>Log in</Link>
               </Button>
-              <Button
-                asChild
-                className="text-sm font-medium bg-brand text-brand-foreground hover:bg-brand/90 rounded-full px-5"
-              >
+              <Button asChild className={cn(pillButton, solidButton)}>
                 <Link href={SIGN_UP_URL}>Sign Up</Link>
               </Button>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-1 md:hidden">
           {isSignedIn === true && <UserMenu avatarClassName="size-7" />}
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Toggle menu">
-                <Menu className="size-5" />
+              <Button variant="ghost" size="icon" aria-label="Toggle menu" className="rounded-full">
+                <Menu className="size-5" strokeWidth={1.5} />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full gap-0 sm:max-w-sm">
-              <SheetHeader className="h-16 flex-row items-center border-b border-border/50 px-6 py-0">
+            <SheetContent side="right" className="w-full gap-0 shadow-none sm:max-w-sm">
+              <SheetHeader className="h-14 flex-row items-center px-5 py-0">
                 <SheetTitle className="sr-only">Menu</SheetTitle>
                 <SheetDescription className="sr-only">Site navigation</SheetDescription>
                 <Brand />
               </SheetHeader>
 
-              <ul className="flex flex-col gap-1 p-4">
-                {NAV_LINKS.map(({ href, label }) => {
+              <p className="px-5 pt-8 pb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                Navigate
+              </p>
+              <ul className="flex flex-col border-t border-border mx-5">
+                {NAV_LINKS.map(({ href, label }, index) => {
                   const active = isActive(pathname, href);
                   return (
-                    <li key={href}>
+                    <li key={href} className="border-b border-border">
                       <SheetClose asChild>
                         <Link
                           href={href}
                           aria-current={active ? "page" : undefined}
                           className={cn(
-                            "flex h-12 items-center rounded-lg border-l-2 px-4 text-base font-medium transition-colors",
-                            active
-                              ? "border-brand bg-muted text-foreground"
-                              : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                            "flex items-baseline gap-4 py-4 text-3xl font-semibold tracking-[-0.03em] transition-colors duration-150 outline-none focus-visible:text-foreground",
+                            active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                           )}
                         >
+                          <span aria-hidden className="w-5 font-mono text-[11px] font-normal tracking-normal tabular-nums text-muted-foreground">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
                           {label}
+                          {active && (
+                            <span className="ml-auto self-center">
+                              <ActiveDot />
+                            </span>
+                          )}
                         </Link>
                       </SheetClose>
                     </li>
@@ -183,10 +180,10 @@ export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
                 })}
               </ul>
 
-              <div className="mt-auto flex flex-col gap-3 border-t border-border/50 p-4">
+              <div className="mt-auto flex flex-col gap-2 p-5">
                 {isSignedIn === true && (
                   <SheetClose asChild>
-                    <Button asChild variant="secondary" className="h-12 w-full text-base">
+                    <Button asChild className={cn("h-11 w-full rounded-full text-base", solidButton)}>
                       <Link href="/">Dashboard</Link>
                     </Button>
                   </SheetClose>
@@ -194,15 +191,12 @@ export const MarketingNavbar = ({ overlay = false }: MarketingNavbarProps) => {
                 {isSignedIn === false && (
                   <>
                     <SheetClose asChild>
-                      <Button asChild variant="outline" className="h-12 w-full text-base">
+                      <Button asChild variant="outline" className="h-11 w-full rounded-full text-base">
                         <Link href={SIGN_IN_URL}>Log in</Link>
                       </Button>
                     </SheetClose>
                     <SheetClose asChild>
-                      <Button
-                        asChild
-                        className="h-12 w-full text-base bg-brand text-brand-foreground hover:bg-brand/90"
-                      >
+                      <Button asChild className={cn("h-11 w-full rounded-full text-base", solidButton)}>
                         <Link href={SIGN_UP_URL}>Sign Up</Link>
                       </Button>
                     </SheetClose>
