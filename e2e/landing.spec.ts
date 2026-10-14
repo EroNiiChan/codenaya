@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { ConvexHttpClient } from "convex/browser";
 
+import { api } from "../convex/_generated/api";
 import { collectConsoleErrors } from "./console-errors";
 
 const VIEWPORTS = [
@@ -100,7 +102,9 @@ test.describe("landing layout", () => {
 });
 
 test.describe("landing social proof", () => {
-  test("shows real showcase projects and the live project count", async ({ page }) => {
+  test("shows only featured showcase projects and the live project count", async ({ page }) => {
+    const anon = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+    const featured = await anon.query(api.showcase.getFeatured, { limit: 6 });
     await page.goto("/");
 
     const community = page.getByRole("region", { name: "Built with Codenaya" });
@@ -108,7 +112,10 @@ test.describe("landing social proof", () => {
     await expect(community.getByText(/\d[\d,]* projects built/)).toBeVisible();
 
     const cards = community.locator('a[href^="/showcase/"]');
-    expect(await cards.count()).toBeLessThanOrEqual(6);
+    await expect(cards).toHaveCount(featured.length);
+    for (const entry of featured) {
+      await expect(community.locator(`a[href="/showcase/${entry._id}"]`)).toBeVisible();
+    }
   });
 
   test("plays the muted demo with a poster", async ({ page }) => {
