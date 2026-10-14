@@ -32,12 +32,12 @@ const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(`${href}/`);
 
 /**
- * The bar's surface: a glass pill floating over the page. Only these classes
+ * The bar's surface: a flat full-width bar on a hairline. Only these classes
  * differ between the floating and the full-width variant of the header.
  */
 const SURFACE = {
-  header: "px-3 pt-3 md:pt-4",
-  nav: "max-w-5xl rounded-full pl-5 pr-2 bg-card/70 dark:bg-card/55 backdrop-blur-xl backdrop-saturate-150 border border-border shadow-[0_8px_32px_-12px_rgb(0_0_0/0.12)] dark:shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]",
+  header: "bg-background border-b border-border",
+  nav: "max-w-6xl px-5 md:px-8",
 };
 
 const pillButton = "h-9 rounded-full px-4 text-sm font-medium";
