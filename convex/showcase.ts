@@ -195,7 +195,9 @@ export const getTrending = query({
   },
 });
 
-/** How many top-voted entries the landing strip fallback looks through for covers. */
+/** Most entries `getFeatured` returns. */
+const FEATURED_MAX = 24;
+/** How many top-voted entries the fallback looks through for covers (>= FEATURED_MAX). */
 const FALLBACK_WINDOW = 50;
 
 /**
@@ -206,7 +208,7 @@ const FALLBACK_WINDOW = 50;
 export const getFeatured = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 6;
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 6), 1), FEATURED_MAX);
 
     let results = await ctx.db
       .query("showcaseProjects")

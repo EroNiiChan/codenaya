@@ -184,6 +184,9 @@ describe("showcase.getFeatured", () => {
     expect(featured[0]).not.toHaveProperty("projectId");
     expect(featured[0]).not.toHaveProperty("ownerId");
     expect(titles(await t.query(api.showcase.getFeatured, { limit: 1 }))).toEqual(["new pick"]);
+    // Out-of-range limits are clamped rather than passed to the database.
+    expect(titles(await t.query(api.showcase.getFeatured, { limit: -3 }))).toEqual(["new pick"]);
+    expect(await t.query(api.showcase.getFeatured, { limit: 1e6 })).toHaveLength(2);
   });
 
   test("falls back to the most upvoted entries with a screenshot when nothing is featured", async () => {
