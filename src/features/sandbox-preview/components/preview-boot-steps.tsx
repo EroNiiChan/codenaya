@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 
 import { cn } from "@/lib/utils";
@@ -14,81 +14,108 @@ const STEPS: { phase: BootPhase; label: string }[] = [
   { phase: "start", label: "Start dev server" },
 ];
 
-const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*<>/";
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*<>/=+";
 const ANSI_ESCAPE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, "g");
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+const STREAM_LINES = 5;
 
-export type BootStepsVariant = "decrypt" | "blur";
+export type BootStepsVariant = "morph" | "stream" | "interactive";
 
-/** Shows `text` resolving out of random glyphs, left to right. */
-const DecryptText = ({ text }: { text: string }) => {
-  const [shown, setShown] = useState(text);
+const randomGlyph = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+
+const logLines = (log: string) =>
+  log
+    .replace(ANSI_ESCAPE, "")
+    .split(/\r?\n|\r/)
+    .filter((line) => line.trim());
+
+/**
+ * Morphs `from` into `text` on mount: every character cycles through glyphs
+ * and settles, left to right, out of a blur.
+ */
+const MorphText = ({ text, from }: { text: string; from: string }) => {
+  const [chars, setChars] = useState(() => [...from].map((char) => ({ char, settled: false })));
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const frames = 16;
+    const still = from === text || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const length = Math.max(from.length, text.length);
+    const frames = still ? 1 : 22;
     let frame = 0;
     const timer = setInterval(() => {
       frame += 1;
-      const settled = Math.floor((frame / frames) * text.length);
-      setShown(
-        [...text]
-          .map((char, index) =>
-            index < settled || char === " "
-              ? char
-              : GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
-          )
-          .join(""),
-      );
+      // Characters settle left to right, each after a short spin.
+      const settledUpTo = still ? length : ((frame - 4) / (frames - 4)) * length;
+      const next = Array.from({ length }, (_, index) => {
+        const target = text[index] ?? "";
+        if (index < settledUpTo) return { char: target, settled: true };
+        if (target === " ") return { char: " ", settled: true };
+        return { char: randomGlyph(), settled: false };
+      }).filter((entry, index) => index < text.length || !entry.settled);
+      setChars(next);
       if (frame >= frames) clearInterval(timer);
-    }, 32);
+    }, 34);
     return () => clearInterval(timer);
-  }, [text]);
+  }, [text, from]);
 
   return (
     <>
-      <span aria-hidden="true">{shown}</span>
+      <span aria-hidden="true" className="whitespace-pre">
+        {chars.map(({ char, settled }, index) => (
+          <span
+            key={index}
+            className={cn(
+              "inline-block transition-[filter,opacity,color] duration-300",
+              !settled && "text-brand opacity-70 blur-[1.5px]",
+            )}
+          >
+            {char}
+          </span>
+        ))}
+      </span>
       <span className="sr-only">{text}</span>
     </>
   );
 };
 
-/** Each character rises out of a blur, one after another. */
-const BlurInText = ({ text }: { text: string }) => (
-  <>
-    <span aria-hidden="true" className="inline-flex flex-wrap">
-      {[...text].map((char, index) => (
-        <motion.span
-          key={index}
-          initial={{ opacity: 0, y: 8, filter: "blur(8px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.45, delay: index * 0.022, ease: EASE_OUT }}
-          className="whitespace-pre"
-        >
-          {char}
-        </motion.span>
-      ))}
-    </span>
-    <span className="sr-only">{text}</span>
-  </>
-);
+/** Types `text` out once, a few characters per frame. */
+const TypedLine = ({ text }: { text: string }) => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const perFrame = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? text.length : 3;
+    const timer = setInterval(() => {
+      setCount((value) => {
+        if (value >= text.length) clearInterval(timer);
+        return Math.min(text.length, value + perFrame);
+      });
+    }, 16);
+    return () => clearInterval(timer);
+  }, [text]);
+
+  return (
+    <>
+      {text.slice(0, count)}
+      <span className="ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[0.15em] animate-pulse bg-brand motion-reduce:animate-none" />
+    </>
+  );
+};
 
 /**
- * The preview's boot as type (#254): what is happening right now, large, with
- * the finished and upcoming steps around it, a hairline progress and the
- * latest log line. It sits on the pane itself rather than in a card.
- * Elapsed time counts from mount, which is when the boot starts showing.
+ * The preview's boot as type on the pane (#254). The step in progress is set
+ * large and morphs into the next one; a finished step collapses into the
+ * history above it. Elapsed time counts from mount, which is when the boot
+ * starts showing.
  */
 export const PreviewBootSteps = ({
   phase,
   log,
   firstStepLabel,
   onShowLogs,
-  variant = "decrypt",
+  variant = "morph",
 }: {
   /** The phase in progress; `null` before the first one is reported. */
   phase: BootPhase | null;
-  /** The boot's terminal output; its latest line shows under the steps. */
+  /** The boot's terminal output. */
   log: string;
   /** WebContainer boots in the page, so its first step isn't a sandbox. */
   firstStepLabel?: string;
@@ -99,17 +126,42 @@ export const PreviewBootSteps = ({
   const [startedAt] = useState(() => Date.now());
   const now = useNow(true);
   const key = phase ?? "create";
-  const current = BOOT_PHASES.indexOf(key);
-  // When each phase was first seen, for the per-step times.
-  const [marks, setMarks] = useState<Partial<Record<BootPhase, number>>>({});
-  if (marks[key] === undefined) setMarks({ ...marks, [key]: now });
-  // Half credit for the step in progress, so the bar moves as each starts.
+  const current = Math.min(BOOT_PHASES.indexOf(key), STEPS.length - 1);
+  // When each phase was first seen and how much log there was by then, for
+  // the per-step times and log excerpts.
+  const [marks, setMarks] = useState<Partial<Record<BootPhase, { at: number; logAt: number }>>>({});
+  if (marks[key] === undefined) setMarks({ ...marks, [key]: { at: now, logAt: log.length } });
+  const [expanded, setExpanded] = useState<BootPhase | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+
   const progress = Math.min(1, (current + 0.5) / STEPS.length);
-  const lastLine = log
-    .replace(ANSI_ESCAPE, "")
-    .split(/\r?\n|\r/)
-    .filter((line) => line.trim())
-    .at(-1);
+  const labelOf = (index: number) =>
+    index === 0 && firstStepLabel ? firstStepLabel : STEPS[index].label;
+  const lines = logLines(log);
+  const done = STEPS.slice(0, current);
+  const upcoming = STEPS.slice(current + 1);
+  const active = STEPS[current];
+  const activeStart = marks[active.phase]?.at;
+
+  const stepTime = (index: number) => {
+    const start = marks[STEPS[index].phase]?.at;
+    const end = marks[BOOT_PHASES[index + 1]]?.at;
+    return start !== undefined && end !== undefined ? formatDuration(end - start) : null;
+  };
+  const stepLog = (index: number) => {
+    const start = marks[STEPS[index].phase]?.logAt ?? 0;
+    const end = marks[BOOT_PHASES[index + 1]]?.logAt ?? log.length;
+    return logLines(log.slice(start, end)).slice(-6);
+  };
+
+  // The spotlight follows the pointer across the stage text.
+  const trackPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const stage = stageRef.current;
+    if (!stage || variant !== "interactive") return;
+    const rect = stage.getBoundingClientRect();
+    stage.style.setProperty("--spot-x", `${event.clientX - rect.left}px`);
+    stage.style.setProperty("--spot-y", `${event.clientY - rect.top}px`);
+  };
 
   return (
     <MotionConfig reducedMotion="user">
@@ -117,8 +169,9 @@ export const PreviewBootSteps = ({
         role="status"
         aria-label="Starting preview"
         className="size-full overflow-y-auto bg-background"
+        onPointerMove={trackPointer}
       >
-        <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center gap-7 px-6 py-8 @3xl:gap-9">
+        <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center gap-6 px-6 py-8 @3xl:gap-8">
           <div className="space-y-3">
             <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               <span className="flex items-center gap-2">
@@ -135,7 +188,7 @@ export const PreviewBootSteps = ({
                 className="absolute inset-y-0 left-0 bg-foreground"
                 initial={false}
                 animate={{ width: `${progress * 100}%` }}
-                transition={{ duration: 0.8, ease: EASE_OUT }}
+                transition={{ type: "spring", stiffness: 70, damping: 20 }}
               />
               <motion.div
                 className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-brand to-transparent"
@@ -145,102 +198,167 @@ export const PreviewBootSteps = ({
             </div>
           </div>
 
-          <ol className="space-y-2.5">
-            {STEPS.map((step, index) => {
-              const state = index < current ? "done" : index === current ? "active" : "pending";
-              const label = index === 0 && firstStepLabel ? firstStepLabel : step.label;
-              const start = marks[step.phase];
-              const end = state === "done" ? marks[BOOT_PHASES[index + 1]] : now;
-              const time =
-                state !== "pending" && start !== undefined && end !== undefined
-                  ? formatDuration(end - start)
-                  : null;
-              return (
-                <motion.li
-                  key={step.phase}
-                  layout
-                  transition={{ duration: 0.5, ease: EASE_OUT }}
-                  data-state={state}
-                  aria-current={state === "active" ? "step" : undefined}
-                  className={cn(
-                    "flex items-baseline justify-between gap-4",
-                    state === "active" ? "py-1.5" : "text-sm",
-                    state === "done" && "text-muted-foreground",
-                    state === "pending" && "text-muted-foreground/40",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex min-w-0 items-baseline gap-3",
-                      state === "active" &&
-                        "text-2xl font-semibold tracking-tight text-foreground @3xl:text-4xl",
-                      state === "active" && variant === "decrypt" && "font-mono font-medium tracking-tighter",
-                    )}
+          <ol className="flex flex-col">
+            {/* Finished steps: each collapses in from the stage. */}
+            <AnimatePresence initial={false}>
+              {done.map((step, index) => {
+                const excerpt = variant === "interactive" ? stepLog(index) : [];
+                const open = expanded === step.phase;
+                return (
+                  <motion.li
+                    key={step.phase}
+                    layout
+                    initial={{ opacity: 0, scale: 1.9, y: 36, filter: "blur(6px)" }}
+                    animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                    transition={{ duration: 0.6, ease: EASE_OUT }}
+                    style={{ originX: 0 }}
+                    data-state="done"
+                    className="text-sm text-muted-foreground"
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        "w-4 shrink-0 font-mono text-xs",
-                        state === "done" && "text-brand",
-                        state === "active" && "hidden",
-                      )}
+                    <button
+                      type="button"
+                      disabled={variant !== "interactive"}
+                      onClick={() => setExpanded(open ? null : step.phase)}
+                      aria-expanded={variant === "interactive" ? open : undefined}
+                      className="group flex h-7 w-full items-baseline justify-between gap-4 text-left enabled:cursor-pointer"
                     >
-                      {state === "done" ? "✓" : "·"}
-                    </span>
-                    <span className="min-w-0">
-                      {state !== "active" ? (
-                        label
-                      ) : variant === "decrypt" ? (
-                        <>
-                          <DecryptText key={label} text={label} />
-                          <span
-                            aria-hidden="true"
-                            className="ml-1 inline-block h-[0.8em] w-[0.45em] translate-y-[0.08em] animate-pulse bg-brand motion-reduce:animate-none"
-                          />
-                        </>
-                      ) : (
-                        <BlurInText key={label} text={label} />
-                      )}
-                      <span className="sr-only">
-                        {state === "done" ? " (done)" : state === "active" ? " (in progress)" : ""}
+                      <span className="flex min-w-0 items-baseline gap-3 transition-colors group-enabled:group-hover:text-foreground">
+                        <span aria-hidden="true" className="w-4 shrink-0 font-mono text-xs text-brand">
+                          ✓
+                        </span>
+                        <span className="truncate">
+                          {labelOf(index)}
+                          <span className="sr-only"> (done)</span>
+                        </span>
                       </span>
-                    </span>
-                  </span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {time}
-                  </span>
-                </motion.li>
-              );
-            })}
+                      <span className="shrink-0 font-mono text-xs tabular-nums">
+                        {variant === "interactive" && (
+                          <span className="mr-2 opacity-0 transition-opacity group-hover:opacity-100">
+                            {open ? "hide" : "logs"}
+                          </span>
+                        )}
+                        {stepTime(index)}
+                      </span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.pre
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: EASE_OUT }}
+                          className="ml-7 overflow-hidden border-l border-border pl-3 font-mono text-[11px] leading-5 text-muted-foreground"
+                        >
+                          {excerpt.length > 0 ? excerpt.join("\n") : "No output"}
+                        </motion.pre>
+                      )}
+                    </AnimatePresence>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+
+            {/* The stage: the step in progress, large, morphing into the next. */}
+            <motion.li
+              layout
+              data-state="active"
+              aria-current="step"
+              className="py-3"
+              transition={{ duration: 0.5, ease: EASE_OUT }}
+            >
+              <motion.div
+                key={active.phase}
+                ref={stageRef}
+                initial={{ scale: 0.94, opacity: 0.6 }}
+                animate={{ scale: [0.94, 1.03, 1], opacity: 1 }}
+                transition={{ duration: 0.7, ease: EASE_OUT }}
+                style={{ originX: 0 }}
+                className={cn(
+                  "text-3xl font-semibold tracking-tight text-foreground @3xl:text-5xl",
+                  variant === "interactive" &&
+                    "bg-[radial-gradient(160px_circle_at_var(--spot-x,30%)_var(--spot-y,50%),var(--brand),var(--foreground)_70%)] bg-clip-text text-transparent",
+                )}
+              >
+                <MorphText text={labelOf(current)} from={current > 0 ? labelOf(current - 1) : ""} />
+                <span className="sr-only"> (in progress)</span>
+              </motion.div>
+              <div className="mt-2 flex items-center gap-3 font-mono text-xs text-muted-foreground">
+                <span>
+                  Step {current + 1} of {STEPS.length}
+                </span>
+                <span aria-hidden="true" className="h-px w-6 bg-border" />
+                <span className="tabular-nums">
+                  {activeStart !== undefined ? formatDuration(now - activeStart) : null}
+                </span>
+              </div>
+            </motion.li>
+
+            {upcoming.map((step) => (
+              <motion.li
+                key={step.phase}
+                layout
+                transition={{ duration: 0.5, ease: EASE_OUT }}
+                data-state="pending"
+                className="flex h-7 items-baseline gap-3 text-sm text-muted-foreground/40"
+              >
+                <span aria-hidden="true" className="w-4 shrink-0 font-mono text-xs">
+                  ·
+                </span>
+                {labelOf(STEPS.indexOf(step))}
+              </motion.li>
+            ))}
           </ol>
 
-          <div className="flex min-h-5 items-center justify-between gap-4 font-mono text-xs text-muted-foreground">
-            <div aria-hidden="true" className="relative min-w-0 flex-1 overflow-hidden">
-              <AnimatePresence mode="popLayout" initial={false}>
-                {lastLine && (
+          {variant === "stream" ? (
+            <div
+              aria-hidden="true"
+              className="space-y-1 font-mono text-xs text-muted-foreground [mask-image:linear-gradient(to_bottom,transparent,#000_45%)]"
+            >
+              <AnimatePresence initial={false} mode="popLayout">
+                {lines.slice(-STREAM_LINES).map((line, index, shown) => (
                   <motion.p
-                    key={lastLine}
+                    key={`${lines.length - shown.length + index}`}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.25, ease: EASE_OUT }}
+                    className="truncate"
+                  >
+                    <span className="text-brand">❯</span>{" "}
+                    {index === shown.length - 1 ? <TypedLine text={line} /> : line}
+                  </motion.p>
+                ))}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <div aria-hidden="true" className="relative min-h-5 overflow-hidden font-mono text-xs text-muted-foreground">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {lines.length > 0 && (
+                  <motion.p
+                    key={lines.length}
                     initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
                     animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                     exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
                     transition={{ duration: 0.3, ease: EASE_OUT }}
                     className="truncate"
                   >
-                    <span className="text-brand">❯</span> {lastLine}
+                    <span className="text-brand">❯</span> {lines.at(-1)}
                   </motion.p>
                 )}
               </AnimatePresence>
             </div>
-            {onShowLogs && (
-              <button
-                type="button"
-                onClick={onShowLogs}
-                className="shrink-0 underline-offset-4 transition-colors hover:text-foreground hover:underline"
-              >
-                Show logs
-              </button>
-            )}
-          </div>
+          )}
+
+          {onShowLogs && (
+            <button
+              type="button"
+              onClick={onShowLogs}
+              className="self-start font-mono text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            >
+              Show logs
+            </button>
+          )}
         </div>
       </div>
     </MotionConfig>
