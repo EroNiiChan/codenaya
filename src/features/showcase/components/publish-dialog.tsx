@@ -144,6 +144,35 @@ export const PublishDialog = ({
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto -mx-6 px-6 space-y-5 py-2">
+          <div className="space-y-2 rounded-lg border border-dashed border-border/70 p-3">
+            <label className="text-xs font-medium text-muted-foreground">
+              Preview Screenshot
+            </label>
+            <p className="text-xs text-muted-foreground/80">
+              Your card&apos;s cover image. Without one it gets placeholder art and
+              can&apos;t be featured on the home page.
+            </p>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
+                <UploadIcon className="size-3.5" />
+                {previewImageId ? "Replace" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={uploading}
+                />
+              </label>
+              {previewImageId && (
+                <span className="text-xs text-muted-foreground">✓ Uploaded</span>
+              )}
+              {uploading && (
+                <span className="text-xs text-muted-foreground">Uploading...</span>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Title</label>
             <Input
@@ -166,31 +195,6 @@ export const PublishDialog = ({
             <p className="text-[10px] text-muted-foreground/60 text-right">
               {description.length}/280
             </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              Preview Screenshot
-            </label>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors">
-                <UploadIcon className="size-3.5" />
-                {previewImageId ? "Replace" : "Upload"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                  disabled={uploading}
-                />
-              </label>
-              {previewImageId && (
-                <span className="text-xs text-muted-foreground">✓ Uploaded</span>
-              )}
-              {uploading && (
-                <span className="text-xs text-muted-foreground">Uploading...</span>
-              )}
-            </div>
           </div>
 
           <div className="space-y-1.5">

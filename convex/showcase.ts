@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 import { paginationOptsValidator, type PaginationResult } from "convex/server";
 
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { copyProjectFiles } from "./projectCopy";
 import { countProjectBuilt } from "./stats";
@@ -173,7 +174,8 @@ export const isProjectPublished = query({
       .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
       .take(1);
 
-    const published = existing.find((e) => e.status === "published");
+    // An unlisted entry is still published as far as its owner is concerned.
+    const published = existing.find((e) => e.status !== "removed");
     return published ?? null;
   },
 });
@@ -193,7 +195,32 @@ export const getTrending = query({
   },
 });
 
+/** Hand-picked entries for the landing page strip, most recently published first. */
+export const getFeatured = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const results = await ctx.db
+      .query("showcaseProjects")
+      .withIndex("by_status_and_featured_and_publishedAt", (q) =>
+        q.eq("status", "published").eq("featured", true)
+      )
+      .order("desc")
+      .take(args.limit ?? 6);
+
+    return await Promise.all(results.map((item) => toPublicEntry(ctx, item)));
+  },
+});
+
 // ─── Mutations ───
+
+/**
+ * Clerk test accounts (`+clerk_test@` emails, used by the e2e user pool)
+ * publish as "unlisted" on deployments that set SHOWCASE_UNLIST_TEST_OWNERS=1,
+ * so test runs never reach the public pages. Dev leaves it unset: the feed
+ * specs need their seeds listed.
+ */
+const isUnlistedOwner = (email: string | undefined) =>
+  process.env.SHOWCASE_UNLIST_TEST_OWNERS === "1" && !!email?.includes("+clerk_test@");
 
 export const publish = mutation({
   args: {
@@ -219,7 +246,7 @@ export const publish = mutation({
       .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
       .take(1);
 
-    const alreadyPublished = existing.find((e) => e.status === "published");
+    const alreadyPublished = existing.find((e) => e.status !== "removed");
     if (alreadyPublished) {
       throw new Error("Project is already published to showcase");
     }
@@ -241,7 +268,7 @@ export const publish = mutation({
       downvotes: 0,
       viewCount: 0,
       importCount: 0,
-      status: "published",
+      status: isUnlistedOwner(identity.email) ? "unlisted" : "published",
       publishedAt: now,
       updatedAt: now,
     });
@@ -394,5 +421,78 @@ export const generateUploadUrl = mutation({
   handler: async (ctx) => {
     await verifyAuth(ctx);
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// ─── Curation (internal: run from the Convex dashboard or `npx convex run`) ───
+
+/**
+ * Adds an entry to the landing page strip, or takes it off. Only published
+ * entries with a screenshot qualify: the strip is the first thing a visitor
+ * sees, so it shows real work, not placeholder art.
+ */
+export const setFeatured = internalMutation({
+  args: { id: v.id("showcaseProjects"), featured: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item) throw new Error("Not found");
+    if (args.featured) {
+      if (item.status !== "published") throw new Error("Only published entries can be featured");
+      if (!item.previewImageId) throw new Error("Add a screenshot before featuring this entry");
+    }
+    await ctx.db.patch(args.id, { featured: args.featured, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+const UNLIST_BATCH = 200;
+/** Titles the e2e specs give their seeds. */
+const TEST_TITLE_PREFIXES = ["Seed feed", "e2e "];
+
+/**
+ * One-off cleanup: unlists published entries owned by `ownerIds` or titled
+ * with one of `titlePrefixes` (by default the e2e seed titles). Walks the
+ * published entries in batches, scheduling itself until done, and logs the
+ * total.
+ */
+export const unlistTestEntries = internalMutation({
+  args: {
+    ownerIds: v.optional(v.array(v.string())),
+    titlePrefixes: v.optional(v.array(v.string())),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    unlisted: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerIds = args.ownerIds ?? [];
+    const titlePrefixes = args.titlePrefixes ?? TEST_TITLE_PREFIXES;
+    const isTestEntry = (item: Doc<"showcaseProjects">) =>
+      ownerIds.includes(item.ownerId) ||
+      titlePrefixes.some((prefix) => item.title.startsWith(prefix));
+
+    const page = await ctx.db
+      .query("showcaseProjects")
+      .withIndex("by_status_and_publishedAt", (q) => q.eq("status", "published"))
+      .paginate({ cursor: args.cursor ?? null, numItems: UNLIST_BATCH });
+
+    const matches = page.page.filter(isTestEntry);
+    const now = Date.now();
+    for (const item of matches) {
+      await ctx.db.patch(item._id, { status: "unlisted", featured: false, updatedAt: now });
+    }
+    const unlisted = (args.unlisted ?? 0) + matches.length;
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.showcase.unlistTestEntries, {
+        ownerIds,
+        titlePrefixes,
+        cursor: page.continueCursor,
+        unlisted,
+      });
+      return null;
+    }
+    console.log(`Unlisted ${unlisted} showcase entries`);
+    return null;
   },
 });

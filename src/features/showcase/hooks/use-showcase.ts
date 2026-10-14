@@ -52,6 +52,10 @@ export const useShowcaseTrending = (limit?: number) => {
   return useQuery(api.showcase.getTrending, { limit });
 };
 
+export const useShowcaseFeatured = (limit?: number) => {
+  return useQuery(api.showcase.getFeatured, { limit });
+};
+
 export const useIsProjectPublished = (projectId: Id<"projects">) => {
   return useQuery(api.showcase.isProjectPublished, { projectId });
 };
