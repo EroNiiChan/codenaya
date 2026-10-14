@@ -1,11 +1,8 @@
 "use client";
 
-import { useId, useState } from "react";
-import { CheckIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { formatDuration, useNow } from "@/features/conversations/components/agent-run";
 import { BOOT_PHASES, type BootPhase } from "@/features/sandbox-preview/utils/boot-phase";
 
@@ -16,191 +13,264 @@ const STEPS: { phase: BootPhase; label: string }[] = [
   { phase: "start", label: "Start dev server" },
 ];
 
-/** Fixed spark lanes (left %, delay s, sway px) so renders stay pure. */
-const SPARKS = [
-  [6, 0, 14], [14, 3.1, -10], [23, 1.4, 8], [31, 5.2, -16], [40, 2.3, 12], [48, 6.1, -6],
-  [57, 0.8, 16], [65, 4.4, -12], [73, 2.9, 10], [81, 5.8, -14], [89, 1.9, 6], [95, 3.7, -8],
-] as const;
-
-const RING_RADIUS = 54;
+const RING_RADIUS = 56;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+/** The reactor's tick ring: every fifth tick is longer. */
+const TICKS = Array.from({ length: 60 }, (_, index) => {
+  const angle = (index / 60) * 2 * Math.PI;
+  const inner = index % 5 === 0 ? 63 : 65;
+  return {
+    x1: 80 + inner * Math.cos(angle),
+    y1: 80 + inner * Math.sin(angle),
+    x2: 80 + 68 * Math.cos(angle),
+    y2: 80 + 68 * Math.sin(angle),
+  };
+});
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*<>/";
+const ANSI_ESCAPE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, "g");
+const LOG_LINES = 3;
+
+/** `T+mm:ss`, the boot's mission clock. */
+const missionClock = (ms: number) => {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `T+${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
+};
+
+/** Shows `text` resolving out of random glyphs, left to right. */
+const DecryptText = ({ text }: { text: string }) => {
+  const [shown, setShown] = useState(text);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const frames = 14;
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame += 1;
+      const settled = Math.floor((frame / frames) * text.length);
+      setShown(
+        [...text]
+          .map((char, index) =>
+            index < settled || char === " "
+              ? char
+              : GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
+          )
+          .join(""),
+      );
+      if (frame >= frames) clearInterval(timer);
+    }, 35);
+    return () => clearInterval(timer);
+  }, [text]);
+
+  return (
+    <>
+      <span aria-hidden="true">{shown}</span>
+      <span className="sr-only">{text}</span>
+    </>
+  );
+};
 
 /**
- * The preview's boot as a stage: a progress core with the total time so far
- * over a drifting aurora and grid, and the four boot steps below it (#254).
- * Elapsed time counts from mount, which is when the boot starts showing.
+ * The preview's boot as a console readout (#254): a reactor ring with the
+ * mission clock, the four boot steps with their times and the tail of the
+ * live log. Elapsed time counts from mount, which is when the boot starts
+ * showing.
  */
 export const PreviewBootSteps = ({
   phase,
+  log,
+  engineLabel = "Sandbox",
   firstStepLabel,
   onShowLogs,
 }: {
   /** The phase in progress; `null` before the first one is reported. */
   phase: BootPhase | null;
+  /** The boot's terminal output; its last lines tail under the steps. */
+  log: string;
+  engineLabel?: string;
   /** WebContainer boots in the page, so its first step isn't a sandbox. */
   firstStepLabel?: string;
   /** Reveals the terminal; omitted while it is already showing. */
   onShowLogs?: () => void;
 }) => {
-  const gradientId = useId();
   const [startedAt] = useState(() => Date.now());
   const now = useNow(true);
-  const current = BOOT_PHASES.indexOf(phase ?? "create");
+  const key = phase ?? "create";
+  const current = BOOT_PHASES.indexOf(key);
+  // When each phase was first seen, for the per-step times.
+  const [marks, setMarks] = useState<Partial<Record<BootPhase, number>>>({});
+  if (marks[key] === undefined) setMarks({ ...marks, [key]: now });
   // Half credit for the step in progress, so the ring moves as each starts.
   const progress = Math.min(1, (current + 0.5) / STEPS.length);
+  const tail = log
+    .replace(ANSI_ESCAPE, "")
+    .split(/\r?\n|\r/)
+    .filter((line) => line.trim())
+    .slice(-LOG_LINES);
 
   return (
     <div
       role="status"
       aria-label="Starting preview"
-      className="preview-boot relative size-full overflow-hidden bg-background"
+      className="preview-boot relative size-full overflow-hidden font-mono"
     >
-      <div aria-hidden="true" className="preview-boot-aurora absolute inset-0">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div aria-hidden="true" className="preview-boot-grid" />
-      <div aria-hidden="true" className="preview-boot-sparks absolute inset-0">
-        {SPARKS.map(([left, delay, sway]) => (
-          <span
-            key={left}
-            style={{
-              left: `${left}%`,
-              animationDelay: `${delay}s`,
-              ["--spark-sway" as string]: `${sway}px`,
-            }}
-          />
-        ))}
-      </div>
+      <div aria-hidden="true" className="preview-boot-dots absolute inset-0" />
+      <div aria-hidden="true" className="preview-boot-sweep absolute inset-x-0 top-0" />
+      <div aria-hidden="true" className="preview-boot-scanlines pointer-events-none absolute inset-0 z-20" />
 
       <div className="relative z-10 size-full overflow-y-auto p-4">
-        <div className="mx-auto flex min-h-full max-w-xs flex-col items-center justify-center gap-4 @md:gap-5">
-          <div className="relative grid size-28 shrink-0 place-items-center @md:size-32 @3xl:size-40">
-            <div aria-hidden="true" className="preview-boot-halo absolute -inset-2 rounded-full" />
+        <div className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 @md:gap-5">
+          <div className="relative grid size-32 shrink-0 place-items-center @md:size-36 @3xl:size-44">
             <svg
               aria-hidden="true"
-              viewBox="0 0 120 120"
-              className="absolute inset-0 size-full -rotate-90"
+              viewBox="0 0 160 160"
+              className="absolute inset-0 size-full text-[var(--hud)]"
             >
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="var(--brand)" />
-                  <stop offset="100%" stopColor="color-mix(in oklab, var(--brand) 30%, #a78bfa)" />
-                </linearGradient>
-              </defs>
               <circle
-                cx="60"
-                cy="60"
-                r={RING_RADIUS}
+                cx="80"
+                cy="80"
+                r="76"
                 fill="none"
-                strokeWidth="3"
-                className="stroke-border/70"
+                stroke="var(--hud-dim)"
+                strokeWidth="1"
+                strokeDasharray="1 5"
+                className="preview-boot-spin"
               />
+              <g className="preview-boot-spin-reverse" stroke="var(--hud-dim)" strokeWidth="1">
+                {TICKS.map((tick, index) => (
+                  <line key={index} {...tick} />
+                ))}
+              </g>
+              <circle cx="80" cy="80" r={RING_RADIUS} fill="none" stroke="var(--hud-dim)" strokeWidth="1" />
               <circle
-                cx="60"
-                cy="60"
+                cx="80"
+                cy="80"
                 r={RING_RADIUS}
                 fill="none"
+                stroke="currentColor"
                 strokeWidth="3"
-                strokeLinecap="round"
-                stroke={`url(#${gradientId})`}
                 strokeDasharray={RING_LENGTH}
                 strokeDashoffset={RING_LENGTH * (1 - progress)}
-                className="transition-[stroke-dashoffset] duration-700 ease-out"
+                transform="rotate(-90 80 80)"
+                className="transition-[stroke-dashoffset] duration-700 ease-out [filter:drop-shadow(0_0_4px_var(--hud))]"
+              />
+              <circle
+                cx="80"
+                cy="80"
+                r="46"
+                fill="none"
+                stroke="var(--hud-dim)"
+                strokeWidth="1"
+                strokeDasharray="12 4 2 4"
+                className="preview-boot-spin"
               />
             </svg>
-            <div aria-hidden="true" className="preview-boot-orbit absolute inset-0">
-              <span className="absolute left-1/2 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand shadow-[0_0_12px_3px] shadow-brand/60" />
-            </div>
-            <div className="absolute inset-3 grid place-items-center rounded-full border border-border/40 bg-background/70 backdrop-blur-md">
-              <div className="flex flex-col items-center gap-1">
-                <span className="font-mono text-xl font-medium tabular-nums text-foreground @md:text-2xl @3xl:text-3xl">
-                  {formatDuration(now - startedAt)}
-                </span>
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                  Step {Math.min(current + 1, STEPS.length)} of {STEPS.length}
-                </span>
-              </div>
+            <div className="relative flex flex-col items-center gap-0.5">
+              <span className="text-lg font-medium tabular-nums tracking-wider text-[var(--hud)] [text-shadow:0_0_12px_var(--hud-dim)] @md:text-xl @3xl:text-2xl">
+                {missionClock(now - startedAt)}
+              </span>
+              <span className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">
+                Boot {Math.round(progress * 100)}%
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-0.5 text-center">
-            <p className="text-sm font-medium text-foreground">Starting preview</p>
-            <p className="text-xs text-muted-foreground">Your app opens here when it&apos;s ready</p>
-          </div>
+          <div className="preview-boot-panel relative w-full rounded-md border border-[var(--hud-dim)] bg-background/70 text-[11px] backdrop-blur-sm">
+            {/* HUD corner brackets */}
+            {[
+              "left-0 top-0 border-l border-t",
+              "right-0 top-0 border-r border-t",
+              "bottom-0 left-0 border-b border-l",
+              "bottom-0 right-0 border-b border-r",
+            ].map((corner) => (
+              <span
+                key={corner}
+                aria-hidden="true"
+                className={cn("absolute -m-px size-2.5 border-[var(--hud)]", corner)}
+              />
+            ))}
 
-          <ol className="w-full rounded-2xl border border-border/50 bg-card/50 p-2 shadow-lg shadow-black/5 backdrop-blur-xl dark:shadow-black/30">
-            {STEPS.map((step, index) => {
-              const state = index < current ? "done" : index === current ? "active" : "pending";
-              const label = index === 0 && firstStepLabel ? firstStepLabel : step.label;
-              return (
-                <li
-                  key={step.phase}
-                  data-state={state}
-                  aria-current={state === "active" ? "step" : undefined}
-                  className={cn(
-                    "relative flex h-9 items-center gap-3 rounded-xl px-2 text-xs transition-colors duration-300",
-                    state === "active" && "bg-brand/[0.07]",
-                  )}
-                >
-                  {/* The rail between steps, lit up to the step in progress. */}
-                  {index < STEPS.length - 1 && (
+            <div className="flex items-center justify-between border-b border-[var(--hud-dim)] px-3 py-2 text-[10px] uppercase tracking-[0.2em]">
+              <span className="text-[var(--hud)]">{engineLabel}{" // "}Boot sequence</span>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span aria-hidden="true" className="preview-boot-cursor size-1.5 rounded-full bg-[var(--hud)]" />
+                Live
+              </span>
+            </div>
+
+            <ol className="space-y-0.5 px-3 py-2">
+              {STEPS.map((step, index) => {
+                const state = index < current ? "done" : index === current ? "active" : "pending";
+                const label = index === 0 && firstStepLabel ? firstStepLabel : step.label;
+                const start = marks[step.phase];
+                const end = state === "done" ? marks[BOOT_PHASES[index + 1]] : now;
+                const time =
+                  state !== "pending" && start !== undefined && end !== undefined
+                    ? formatDuration(end - start)
+                    : null;
+                return (
+                  <li
+                    key={step.phase}
+                    data-state={state}
+                    aria-current={state === "active" ? "step" : undefined}
+                    className="grid h-6 grid-cols-[auto_1fr_auto] items-center gap-3"
+                  >
                     <span
                       aria-hidden="true"
                       className={cn(
-                        "absolute left-[17px] top-[26px] h-[19px] w-px transition-colors duration-500",
-                        index < current ? "bg-brand/60" : "bg-border",
+                        "whitespace-pre",
+                        state === "pending" ? "text-muted-foreground/50" : "text-[var(--hud)]",
+                        state === "active" && "preview-boot-cursor",
                       )}
-                    />
-                  )}
-                  <span
-                    className={cn(
-                      "relative grid size-5 shrink-0 place-items-center rounded-full border text-[10px] font-medium transition-all duration-300",
-                      state === "done" &&
-                        "border-brand/50 bg-brand text-brand-foreground shadow-[0_0_10px] shadow-brand/50",
-                      state === "active" && "border-brand/70 text-brand",
-                      state === "pending" && "border-border text-muted-foreground",
-                    )}
-                  >
-                    {state === "done" ? (
-                      <CheckIcon aria-hidden="true" className="size-3" strokeWidth={3} />
-                    ) : (
-                      index + 1
-                    )}
-                    {state === "active" && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute inset-0 animate-ping rounded-full border border-brand/60 motion-reduce:animate-none"
-                      />
-                    )}
-                  </span>
-                  {state === "active" ? (
-                    <Shimmer as="span" className="font-medium">
-                      {label}
-                    </Shimmer>
-                  ) : (
-                    <span className={state === "pending" ? "text-muted-foreground" : "text-foreground/90"}>
-                      {label}
+                    >
+                      {state === "done" ? "[ OK ]" : state === "active" ? "[ >> ]" : "[    ]"}
                     </span>
-                  )}
-                  <span className="sr-only">
-                    {state === "done" ? "(done)" : state === "active" ? "(in progress)" : ""}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
+                    <span
+                      className={cn(
+                        "truncate uppercase tracking-wider",
+                        state === "pending" ? "text-muted-foreground/60" : "text-foreground",
+                      )}
+                    >
+                      {state === "active" ? <DecryptText key={label} text={label} /> : label}
+                      <span className="sr-only">
+                        {state === "done" ? " (done)" : state === "active" ? " (in progress)" : ""}
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">{time}</span>
+                  </li>
+                );
+              })}
+            </ol>
+
+            <div
+              aria-hidden="true"
+              className="space-y-0.5 border-t border-dashed border-[var(--hud-dim)] px-3 py-2 text-[10px] text-muted-foreground"
+            >
+              {tail.length === 0 ? (
+                <p>
+                  &gt; awaiting output<span className="preview-boot-cursor">_</span>
+                </p>
+              ) : (
+                tail.map((line, index) => (
+                  <p key={`${tail.length}-${index}`} className="truncate">
+                    &gt; {line}
+                    {index === tail.length - 1 && (
+                      <span className="preview-boot-cursor ml-0.5 inline-block h-2.5 w-1.5 translate-y-0.5 bg-[var(--hud)]" />
+                    )}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
 
           {onShowLogs && (
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-xs text-muted-foreground"
+            <button
+              type="button"
               onClick={onShowLogs}
+              className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-[var(--hud)]"
             >
-              Show logs
-            </Button>
+              &gt; Show logs
+            </button>
           )}
         </div>
       </div>

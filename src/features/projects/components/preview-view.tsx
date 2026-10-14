@@ -328,6 +328,7 @@ export const PreviewView = ({
                   error={error}
                   isLoading={isLoading}
                   bootPhase={bootPhase}
+                  terminalOutput={terminalOutput}
                   activeEngine={activeEngine}
                   previewUrl={previewUrl}
                   refreshKey={refreshKey}
@@ -358,6 +359,7 @@ export const PreviewView = ({
               error={error}
               isLoading={isLoading}
               bootPhase={bootPhase}
+              terminalOutput={terminalOutput}
               activeEngine={activeEngine}
               previewUrl={previewUrl}
               refreshKey={refreshKey}
@@ -385,6 +387,7 @@ const PreviewContent = ({
   error,
   isLoading,
   bootPhase,
+  terminalOutput,
   activeEngine,
   previewUrl,
   refreshKey,
@@ -398,6 +401,7 @@ const PreviewContent = ({
   error: string | null | undefined;
   isLoading: boolean;
   bootPhase: BootPhase | null;
+  terminalOutput: string;
   activeEngine: PreviewEngine;
   previewUrl: string | null | undefined;
   refreshKey: number;
@@ -446,6 +450,8 @@ const PreviewContent = ({
     {isLoading && !error && (
       <PreviewBootSteps
         phase={bootPhase}
+        log={terminalOutput}
+        engineLabel={activeEngine === "webcontainer" ? "WebContainer" : "Sandbox"}
         firstStepLabel={activeEngine === "webcontainer" ? "Start WebContainer" : undefined}
         onShowLogs={onShowLogs}
       />

@@ -49,17 +49,20 @@ test.describe("preview boot steps", () => {
     ]);
     await expect(steps.nth(2)).toHaveAttribute("aria-current", "step");
     await expect(steps.nth(3)).toHaveAttribute("data-state", "pending");
-    // The elapsed time ticks.
-    const elapsed = boot.getByText(/^\d+s$/);
+    // The mission clock ticks, and the log tails under the steps.
+    const elapsed = boot.getByText(/^T\+\d{2}:\d{2}$/);
     const first = await elapsed.textContent();
     await expect(elapsed).not.toHaveText(first!, { timeout: 5_000 });
+    await expect(boot).toContainText("$ npm install");
 
     // The terminal shows by default, so the link only appears once it's hidden.
     await expect(boot.getByRole("button", { name: "Show logs" })).toBeHidden();
+    const terminal = page.getByText("Terminal", { exact: true });
+    await expect(terminal).toBeVisible();
     await page.getByRole("button", { name: "Toggle terminal" }).click();
-    await expect(page.getByText("$ npm install")).toBeHidden();
+    await expect(terminal).toBeHidden();
     await boot.getByRole("button", { name: "Show logs" }).click();
-    await expect(page.getByText("$ npm install")).toBeVisible();
+    await expect(terminal).toBeVisible();
 
     expect(errors).toEqual([]);
   });
