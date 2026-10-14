@@ -451,7 +451,6 @@ const PreviewContent = ({
       <PreviewBootSteps
         phase={bootPhase}
         log={terminalOutput}
-        engineLabel={activeEngine === "webcontainer" ? "WebContainer" : "Sandbox"}
         firstStepLabel={activeEngine === "webcontainer" ? "Start WebContainer" : undefined}
         onShowLogs={onShowLogs}
       />

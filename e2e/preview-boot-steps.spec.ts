@@ -49,8 +49,8 @@ test.describe("preview boot steps", () => {
     ]);
     await expect(steps.nth(2)).toHaveAttribute("aria-current", "step");
     await expect(steps.nth(3)).toHaveAttribute("data-state", "pending");
-    // The mission clock ticks, and the log tails under the steps.
-    const elapsed = boot.getByText(/^T\+\d{2}:\d{2}$/);
+    // The elapsed time ticks, and the latest log line shows under the steps.
+    const elapsed = boot.getByText(/^\d+s$/).first();
     const first = await elapsed.textContent();
     await expect(elapsed).not.toHaveText(first!, { timeout: 5_000 });
     await expect(boot).toContainText("$ npm install");

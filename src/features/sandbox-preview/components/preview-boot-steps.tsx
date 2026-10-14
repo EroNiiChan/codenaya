@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 
 import { cn } from "@/lib/utils";
 import { formatDuration, useNow } from "@/features/conversations/components/agent-run";
@@ -13,29 +14,11 @@ const STEPS: { phase: BootPhase; label: string }[] = [
   { phase: "start", label: "Start dev server" },
 ];
 
-const RING_RADIUS = 56;
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
-/** The reactor's tick ring: every fifth tick is longer. */
-const TICKS = Array.from({ length: 60 }, (_, index) => {
-  const angle = (index / 60) * 2 * Math.PI;
-  const inner = index % 5 === 0 ? 63 : 65;
-  return {
-    x1: 80 + inner * Math.cos(angle),
-    y1: 80 + inner * Math.sin(angle),
-    x2: 80 + 68 * Math.cos(angle),
-    y2: 80 + 68 * Math.sin(angle),
-  };
-});
-const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*<>/";
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*<>/";
 const ANSI_ESCAPE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, "g");
-const LOG_LINES = 3;
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-/** `T+mm:ss`, the boot's mission clock. */
-const missionClock = (ms: number) => {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `T+${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
-};
+export type BootStepsVariant = "decrypt" | "blur";
 
 /** Shows `text` resolving out of random glyphs, left to right. */
 const DecryptText = ({ text }: { text: string }) => {
@@ -43,7 +26,7 @@ const DecryptText = ({ text }: { text: string }) => {
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const frames = 14;
+    const frames = 16;
     let frame = 0;
     const timer = setInterval(() => {
       frame += 1;
@@ -58,7 +41,7 @@ const DecryptText = ({ text }: { text: string }) => {
           .join(""),
       );
       if (frame >= frames) clearInterval(timer);
-    }, 35);
+    }, 32);
     return () => clearInterval(timer);
   }, [text]);
 
@@ -70,28 +53,48 @@ const DecryptText = ({ text }: { text: string }) => {
   );
 };
 
+/** Each character rises out of a blur, one after another. */
+const BlurInText = ({ text }: { text: string }) => (
+  <>
+    <span aria-hidden="true" className="inline-flex flex-wrap">
+      {[...text].map((char, index) => (
+        <motion.span
+          key={index}
+          initial={{ opacity: 0, y: 8, filter: "blur(8px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ duration: 0.45, delay: index * 0.022, ease: EASE_OUT }}
+          className="whitespace-pre"
+        >
+          {char}
+        </motion.span>
+      ))}
+    </span>
+    <span className="sr-only">{text}</span>
+  </>
+);
+
 /**
- * The preview's boot as a console readout (#254): a reactor ring with the
- * mission clock, the four boot steps with their times and the tail of the
- * live log. Elapsed time counts from mount, which is when the boot starts
- * showing.
+ * The preview's boot as type (#254): what is happening right now, large, with
+ * the finished and upcoming steps around it, a hairline progress and the
+ * latest log line. It sits on the pane itself rather than in a card.
+ * Elapsed time counts from mount, which is when the boot starts showing.
  */
 export const PreviewBootSteps = ({
   phase,
   log,
-  engineLabel = "Sandbox",
   firstStepLabel,
   onShowLogs,
+  variant = "decrypt",
 }: {
   /** The phase in progress; `null` before the first one is reported. */
   phase: BootPhase | null;
-  /** The boot's terminal output; its last lines tail under the steps. */
+  /** The boot's terminal output; its latest line shows under the steps. */
   log: string;
-  engineLabel?: string;
   /** WebContainer boots in the page, so its first step isn't a sandbox. */
   firstStepLabel?: string;
   /** Reveals the terminal; omitted while it is already showing. */
   onShowLogs?: () => void;
+  variant?: BootStepsVariant;
 }) => {
   const [startedAt] = useState(() => Date.now());
   const now = useNow(true);
@@ -100,180 +103,146 @@ export const PreviewBootSteps = ({
   // When each phase was first seen, for the per-step times.
   const [marks, setMarks] = useState<Partial<Record<BootPhase, number>>>({});
   if (marks[key] === undefined) setMarks({ ...marks, [key]: now });
-  // Half credit for the step in progress, so the ring moves as each starts.
+  // Half credit for the step in progress, so the bar moves as each starts.
   const progress = Math.min(1, (current + 0.5) / STEPS.length);
-  const tail = log
+  const lastLine = log
     .replace(ANSI_ESCAPE, "")
     .split(/\r?\n|\r/)
     .filter((line) => line.trim())
-    .slice(-LOG_LINES);
+    .at(-1);
 
   return (
-    <div
-      role="status"
-      aria-label="Starting preview"
-      className="preview-boot relative size-full overflow-hidden font-mono"
-    >
-      <div aria-hidden="true" className="preview-boot-dots absolute inset-0" />
-      <div aria-hidden="true" className="preview-boot-sweep absolute inset-x-0 top-0" />
-      <div aria-hidden="true" className="preview-boot-scanlines pointer-events-none absolute inset-0 z-20" />
-
-      <div className="relative z-10 size-full overflow-y-auto p-4">
-        <div className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 @md:gap-5">
-          <div className="relative grid size-32 shrink-0 place-items-center @md:size-36 @3xl:size-44">
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 160 160"
-              className="absolute inset-0 size-full text-[var(--hud)]"
-            >
-              <circle
-                cx="80"
-                cy="80"
-                r="76"
-                fill="none"
-                stroke="var(--hud-dim)"
-                strokeWidth="1"
-                strokeDasharray="1 5"
-                className="preview-boot-spin"
-              />
-              <g className="preview-boot-spin-reverse" stroke="var(--hud-dim)" strokeWidth="1">
-                {TICKS.map((tick, index) => (
-                  <line key={index} {...tick} />
-                ))}
-              </g>
-              <circle cx="80" cy="80" r={RING_RADIUS} fill="none" stroke="var(--hud-dim)" strokeWidth="1" />
-              <circle
-                cx="80"
-                cy="80"
-                r={RING_RADIUS}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeDasharray={RING_LENGTH}
-                strokeDashoffset={RING_LENGTH * (1 - progress)}
-                transform="rotate(-90 80 80)"
-                className="transition-[stroke-dashoffset] duration-700 ease-out [filter:drop-shadow(0_0_4px_var(--hud))]"
-              />
-              <circle
-                cx="80"
-                cy="80"
-                r="46"
-                fill="none"
-                stroke="var(--hud-dim)"
-                strokeWidth="1"
-                strokeDasharray="12 4 2 4"
-                className="preview-boot-spin"
-              />
-            </svg>
-            <div className="relative flex flex-col items-center gap-0.5">
-              <span className="text-lg font-medium tabular-nums tracking-wider text-[var(--hud)] [text-shadow:0_0_12px_var(--hud-dim)] @md:text-xl @3xl:text-2xl">
-                {missionClock(now - startedAt)}
+    <MotionConfig reducedMotion="user">
+      <div
+        role="status"
+        aria-label="Starting preview"
+        className="size-full overflow-y-auto bg-background"
+      >
+        <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center gap-7 px-6 py-8 @3xl:gap-9">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <span aria-hidden="true" className="relative flex size-1.5">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-70 motion-reduce:animate-none" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
+                </span>
+                Starting preview
               </span>
-              <span className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">
-                Boot {Math.round(progress * 100)}%
-              </span>
+              <span className="tabular-nums">{formatDuration(now - startedAt)}</span>
+            </div>
+            <div aria-hidden="true" className="relative h-px w-full overflow-hidden bg-border">
+              <motion.div
+                className="absolute inset-y-0 left-0 bg-foreground"
+                initial={false}
+                animate={{ width: `${progress * 100}%` }}
+                transition={{ duration: 0.8, ease: EASE_OUT }}
+              />
+              <motion.div
+                className="absolute inset-y-0 w-24 bg-gradient-to-r from-transparent via-brand to-transparent"
+                animate={{ left: ["-6rem", `${progress * 100}%`] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+              />
             </div>
           </div>
 
-          <div className="preview-boot-panel relative w-full rounded-md border border-[var(--hud-dim)] bg-background/70 text-[11px] backdrop-blur-sm">
-            {/* HUD corner brackets */}
-            {[
-              "left-0 top-0 border-l border-t",
-              "right-0 top-0 border-r border-t",
-              "bottom-0 left-0 border-b border-l",
-              "bottom-0 right-0 border-b border-r",
-            ].map((corner) => (
-              <span
-                key={corner}
-                aria-hidden="true"
-                className={cn("absolute -m-px size-2.5 border-[var(--hud)]", corner)}
-              />
-            ))}
-
-            <div className="flex items-center justify-between border-b border-[var(--hud-dim)] px-3 py-2 text-[10px] uppercase tracking-[0.2em]">
-              <span className="text-[var(--hud)]">{engineLabel}{" // "}Boot sequence</span>
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span aria-hidden="true" className="preview-boot-cursor size-1.5 rounded-full bg-[var(--hud)]" />
-                Live
-              </span>
-            </div>
-
-            <ol className="space-y-0.5 px-3 py-2">
-              {STEPS.map((step, index) => {
-                const state = index < current ? "done" : index === current ? "active" : "pending";
-                const label = index === 0 && firstStepLabel ? firstStepLabel : step.label;
-                const start = marks[step.phase];
-                const end = state === "done" ? marks[BOOT_PHASES[index + 1]] : now;
-                const time =
-                  state !== "pending" && start !== undefined && end !== undefined
-                    ? formatDuration(end - start)
-                    : null;
-                return (
-                  <li
-                    key={step.phase}
-                    data-state={state}
-                    aria-current={state === "active" ? "step" : undefined}
-                    className="grid h-6 grid-cols-[auto_1fr_auto] items-center gap-3"
+          <ol className="space-y-2.5">
+            {STEPS.map((step, index) => {
+              const state = index < current ? "done" : index === current ? "active" : "pending";
+              const label = index === 0 && firstStepLabel ? firstStepLabel : step.label;
+              const start = marks[step.phase];
+              const end = state === "done" ? marks[BOOT_PHASES[index + 1]] : now;
+              const time =
+                state !== "pending" && start !== undefined && end !== undefined
+                  ? formatDuration(end - start)
+                  : null;
+              return (
+                <motion.li
+                  key={step.phase}
+                  layout
+                  transition={{ duration: 0.5, ease: EASE_OUT }}
+                  data-state={state}
+                  aria-current={state === "active" ? "step" : undefined}
+                  className={cn(
+                    "flex items-baseline justify-between gap-4",
+                    state === "active" ? "py-1.5" : "text-sm",
+                    state === "done" && "text-muted-foreground",
+                    state === "pending" && "text-muted-foreground/40",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex min-w-0 items-baseline gap-3",
+                      state === "active" &&
+                        "text-2xl font-semibold tracking-tight text-foreground @3xl:text-4xl",
+                      state === "active" && variant === "decrypt" && "font-mono font-medium tracking-tighter",
+                    )}
                   >
                     <span
                       aria-hidden="true"
                       className={cn(
-                        "whitespace-pre",
-                        state === "pending" ? "text-muted-foreground/50" : "text-[var(--hud)]",
-                        state === "active" && "preview-boot-cursor",
+                        "w-4 shrink-0 font-mono text-xs",
+                        state === "done" && "text-brand",
+                        state === "active" && "hidden",
                       )}
                     >
-                      {state === "done" ? "[ OK ]" : state === "active" ? "[ >> ]" : "[    ]"}
+                      {state === "done" ? "✓" : "·"}
                     </span>
-                    <span
-                      className={cn(
-                        "truncate uppercase tracking-wider",
-                        state === "pending" ? "text-muted-foreground/60" : "text-foreground",
+                    <span className="min-w-0">
+                      {state !== "active" ? (
+                        label
+                      ) : variant === "decrypt" ? (
+                        <>
+                          <DecryptText key={label} text={label} />
+                          <span
+                            aria-hidden="true"
+                            className="ml-1 inline-block h-[0.8em] w-[0.45em] translate-y-[0.08em] animate-pulse bg-brand motion-reduce:animate-none"
+                          />
+                        </>
+                      ) : (
+                        <BlurInText key={label} text={label} />
                       )}
-                    >
-                      {state === "active" ? <DecryptText key={label} text={label} /> : label}
                       <span className="sr-only">
                         {state === "done" ? " (done)" : state === "active" ? " (in progress)" : ""}
                       </span>
                     </span>
-                    <span className="tabular-nums text-muted-foreground">{time}</span>
-                  </li>
-                );
-              })}
-            </ol>
+                  </span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                    {time}
+                  </span>
+                </motion.li>
+              );
+            })}
+          </ol>
 
-            <div
-              aria-hidden="true"
-              className="space-y-0.5 border-t border-dashed border-[var(--hud-dim)] px-3 py-2 text-[10px] text-muted-foreground"
-            >
-              {tail.length === 0 ? (
-                <p>
-                  &gt; awaiting output<span className="preview-boot-cursor">_</span>
-                </p>
-              ) : (
-                tail.map((line, index) => (
-                  <p key={`${tail.length}-${index}`} className="truncate">
-                    &gt; {line}
-                    {index === tail.length - 1 && (
-                      <span className="preview-boot-cursor ml-0.5 inline-block h-2.5 w-1.5 translate-y-0.5 bg-[var(--hud)]" />
-                    )}
-                  </p>
-                ))
-              )}
+          <div className="flex min-h-5 items-center justify-between gap-4 font-mono text-xs text-muted-foreground">
+            <div aria-hidden="true" className="relative min-w-0 flex-1 overflow-hidden">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {lastLine && (
+                  <motion.p
+                    key={lastLine}
+                    initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+                    transition={{ duration: 0.3, ease: EASE_OUT }}
+                    className="truncate"
+                  >
+                    <span className="text-brand">❯</span> {lastLine}
+                  </motion.p>
+                )}
+              </AnimatePresence>
             </div>
+            {onShowLogs && (
+              <button
+                type="button"
+                onClick={onShowLogs}
+                className="shrink-0 underline-offset-4 transition-colors hover:text-foreground hover:underline"
+              >
+                Show logs
+              </button>
+            )}
           </div>
-
-          {onShowLogs && (
-            <button
-              type="button"
-              onClick={onShowLogs}
-              className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-[var(--hud)]"
-            >
-              &gt; Show logs
-            </button>
-          )}
         </div>
       </div>
-    </div>
+    </MotionConfig>
   );
 };
