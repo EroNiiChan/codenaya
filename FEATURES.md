@@ -24,8 +24,8 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 - #259: file/folder delete and checkpoint restore have no confirm or undo; the ⌘Backspace
   hint does nothing.
 - #260: project "Copy link" copies an owner-only URL; there is no read-only share link.
-- #261: integrations have no Reconnect for expired or revoked connections, and last-used is
-  never recorded.
+- #261: integrations have no Reconnect for expired or revoked connections, Settings can't
+  link a connection to a project, and last-used is never recorded.
 
 ## 1. Core user flows
 
@@ -128,7 +128,8 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `preview-device-toggle.tsx`, `utils/boot-plan.ts`) → `POST /api/sandbox` (NDJSON stream;
   secrets are injected server-side and redacted from output; at most 3 live sandboxes per
   user), `/api/sandbox/[sandboxId]` (file sync, kill); `features/webcontainer-preview/*`
-  (public env vars only); `projects.updateSettings`; COOP/COEP headers in `next.config.ts`.
+  (public env vars only); `projects.updateSettings`; COOP/COEP headers in `next.config.ts` (only with
+  `?engine=webcontainer`).
 - Env: `E2B_API_KEY`; `E2B_TEMPLATE=codenaya-node22` (built by `npm run e2b:template`).
 - E2E: `preview-lazy.spec.ts`, `preview-boot-steps.spec.ts`, `preview-terminal.spec.ts`,
   `preview-open-tab.spec.ts`, `preview-device.spec.ts`, `preview-auto-open.spec.ts`,
@@ -175,11 +176,12 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   Unpublish.
 
 **F12. Integrations (API key, OAuth PKCE, MCP tools with approval)**: Unverified
-- Steps: Integrations dialog (navbar) or Settings → Integrations → choose a provider (Supabase,
-  Neon, GitHub, Stripe, Context7, Prisma Postgres, Sentry, Cloudflare, Linear, or a custom MCP
-  URL) → connect with an API key or an OAuth popup → link it to the project with a scope →
-  the agent gets the MCP tools. Tools in a provider's destructive list pause for approval in
-  the chat (approve or deny).
+- Steps: IDE navbar → Integrations dialog → choose a provider (Supabase, Neon, GitHub, Stripe,
+  Context7, Prisma Postgres, Sentry, Cloudflare, Linear, or a custom MCP URL) → connect with
+  an API key or an OAuth popup → link it to the project with a scope → the agent gets the MCP
+  tools. Settings → Integrations lists and manages connections but can't link them to a
+  project (#261). Tools in a provider's destructive list pause for approval in the chat
+  (approve or deny).
 - Code: `features/integrations/components/*`, `catalog.ts`, `server/{oauth,mcp,crypto}/*`;
   `/api/integrations/connect`, `/api/integrations/oauth/{start,callback}`;
   `convex/integrations.ts`, `convex/crons.ts` and `maintenance.ts` (pruning).
@@ -280,7 +282,8 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 - E2E: `chat-images.spec.ts`.
 
 **F22. Checkpoints and restore**: Works
-- Steps: every non-plan agent run snapshots the project first (last 20 kept) → chat Version
+- Steps: every non-plan agent run snapshots the project first (last 20 kept; projects over 2000 files are
+  skipped) → chat Version
   history, or "Restore to before this run" on an assistant message → confirm → files restored.
   Restore is refused while an agent is running.
 - Code: `checkpoint-dialogs.tsx`; `system.createProjectCheckpoint`, `convex/checkpoints.ts`
@@ -328,6 +331,7 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 **F28. Credits and billing**: Missing (#105)
 - `/pricing` shows Free and Pro plans, but Pro checkout is disabled ("Coming soon") and no
   credits are tracked or enforced. Everyone is on Free.
+- E2E: none (`pricing.spec.ts` covers the page only).
 
 ## 2. Platform safeguards
 
