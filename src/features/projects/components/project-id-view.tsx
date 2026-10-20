@@ -159,7 +159,7 @@ export const ProjectIdView = ({
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
   const { openIntegrations } = useProjectIntegrations();
   const project = useProject(projectId);
-  const isPublished = useIsProjectPublished(projectId);
+  const showcaseId = useIsProjectPublished(projectId);
   const rename = useProjectRename(project);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
@@ -285,13 +285,13 @@ export const ProjectIdView = ({
 
         {/* Right: Publish + Export + Help + User (phones hide it while renaming to make room) */}
         <div className={cn("flex items-center gap-1.5 shrink-0", rename.isRenaming && "hidden @xl:flex")}>
-          {isPublished && (
+          {showcaseId && (
             <PublishedMenu
-              showcaseId={isPublished}
+              showcaseId={showcaseId}
               className="flex items-center gap-1.5 h-8 px-2 @3xl:px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-colors"
             />
           )}
-          {isPublished === null && (
+          {showcaseId === null && (
             <button
               onClick={() => setPublishDialogOpen(true)}
               aria-label="Publish"

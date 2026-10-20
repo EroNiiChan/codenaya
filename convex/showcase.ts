@@ -179,12 +179,12 @@ export const getMyPublished = query({
   handler: async (ctx) => {
     const identity = await verifyAuth(ctx);
 
-    return await ctx.db
+    const entries = await ctx.db
       .query("showcaseProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
       .order("desc")
-      .filter((q) => q.neq(q.field("status"), "removed"))
       .take(50);
+    return entries.filter((e) => e.status !== "removed");
   },
 });
 
@@ -320,10 +320,11 @@ export const publish = mutation({
     };
 
     // Republishing brings the unpublished entry back with the new listing,
-    // so its votes, views and imports survive.
+    // so its votes, views and imports survive. Featuring was a pick of the
+    // old listing, so it does not carry over.
     const removed = await entryWithStatus(ctx, args.projectId, "removed");
     if (removed) {
-      await ctx.db.patch(removed._id, listing);
+      await ctx.db.patch(removed._id, { ...listing, featured: undefined });
       await releaseBlobs(ctx, [removed.previewImageId]);
       return removed._id;
     }

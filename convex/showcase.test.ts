@@ -470,10 +470,11 @@ describe("showcase.isProjectPublished", () => {
     const projectId = await t.run((ctx) =>
       ctx.db.insert("projects", { name: "Todo", ownerId: "user_alice", updatedAt: 0 })
     );
-    const publish = (title: string) =>
+    const publish = async (title: string) =>
       alice.mutation(api.showcase.publish, {
         projectId,
         title,
+        previewImageId: await storeImage(t),
         description: "",
         techStack: [],
         designStyle: [],
@@ -481,19 +482,22 @@ describe("showcase.isProjectPublished", () => {
       });
 
     const id = await publish("First");
-    await t.run((ctx) => ctx.db.patch(id, { upvotes: 3 }));
+    const firstPreview = (await t.run((ctx) => ctx.db.get(id)))!.previewImageId!;
+    await t.run((ctx) => ctx.db.patch(id, { upvotes: 3, featured: true }));
     await alice.mutation(api.showcase.unpublish, { id });
     expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBeNull();
 
     // Republishing refreshes the same entry, votes included, and a second publish is refused.
     expect(await publish("Second")).toBe(id);
+    expect(await t.run((ctx) => ctx.db.system.get(firstPreview))).toBeNull();
     expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(id);
     await expect(publish("Third")).rejects.toThrow("already published");
 
     const rows = await t.run((ctx) => ctx.db.query("showcaseProjects").collect());
-    expect(rows.map(({ title, status, upvotes }) => ({ title, status, upvotes }))).toEqual([
-      { title: "Second", status: "published", upvotes: 3 },
+    expect(rows.map(({ title, status, upvotes, featured }) => ({ title, status, upvotes, featured }))).toEqual([
+      { title: "Second", status: "published", upvotes: 3, featured: undefined },
     ]);
+    expect(await t.run((ctx) => ctx.db.system.get(rows[0].previewImageId!))).not.toBeNull();
   });
 });
 
