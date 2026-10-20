@@ -59,6 +59,9 @@ describe("reconcileSuggestion (#268)", () => {
     expect(apply("arr.forEach(", "x => {", ")")).toBe("arr.forEach(x => {)");
     expect(apply("foo(", "{", ")")).toBe("foo({)");
     expect(apply("foo(a, ", "{", ")")).toBe("foo(a, {)");
+    expect(apply("setTimeout(", "function () {", ")")).toBe("setTimeout(function () {)");
+    expect(apply("return (", '<div className="card">{', ");")).toBe('return (<div className="card">{);');
+    expect(apply("doThing(", "value {", ")")).toBe("doThing(value {)");
   });
 
   it("uses the overlap when the suggestion closes the pair itself", () => {
