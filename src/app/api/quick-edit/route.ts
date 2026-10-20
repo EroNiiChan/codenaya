@@ -10,7 +10,7 @@ import {
   QUICK_EDIT_RATE_LIMIT,
   checkRateLimit,
   rateLimitedResponse,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 
 const quickEditSchema = z.object({
   editedCode: z

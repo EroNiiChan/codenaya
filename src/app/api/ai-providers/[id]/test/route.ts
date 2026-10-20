@@ -8,7 +8,7 @@ import {
   AI_PROVIDER_TEST_RATE_LIMIT,
   checkRateLimit,
   rateLimitedResponse,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 import { convex } from "@/lib/convex-client";
 
 import { api } from "../../../../../../convex/_generated/api";
