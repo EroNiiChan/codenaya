@@ -134,8 +134,7 @@ rules:
     cascades nobody calls directly. `convex/maintenance.ts` has the rationale.
 - **One ownership helper per resource.** Use `getOwnedProject(ctx, id, ownerId)` from
   `convex/projects.ts:30`. It also treats `deletingAt` projects as gone. Debt to clear:
-  `convex/files.ts` repeats the check inline ten times (e.g. `files.ts:12-21`), and
-  `convex/skills.ts:45` has its own copy that *misses* the `deletingAt` check. Import
+  `convex/files.ts` repeats the check inline ten times (e.g. `files.ts:12-21`). Import
   the shared helper; don't write another copy.
 - **Ids from outside are strings.** When an id comes from model output or a URL, take
   `v.string()` and `ctx.db.normalizeId(...)`, then return `null` for a malformed id, as
