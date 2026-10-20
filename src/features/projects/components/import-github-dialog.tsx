@@ -29,11 +29,14 @@ const formSchema = z.object({
 interface ImportGithubDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Prefills the URL field, e.g. from an "Open in Codenaya" link. */
+  defaultUrl?: string;
 }
 
 export const ImportGithubDialog = ({
   open,
   onOpenChange,
+  defaultUrl = "",
 }: ImportGithubDialogProps) => {
   const router = useRouter();
   const [githubNotLinked, setGithubNotLinked] = useState(false);
@@ -47,7 +50,7 @@ export const ImportGithubDialog = ({
 
   const form = useForm({
     defaultValues: {
-      url: "",
+      url: defaultUrl,
     },
     validators: {
       onSubmit: formSchema,

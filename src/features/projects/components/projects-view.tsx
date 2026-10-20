@@ -14,6 +14,8 @@ import { takePendingTemplate } from "@/features/templates/utils/pending-template
 import { useProjects } from "../hooks/use-projects";
 import { useCreateProjectFromPrompt } from "../hooks/use-create-project-from-prompt";
 import { takePendingPrompt } from "../utils/pending-prompt";
+import { takePendingImport } from "../utils/pending-import";
+import { githubRepoUrl, parseGithubRepo } from "../utils/github-repo";
 import { ProjectsCommandDialog } from "./projects-command-dialog";
 import { FirstRunChecklist } from "./first-run-checklist";
 import { ImportGithubDialog } from "./import-github-dialog";
@@ -26,6 +28,7 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 export const ProjectsView = () => {
   const [commandDialogOpen, setCommandDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importRepo, setImportRepo] = useState<string | null>(null);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const isMac = useIsMac();
   const { user } = useUser();
@@ -43,6 +46,22 @@ export const ProjectsView = () => {
     if (pendingTemplate) void createProject(pendingTemplate.prompt, pendingTemplate.id);
     else if (pendingPrompt) void createProject(pendingPrompt);
   }, [createProject]);
+
+  // A repo from an "Open in Codenaya" link (/import?repo=), passed as
+  // `?import=` or kept across sign-up: open the import dialog prefilled. The
+  // user still confirms; nothing is imported here.
+  useEffect(() => {
+    const pendingImport = takePendingImport();
+    const param = new URLSearchParams(window.location.search).get("import");
+    const repo = parseGithubRepo(param ?? pendingImport ?? "");
+    if (param !== null) window.history.replaceState(null, "", "/");
+    if (!repo) return;
+    // Browser-only, take-once state (URL + localStorage) can only be read
+    // after mount; a lazy initialiser would run twice in Strict Mode.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setImportRepo(repo);
+    setImportDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -73,8 +92,14 @@ export const ProjectsView = () => {
         onOpenChange={setCommandDialogOpen}
       />
       <ImportGithubDialog
+        // Remount on a new repo so the form takes it as its default value.
+        key={importRepo}
         open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
+        onOpenChange={(open) => {
+          setImportDialogOpen(open);
+          if (!open) setImportRepo(null);
+        }}
+        defaultUrl={importRepo ? githubRepoUrl(importRepo) : undefined}
       />
       <NewProjectDialog
         open={newProjectDialogOpen}

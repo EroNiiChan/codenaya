@@ -10,21 +10,13 @@ import {
   githubNotLinkedResponse,
   isPublicGithubRepo,
 } from "@/features/projects/server/github-token";
+import { parseGithubRepo } from "@/features/projects/utils/github-repo";
 
 import { api } from "../../../../../convex/_generated/api";
 
 const requestSchema = z.object({
   url: z.url(),
 });
-
-function parseGitHubUrl(url: string) {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) {
-    return null;
-  }
-
-  return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
-}
 
 export async function POST(request: Request) {
   const { userId, unauthorized } = await requireUserId();
@@ -41,13 +33,13 @@ export async function POST(request: Request) {
 
   const { url } = data;
 
-  const parsedUrl = parseGitHubUrl(url);
+  const slug = parseGithubRepo(url);
 
-  if (!parsedUrl) {
+  if (!slug) {
     return NextResponse.json({ error: "Invalid GitHub URL" }, { status: 400 });
   }
 
-  const { owner, repo } = parsedUrl;
+  const [owner, repo] = slug.split("/");
   // https://github.com/itsmrad/codenaya
   // { owner: "itsmrad", repo: "codenaya" }
 

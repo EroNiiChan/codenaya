@@ -152,4 +152,16 @@ describe("POST /api/github/import with a non-GitHub URL (#235)", () => {
     expect(await res.json()).toEqual({ error: "Invalid GitHub URL" });
     expect(mocks.createProject).not.toHaveBeenCalled();
   });
+
+  it("rejects a github.com path smuggled into another URL (#231)", async () => {
+    vi.clearAllMocks();
+    mocks.auth.mockResolvedValue({ userId: "user_1", has: () => false });
+
+    const res = await importPOST(
+      post({ url: "https://evil.com/?next=https://github.com/acme/widgets" })
+    );
+
+    expect(res.status).toBe(400);
+    expect(mocks.createProject).not.toHaveBeenCalled();
+  });
 });
