@@ -68,7 +68,10 @@ export const createScaffoldViteAppTool = ({
 
           const created: string[] = [];
           const kept: string[] = [];
-          for (const [dir, files] of byDir) {
+          // Root last: the preview starts booting once package.json exists, so
+          // it must land with (not before) the files the starter references (#254).
+          const batches = [...byDir].sort(([a], [b]) => Number(a === "") - Number(b === ""));
+          for (const [dir, files] of batches) {
             const results = await convex.mutation(api.system.createFiles, {
               internalKey,
               projectId,

@@ -106,7 +106,8 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_parent", ["parentId"])
-    .index("by_project_parent", ["projectId", "parentId"]),
+    .index("by_project_parent", ["projectId", "parentId"])
+    .index("by_storageId", ["storageId"]),
 
   /**
    * The project's files just before an agent run (#43), restorable from the
@@ -198,18 +199,27 @@ export default defineSchema({
     downvotes: v.number(),
     viewCount: v.number(),
     importCount: v.number(),
+    /**
+     * "unlisted" entries exist for their owner but stay off every public
+     * list and page, e.g. ones published by test accounts.
+     */
     status: v.union(
       v.literal("published"),
+      v.literal("unlisted"),
       v.literal("removed"),
     ),
+    /** Picked for the landing page strip; set with `showcase.setFeatured`. */
+    featured: v.optional(v.boolean()),
     publishedAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_status_and_publishedAt", ["status", "publishedAt"])
+    .index("by_status_and_featured_and_publishedAt", ["status", "featured", "publishedAt"])
     .index("by_status_and_upvotes", ["status", "upvotes"])
     .index("by_status_and_importCount", ["status", "importCount"])
     .index("by_owner", ["ownerId"])
     .index("by_projectId", ["projectId"])
+    .index("by_previewImageId", ["previewImageId"])
     .index("by_status_and_category_and_publishedAt", ["status", "category", "publishedAt"])
     .index("by_status_and_category_and_upvotes", ["status", "category", "upvotes"])
     .index("by_status_and_category_and_importCount", ["status", "category", "importCount"])
@@ -231,6 +241,14 @@ export default defineSchema({
     showcaseProjectId: v.id("showcaseProjects"),
     userId: v.string(),
     viewedAt: v.number(),
+  })
+    .index("by_userId_and_showcaseProjectId", ["userId", "showcaseProjectId"])
+    .index("by_showcaseProjectId", ["showcaseProjectId"]),
+
+  showcaseImports: defineTable({
+    showcaseProjectId: v.id("showcaseProjects"),
+    userId: v.string(),
+    importedAt: v.number(),
   })
     .index("by_userId_and_showcaseProjectId", ["userId", "showcaseProjectId"])
     .index("by_showcaseProjectId", ["showcaseProjectId"]),

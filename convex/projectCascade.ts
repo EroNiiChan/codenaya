@@ -39,8 +39,49 @@ export async function deleteStorageIfPresent(
   }
 }
 
+/** Whether any row still points at the blob. */
+async function isStorageReferenced(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+): Promise<boolean> {
+  const refs = await Promise.all([
+    ctx.db
+      .query("files")
+      .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("checkpointFiles")
+      .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("chatImages")
+      .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
+      .first(),
+    ctx.db
+      .query("showcaseProjects")
+      .withIndex("by_previewImageId", (q) => q.eq("previewImageId", storageId))
+      .first(),
+  ]);
+  return refs.some((ref) => ref !== null);
+}
+
 /**
- * One batch of a showcase entry's teardown: votes, then views, then the entry
+ * Deletes a blob once nothing references it. Blobs can be shared: copied
+ * projects point at the source's blobs until `projectCopy.copyBlobs` gives
+ * them their own, and checkpoints keep the blobs of files they can restore.
+ * Call it after deleting or repointing the row that held the blob.
+ */
+export async function releaseStorageIfUnreferenced(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+) {
+  if (!(await isStorageReferenced(ctx, storageId))) {
+    await deleteStorageIfPresent(ctx, storageId);
+  }
+}
+
+/**
+ * One batch of a showcase entry's teardown: votes, views, imports, then the entry
  * and its preview image. Returns `true` once the entry is gone.
  */
 export async function deleteShowcaseBatch(
@@ -63,11 +104,29 @@ export async function deleteShowcaseBatch(
     .take(CASCADE_BATCH_SIZE);
   if (await deleteRows(ctx, "showcaseViews", views)) return false;
 
-  if (showcase.previewImageId) {
-    await deleteStorageIfPresent(ctx, showcase.previewImageId);
-  }
+  const imports = await ctx.db
+    .query("showcaseImports")
+    .withIndex("by_showcaseProjectId", (q) =>
+      q.eq("showcaseProjectId", showcase._id),
+    )
+    .take(CASCADE_BATCH_SIZE);
+  if (await deleteRows(ctx, "showcaseImports", imports)) return false;
+
   await ctx.db.delete("showcaseProjects", showcase._id);
+  if (showcase.previewImageId) {
+    await releaseStorageIfUnreferenced(ctx, showcase.previewImageId);
+  }
   return true;
+}
+
+/** Releases each distinct blob of a batch of just-deleted rows. */
+export async function releaseBlobs(
+  ctx: MutationCtx,
+  storageIds: (Id<"_storage"> | undefined)[],
+) {
+  for (const storageId of new Set(storageIds)) {
+    if (storageId) await releaseStorageIfUnreferenced(ctx, storageId);
+  }
 }
 
 /**
@@ -83,23 +142,19 @@ export async function deleteProjectBatch(
     .query("files")
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
     .take(CASCADE_BATCH_SIZE);
-  for (const file of files) {
-    if (file.storageId) {
-      await deleteStorageIfPresent(ctx, file.storageId);
-    }
+  if (await deleteRows(ctx, "files", files)) {
+    await releaseBlobs(ctx, files.map((file) => file.storageId));
+    return false;
   }
-  if (await deleteRows(ctx, "files", files)) return false;
 
   const checkpointFiles = await ctx.db
     .query("checkpointFiles")
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
     .take(CASCADE_BATCH_SIZE);
-  for (const row of checkpointFiles) {
-    if (row.storageId) {
-      await deleteStorageIfPresent(ctx, row.storageId);
-    }
+  if (await deleteRows(ctx, "checkpointFiles", checkpointFiles)) {
+    await releaseBlobs(ctx, checkpointFiles.map((row) => row.storageId));
+    return false;
   }
-  if (await deleteRows(ctx, "checkpointFiles", checkpointFiles)) return false;
 
   const checkpoints = await ctx.db
     .query("checkpoints")
@@ -117,10 +172,10 @@ export async function deleteProjectBatch(
     .query("chatImages")
     .withIndex("by_projectId", (q) => q.eq("projectId", projectId))
     .take(CASCADE_BATCH_SIZE);
-  for (const image of chatImages) {
-    await deleteStorageIfPresent(ctx, image.storageId);
+  if (await deleteRows(ctx, "chatImages", chatImages)) {
+    await releaseBlobs(ctx, chatImages.map((image) => image.storageId));
+    return false;
   }
-  if (await deleteRows(ctx, "chatImages", chatImages)) return false;
 
   const conversations = await ctx.db
     .query("conversations")
