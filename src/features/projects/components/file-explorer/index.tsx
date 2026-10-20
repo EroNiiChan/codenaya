@@ -28,7 +28,7 @@ export const FileExplorer = ({
     null
   );
 
-  const { openFile } = useEditor();
+  const { openFile } = useEditor(projectId);
   const project = useProject(projectId);
   const rootFiles = useFolderContents({
     projectId,

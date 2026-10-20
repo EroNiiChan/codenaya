@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -34,12 +34,13 @@ export async function getOwnedProject(
 ) {
   const project = await ctx.db.get("projects", id);
 
+  // Typed, so the project page can tell "gone" from other errors (#266).
   if (!project || project.deletingAt !== undefined) {
-    throw new Error("Project not found");
+    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
   }
 
   if (project.ownerId !== ownerId) {
-    throw new Error("Unauthorized access to this project");
+    throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized access to this project" });
   }
 
   return project;

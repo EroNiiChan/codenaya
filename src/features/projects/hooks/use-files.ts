@@ -13,6 +13,7 @@ const sortFiles = <T extends { type: "file" | "folder"; name: string }>(
   });
 };
 
+/** Optimistic rows use `crypto.randomUUID()`; Convex ids never contain "-" (#266). */
 export const isOptimisticFileId = (id: string | null | undefined): boolean => {
   return typeof id === "string" && id.includes("-");
 };
