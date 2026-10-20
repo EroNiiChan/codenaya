@@ -53,6 +53,7 @@ crons.interval(
   "prune orphaned project connections",
   { hours: 6 },
   internal.maintenance.pruneOrphanedProjectConnections,
+  {},
 );
 
 crons.interval(

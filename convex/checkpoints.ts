@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
 import { getOwnedProject } from "./projects";
 
@@ -22,6 +23,12 @@ export const MAX_CHECKPOINTS_PER_PROJECT = 20;
 /** Longest stored label (the prompt that started the run). */
 const MAX_LABEL_LENGTH = 140;
 
+/**
+ * Largest project snapshotted, so a snapshot plus the prune of an old one fit
+ * in one transaction (#212). No snapshot holds more rows than this.
+ */
+const MAX_CHECKPOINT_FILES = 2000;
+
 /** Each file of a project with its slash-separated path from the root. */
 function withPaths(files: Doc<"files">[]) {
   const byId = new Map(files.map((file) => [file._id, file]));
@@ -37,21 +44,35 @@ function withPaths(files: Doc<"files">[]) {
   return files.map((file) => ({ file, path: pathOf(file) }));
 }
 
-const projectFiles = (ctx: MutationCtx, projectId: Id<"projects">) =>
-  ctx.db
+/** All of a project's files; refuses a project too big to snapshot whole. */
+async function projectFiles(ctx: MutationCtx, projectId: Id<"projects">) {
+  const files = await ctx.db
     .query("files")
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
-    .collect();
+    .take(MAX_CHECKPOINT_FILES + 1);
+  if (files.length > MAX_CHECKPOINT_FILES) {
+    throw appError(
+      "LIMIT_EXCEEDED",
+      `Projects with more than ${MAX_CHECKPOINT_FILES} files have no checkpoints`,
+    );
+  }
+  return files;
+}
+
+const checkpointRows = (ctx: MutationCtx, checkpointId: Id<"checkpoints">) =>
+  ctx.db
+    .query("checkpointFiles")
+    .withIndex("by_checkpoint", (q) => q.eq("checkpointId", checkpointId));
 
 /** Deletes a checkpoint and any blob that only it was keeping alive. */
 async function deleteCheckpoint(
   ctx: MutationCtx,
   checkpoint: Doc<"checkpoints">,
 ) {
-  const rows = await ctx.db
-    .query("checkpointFiles")
-    .withIndex("by_checkpoint", (q) => q.eq("checkpointId", checkpoint._id))
-    .collect();
+  // ponytail: a pre-#212 snapshot over the cap leaves its extra rows (and
+  // their blobs) to the project cascade; throwing here would fail every later
+  // snapshot of the project.
+  const rows = await checkpointRows(ctx, checkpoint._id).take(MAX_CHECKPOINT_FILES);
   for (const row of rows) {
     await ctx.db.delete("checkpointFiles", row._id);
   }
@@ -101,7 +122,8 @@ export async function createCheckpoint(
     .query("checkpoints")
     .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
     .order("desc")
-    .collect();
+    // Every snapshot prunes, so at most one is over the cap.
+    .take(MAX_CHECKPOINTS_PER_PROJECT + 1);
   for (const checkpoint of stale.slice(MAX_CHECKPOINTS_PER_PROJECT)) {
     await deleteCheckpoint(ctx, checkpoint);
   }
@@ -118,10 +140,12 @@ async function restoreCheckpoint(
   ctx: MutationCtx,
   checkpoint: Doc<"checkpoints">,
 ) {
-  const rows = await ctx.db
-    .query("checkpointFiles")
-    .withIndex("by_checkpoint", (q) => q.eq("checkpointId", checkpoint._id))
-    .collect();
+  // A pre-#212 snapshot can be over the cap. Restoring part of it would delete
+  // every file outside that part, so refuse it whole.
+  const rows = await checkpointRows(ctx, checkpoint._id).take(MAX_CHECKPOINT_FILES + 1);
+  if (rows.length > MAX_CHECKPOINT_FILES) {
+    throw appError("LIMIT_EXCEEDED", "This checkpoint is too large to restore");
+  }
   const wanted = new Map(rows.map((row) => [row.path, row]));
   const kept = new Map<string, Doc<"files">>();
 

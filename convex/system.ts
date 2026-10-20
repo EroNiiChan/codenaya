@@ -10,17 +10,32 @@ import {
 import { createCheckpoint } from "./checkpoints";
 import { appError } from "./errors";
 import {
+  CASCADE_BATCH_SIZE,
+  deleteRows,
   getUnclaimedStorage,
   releaseBlobs,
-  releaseStorageIfUnreferenced,
 } from "./projectCascade";
 import { assertOwnedImages, withImageUrls } from "./chatImages";
-import { assertProjectFolder, getProjectFile } from "./files";
+import {
+  MAX_PROJECT_FILES,
+  assertProjectFolder,
+  deleteFileTree,
+  findSibling,
+  getProjectFile,
+} from "./files";
 import { resolveProjectSkills } from "./skills";
 import { countProjectBuilt } from "./stats";
+import { MAX_ENV_VARS } from "./envVars";
+import { MAX_PROJECT_CONNECTIONS } from "./integrations";
 
 // Keeps the steps array (and the message document) bounded on long runs.
 const MAX_MESSAGE_STEPS = 100;
+
+/** Most messages `getRecentMessages` returns as agent context (#53). */
+const MAX_RECENT_MESSAGES = 50;
+
+/** A project runs one agent at a time; lost runs are failed by a cron. */
+const MAX_PROCESSING_MESSAGES = 20;
 
 const validateInternalKey = (key: string) => {
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -57,7 +72,7 @@ export const getConversationById = query({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    return await ctx.db.get(args.conversationId);
+    return await ctx.db.get("conversations", args.conversationId);
   },
 });
 
@@ -108,7 +123,7 @@ export const createMessage = mutation({
     });
 
     // Update conversation's updatedAt
-    await ctx.db.patch(args.conversationId, {
+    await ctx.db.patch("conversations", args.conversationId, {
       updatedAt: Date.now(),
     });
 
@@ -125,7 +140,7 @@ export const updateMessageContent = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    await ctx.db.patch(args.messageId, {
+    await ctx.db.patch("messages", args.messageId, {
       content: args.content,
       status: "completed" as const,
       completedAt: Date.now(),
@@ -143,7 +158,7 @@ export const upsertMessageSteps = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("messages", args.messageId);
     if (!message) {
       return;
     }
@@ -163,7 +178,7 @@ export const upsertMessageSteps = mutation({
       }
     }
 
-    await ctx.db.patch(args.messageId, {
+    await ctx.db.patch("messages", args.messageId, {
       steps: steps.slice(-MAX_MESSAGE_STEPS),
     });
   },
@@ -182,7 +197,7 @@ export const updateMessageStatus = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    await ctx.db.patch(args.messageId, {
+    await ctx.db.patch("messages", args.messageId, {
       status: args.status,
       completedAt: args.status === "processing" ? undefined : Date.now(),
     });
@@ -198,7 +213,7 @@ export const setMessageWorkflowRunId = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    await ctx.db.patch(args.messageId, {
+    await ctx.db.patch("messages", args.messageId, {
       workflowRunId: args.workflowRunId,
     });
   },
@@ -212,7 +227,7 @@ export const getMessageById = query({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    return await ctx.db.get(args.messageId);
+    return await ctx.db.get("messages", args.messageId);
   },
 });
 
@@ -231,7 +246,7 @@ export const getProcessingMessages = query({
           .eq("projectId", args.projectId)
           .eq("status", "processing")
       )
-      .collect();
+      .take(MAX_PROCESSING_MESSAGES);
   },
 });
 
@@ -245,16 +260,19 @@ export const getRecentMessages = query({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const limit = Math.min(
+      Math.max(Math.floor(args.limit ?? 10), 1),
+      MAX_RECENT_MESSAGES
+    );
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId)
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .take(limit);
 
-    const limit = args.limit ?? 10;
-    return await withImageUrls(ctx, messages.slice(-limit));
+    return await withImageUrls(ctx, messages.reverse());
   },
 });
 
@@ -268,7 +286,7 @@ export const updateConversationTitle = mutation({
    handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    await ctx.db.patch(args.conversationId, {
+    await ctx.db.patch("conversations", args.conversationId, {
       title: args.title,
       updatedAt: Date.now(),
     });
@@ -287,7 +305,7 @@ export const getProjectFiles = query({
     return await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_FILES);
   },
 });
 
@@ -302,7 +320,7 @@ export const createProjectCheckpoint = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get("messages", args.messageId);
     if (!message || message.projectId !== args.projectId) {
       throw new Error("Message not found");
     }
@@ -351,7 +369,7 @@ export const updateFile = mutation({
       throw new Error("File not found");
     }
 
-    await ctx.db.patch(args.fileId, {
+    await ctx.db.patch("files", args.fileId, {
       content: args.content,
       updatedAt: Date.now(),
     });
@@ -373,18 +391,7 @@ export const createFile = mutation({
     validateInternalKey(args.internalKey);
     await assertProjectFolder(ctx, args.projectId, args.parentId);
 
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "file"
-    );
-
-    if (existing) {
+    if (await findSibling(ctx, { ...args, type: "file" })) {
       throw new Error("File already exists");
     }
 
@@ -418,19 +425,15 @@ export const createFiles = mutation({
     validateInternalKey(args.internalKey);
     await assertProjectFolder(ctx, args.projectId, args.parentId);
 
-    const existingFiles = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
-      )
-      .collect();
-
     const results: { name: string; fileId: string; error?: string }[] = [];
 
     for (const file of args.files) {
-      const existing = existingFiles.find(
-        (f) => f.name === file.name && f.type === "file"
-      );
+      const existing = await findSibling(ctx, {
+        projectId: args.projectId,
+        parentId: args.parentId,
+        name: file.name,
+        type: "file",
+      });
 
       if (existing) {
         results.push({
@@ -469,18 +472,7 @@ export const createFolder = mutation({
     validateInternalKey(args.internalKey);
     await assertProjectFolder(ctx, args.projectId, args.parentId);
 
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "folder"
-    );
-
-    if (existing) {
+    if (await findSibling(ctx, { ...args, type: "folder" })) {
       throw new Error("Folder already exists");
     }
 
@@ -513,25 +505,11 @@ export const renameFile = mutation({
     }
 
     // Check if a file with the new name already exists in the same parent folder
-    const siblings = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", file.projectId).eq("parentId", file.parentId)
-      )
-      .collect();
-
-    const existing = siblings.find(
-      (sibling) =>
-        sibling.name === args.newName &&
-        sibling.type === file.type &&
-        sibling._id !== args.fileId
-    );
-
-    if (existing) {
+    if (await findSibling(ctx, { ...file, name: args.newName }, args.fileId)) {
       throw new Error(`A ${file.type} named "${args.newName}" already exists`);
     }
 
-    await ctx.db.patch(args.fileId, {
+    await ctx.db.patch("files", args.fileId, {
       name: args.newName,
       updatedAt: Date.now(),
     });
@@ -555,62 +533,34 @@ export const deleteFile = mutation({
       throw new Error("File not found");
     }
 
-    // Recursively delete file/folder and all descendants
-    const deleteRecursive = async (fileId: typeof args.fileId) => {
-      const item = await ctx.db.get(fileId);
-
-      if (!item) {
-        return;
-      }
-
-      // If it's a folder, delete all children first
-      if (item.type === "folder") {
-        const children = await ctx.db
-          .query("files")
-          .withIndex("by_project_parent", (q) =>
-            q.eq("projectId", item.projectId).eq("parentId", fileId)
-          )
-          .collect();
-
-        for (const child of children) {
-          await deleteRecursive(child._id);
-        }
-      }
-
-      // Delete the file/folder itself
-      await ctx.db.delete(fileId);
-
-      // Then its blob, unless another file or checkpoint still uses it
-      if (item.storageId) {
-        await releaseStorageIfUnreferenced(ctx, item.storageId);
-      }
-    };
-
-    await deleteRecursive(args.fileId);
+    await deleteFileTree(ctx, file);
 
     return args.fileId;
   },
 });
 
+/**
+ * Deletes one batch of the project's files. Callers repeat it until `done`, so
+ * a project of any size stays inside one transaction's limits (#212).
+ */
 export const cleanup = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
   },
+  returns: v.object({ deleted: v.number(), done: v.boolean() }),
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(CASCADE_BATCH_SIZE);
 
-    for (const file of files) {
-      await ctx.db.delete(file._id);
-    }
+    await deleteRows(ctx, "files", files);
     await releaseBlobs(ctx, files.map((file) => file.storageId));
 
-    return { deleted: files.length };
+    return { deleted: files.length, done: files.length < CASCADE_BATCH_SIZE };
   },
 });
 
@@ -637,18 +587,7 @@ export const createBinaryFile = mutation({
     await assertProjectFolder(ctx, args.projectId, args.parentId);
     await getUnclaimedStorage(ctx, args.storageId);
 
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "file"
-    );
-
-    if (existing) {
+    if (await findSibling(ctx, { ...args, type: "file" })) {
       throw new Error("File already exists");
     }
 
@@ -723,7 +662,7 @@ export const getProjectFilesWithUrls = query({
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_FILES);
 
     return await Promise.all(
       files.map(async (file) => {
@@ -1087,7 +1026,7 @@ export const getProjectMcpConnections = query({
       .withIndex("by_project_and_enabled", (q) =>
         q.eq("projectId", args.projectId).eq("enabled", true),
       )
-      .collect();
+      .take(MAX_PROJECT_CONNECTIONS);
 
     const resolved = [];
 
@@ -1159,7 +1098,7 @@ export const getEnvVarsForSandbox = query({
     return await ctx.db
       .query("projectEnvVars")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_ENV_VARS);
   },
 });
 
@@ -1471,6 +1410,7 @@ export const recordMcpToolCall = mutation({
         .withIndex("by_invocation", (q) =>
           q.eq("mcpInvocationId", args.mcpInvocationId),
         )
+        // One row per status this invocation recorded, so a handful at most.
         .collect();
 
       if (existing.some((row) => row.status === args.status)) return;

@@ -203,10 +203,13 @@ export const isProjectPublished = query({
   },
 });
 
+/** Most entries `getTrending` returns, whatever the client asks for (#212). */
+const TRENDING_MAX = 50;
+
 export const getTrending = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 6;
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 6), 1), TRENDING_MAX);
 
     const results = await ctx.db
       .query("showcaseProjects")

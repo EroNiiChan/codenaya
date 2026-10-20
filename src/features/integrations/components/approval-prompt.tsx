@@ -40,9 +40,9 @@ import { Id } from "../../../../convex/_generated/dataModel";
  * up. The countdown therefore drives the controls, not just the copy — at zero
  * the actions are withdrawn and replaced with a plain expiry notice.
  *
- * `listPendingApprovals` also drops expired rows server-side at read time, but
- * that only takes effect on the next query invalidation. The local clock is
- * what makes the withdrawal immediate.
+ * `listPendingApprovals` reads no clock (a query isn't rerun as time passes),
+ * so an expired row stays listed until the cron marks it expired. The local
+ * clock is what makes the withdrawal immediate.
  */
 
 /**
@@ -129,25 +129,23 @@ const ApprovalCard = ({ approval, now }: ApprovalCardProps) => {
   const handleDecision = async (decision: "approved" | "denied") => {
     setDecisionInFlight(decision);
     try {
-      await resolveApproval({ id: approval._id, decision });
+      // The deadline passed mid-decision. That is a distinct outcome from a
+      // failed write: "something went wrong" would leave the user retrying a
+      // button that can never succeed.
+      if ((await resolveApproval({ id: approval._id, decision })) === "expired") {
+        setExpiredError(true);
+        toast.error(
+          "This request expired before it was answered — the agent stopped waiting. Ask again to retry."
+        );
+        return;
+      }
       toast.success(
         decision === "approved"
           ? `Approved ${approval.toolName} — the agent will run it now`
           : `Denied ${approval.toolName}`
       );
     } catch (error: unknown) {
-      const appError = getAppError(error);
-
-      // The server throws CONFLICT with status `expired` when the deadline
-      // passed mid-decision. That is a distinct outcome from a failed write and
-      // saying "something went wrong" would leave the user retrying a button
-      // that can never succeed.
-      if (appError?.code === "CONFLICT" && appError.status === "expired") {
-        setExpiredError(true);
-        toast.error(
-          "This request expired before it was answered — the agent stopped waiting. Ask again to retry."
-        );
-      } else if (appError?.code === "CONFLICT") {
+      if (getAppError(error)?.code === "CONFLICT") {
         toast.error("This request was already answered.");
       } else {
         toast.error(

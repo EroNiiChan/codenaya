@@ -68,7 +68,10 @@ describe("importGithubRepo", () => {
     vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
     vi.stubGlobal("fetch", fetchMock);
     mocks.getUserOauthAccessToken.mockResolvedValue({ data: [] });
-    mocks.mutation.mockImplementation(async (_fn, args) => `id:${args.name ?? ""}`);
+    // File writes return an id; `system.cleanup` (no name) reports it is done.
+    mocks.mutation.mockImplementation(async (_fn, args) =>
+      args.name ? `id:${args.name}` : { deleted: 0, done: true }
+    );
     fetchMock.mockImplementation(
       async () =>
         new Response(

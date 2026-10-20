@@ -22,6 +22,13 @@ import { getOwnedProject } from "./projects";
  * sealed field is added to the schema, whereas an allowlist fails closed.
  */
 
+/** Most connections read for one user, and links for one project (#212). */
+const MAX_USER_CONNECTIONS = 100;
+export const MAX_PROJECT_CONNECTIONS = 100;
+
+/** Pending approvals listed per project; a run waits on one at a time. */
+const MAX_PENDING_APPROVALS = 50;
+
 /** Connection fields that are safe to send to the browser. */
 export interface UserConnectionSummary {
   _id: Id<"userConnections">;
@@ -95,7 +102,8 @@ export const listUserConnections = query({
     const connections = await ctx.db
       .query("userConnections")
       .withIndex("by_user", (q) => q.eq("userId", identity.subject))
-      .collect();
+      .order("desc")
+      .take(MAX_USER_CONNECTIONS);
 
     return connections
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -118,7 +126,7 @@ export const listProjectConnections = query({
     const links = await ctx.db
       .query("projectConnections")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_CONNECTIONS);
 
     const results = [];
     for (const link of links) {
@@ -188,7 +196,14 @@ export const linkConnectionToProject = mutation({
     const existing = await ctx.db
       .query("projectConnections")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_CONNECTIONS);
+    // At the cap the duplicate check below can't see every link, so stop here.
+    if (existing.length === MAX_PROJECT_CONNECTIONS) {
+      throw appError(
+        "LIMIT_EXCEEDED",
+        `A project can have at most ${MAX_PROJECT_CONNECTIONS} connections`,
+      );
+    }
 
     const duplicate = existing.find(
       (link) => link.userConnectionId === args.userConnectionId,
@@ -310,7 +325,9 @@ export const deleteUserConnection = mutation({
     const links = await ctx.db
       .query("projectConnections")
       .withIndex("by_userConnection", (q) => q.eq("userConnectionId", args.id))
-      .collect();
+      // A link left past this cap is pruned by
+      // `maintenance.pruneOrphanedProjectConnections`.
+      .take(MAX_PROJECT_CONNECTIONS);
 
     for (const link of links) {
       await ctx.db.delete("projectConnections", link._id);
@@ -336,30 +353,30 @@ export const listPendingApprovals = query({
     const identity = await verifyAuth(ctx);
     await getOwnedProject(ctx, args.projectId, identity.subject);
 
+    // No wall clock here: a query isn't rerun as time passes (#53). The prompt
+    // withdraws its buttons at `expiresAt` on the client's clock, and
+    // `maintenance.pruneMcpApprovals` marks the row expired soon after.
     const pending = await ctx.db
       .query("mcpApprovals")
       .withIndex("by_project_and_status", (q) =>
         q.eq("projectId", args.projectId).eq("status", "pending"),
       )
-      .collect();
+      .take(MAX_PENDING_APPROVALS);
 
-    const now = Date.now();
-
-    // Filter expired rows at read time rather than trusting the cron to have run.
-    // Showing a stale prompt would invite the user to approve an action whose
-    // agent has already given up waiting.
-    return pending
-      .filter((row) => row.expiresAt > now)
-      .sort((a, b) => a.createdAt - b.createdAt);
+    return pending.sort((a, b) => a.createdAt - b.createdAt);
   },
 });
 
-/** Approve or deny a pending tool call. */
+/**
+ * Approve or deny a pending tool call. Returns "expired" when the deadline had
+ * passed, instead of throwing: a throw would roll back the expiry write (#212).
+ */
 export const resolveApproval = mutation({
   args: {
     id: v.id("mcpApprovals"),
     decision: v.union(v.literal("approved"), v.literal("denied")),
   },
+  returns: v.union(v.literal("expired"), v.null()),
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
@@ -385,16 +402,13 @@ export const resolveApproval = mutation({
         status: "expired",
         resolvedAt: Date.now(),
       });
-      throw appError(
-        "CONFLICT",
-        "This request expired before it was answered",
-        { status: "expired" },
-      );
+      return "expired";
     }
 
     await ctx.db.patch("mcpApprovals", args.id, {
       status: args.decision,
       resolvedAt: Date.now(),
     });
+    return null;
   },
 });

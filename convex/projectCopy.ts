@@ -81,55 +81,77 @@ export async function copyProjectFiles(
   }
 }
 
-/** Gives each copied binary file its own storage blob. */
+/** Files handled per query and per mutation in `copyBlobs`. */
+const COPY_BLOBS_BATCH_SIZE = 100;
+
+/**
+ * Gives each copied binary file its own storage blob. Batched, so a large
+ * copy costs two function calls per batch instead of two per file (#212).
+ */
 export const copyBlobs = internalAction({
   args: { fileIds: v.array(v.id("files")) },
   handler: async (ctx, { fileIds }) => {
-    for (const fileId of fileIds) {
-      const storageId = await ctx.runQuery(internal.projectCopy.getStorageId, {
-        fileId,
+    for (let i = 0; i < fileIds.length; i += COPY_BLOBS_BATCH_SIZE) {
+      const files = await ctx.runQuery(internal.projectCopy.getStorageIds, {
+        fileIds: fileIds.slice(i, i + COPY_BLOBS_BATCH_SIZE),
       });
-      if (!storageId) continue;
 
-      const blob = await ctx.storage.get(storageId);
-      if (!blob) continue;
+      const swaps = [];
+      for (const { fileId, storageId } of files) {
+        const blob = await ctx.storage.get(storageId);
+        if (!blob) continue;
+        swaps.push({ fileId, from: storageId, to: await ctx.storage.store(blob) });
+      }
 
-      const copyId = await ctx.storage.store(blob);
-      await ctx.runMutation(internal.projectCopy.swapStorageId, {
-        fileId,
-        from: storageId,
-        to: copyId,
-      });
+      if (swaps.length > 0) {
+        await ctx.runMutation(internal.projectCopy.swapStorageIds, { swaps });
+      }
     }
   },
 });
 
-export const getStorageId = internalQuery({
-  args: { fileId: v.id("files") },
-  handler: async (ctx, { fileId }) => {
-    const file = await ctx.db.get("files", fileId);
-    return file?.storageId ?? null;
+/** The current blob of each file that still has one. */
+export const getStorageIds = internalQuery({
+  args: { fileIds: v.array(v.id("files")) },
+  returns: v.array(
+    v.object({ fileId: v.id("files"), storageId: v.id("_storage") }),
+  ),
+  handler: async (ctx, { fileIds }) => {
+    const files = await Promise.all(
+      fileIds.map((fileId) => ctx.db.get("files", fileId)),
+    );
+    return files.flatMap((file) =>
+      file?.storageId ? [{ fileId: file._id, storageId: file.storageId }] : [],
+    );
   },
 });
 
 /**
- * Points the file at its own blob, unless it changed or was deleted while the
+ * Points each file at its own blob, unless it changed or was deleted while the
  * blob was being copied; then the unused copy is dropped instead. The old blob
  * is freed if nothing else uses it any more (the source was deleted meanwhile).
  */
-export const swapStorageId = internalMutation({
+export const swapStorageIds = internalMutation({
   args: {
-    fileId: v.id("files"),
-    from: v.id("_storage"),
-    to: v.id("_storage"),
+    swaps: v.array(
+      v.object({
+        fileId: v.id("files"),
+        from: v.id("_storage"),
+        to: v.id("_storage"),
+      }),
+    ),
   },
-  handler: async (ctx, { fileId, from, to }) => {
-    const file = await ctx.db.get("files", fileId);
-    if (file?.storageId === from) {
-      await ctx.db.patch("files", fileId, { storageId: to });
-      await releaseStorageIfUnreferenced(ctx, from);
-    } else {
-      await ctx.storage.delete(to);
+  returns: v.null(),
+  handler: async (ctx, { swaps }) => {
+    for (const { fileId, from, to } of swaps) {
+      const file = await ctx.db.get("files", fileId);
+      if (file?.storageId === from) {
+        await ctx.db.patch("files", fileId, { storageId: to });
+        await releaseStorageIfUnreferenced(ctx, from);
+      } else {
+        await ctx.storage.delete(to);
+      }
     }
+    return null;
   },
 });
