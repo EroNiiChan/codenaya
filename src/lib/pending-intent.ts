@@ -16,15 +16,17 @@ export const savePendingIntent = (intent: { kind: string; [field: string]: strin
 };
 
 /**
- * Returns the saved intent if it is of `kind`, at most once: reading it also
- * clears the slot, whatever its kind.
+ * Returns the saved intent if it is of `kind`, at most once: taking it clears
+ * the slot. An intent of another kind is left for the page that owns it (the
+ * dashboard mounts right after sign-in, before a Remix resumes on its page).
  */
 export const takePendingIntent = (kind: string): Record<string, unknown> | null => {
   try {
     const raw = localStorage.getItem(PENDING_INTENT_KEY);
-    localStorage.removeItem(PENDING_INTENT_KEY);
     const intent = raw ? (JSON.parse(raw) as Record<string, unknown> | null) : null;
-    return intent?.kind === kind ? intent : null;
+    if (intent?.kind !== kind) return null;
+    localStorage.removeItem(PENDING_INTENT_KEY);
+    return intent;
   } catch {
     return null;
   }
