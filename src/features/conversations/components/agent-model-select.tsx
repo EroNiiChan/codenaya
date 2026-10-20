@@ -7,9 +7,15 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { SelectGroup, SelectLabel } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AI_PROVIDERS,
   PLATFORM_PROVIDER,
   keyModels,
+  runModelLabel,
 } from "@/features/ai-providers/registry";
 import {
   fromChoiceValue,
@@ -47,6 +53,7 @@ export const AgentModelSelect = ({
   const keyGroups = keys.filter(
     (key) => key.status === "active" || key._id === value.keyId,
   );
+  const selectedKey = keys.find((key) => key._id === value.keyId);
 
   return (
     <PromptInputSelect
@@ -54,13 +61,19 @@ export const AgentModelSelect = ({
       onValueChange={(next) => onValueChange(fromChoiceValue(next))}
       disabled={disabled}
     >
-      <PromptInputSelectTrigger
-        size="sm"
-        aria-label="Agent model"
-        className="h-7 min-w-0 max-w-44 gap-1 rounded-md px-2 text-xs dark:bg-transparent dark:hover:bg-accent"
-      >
-        <PromptInputSelectValue />
-      </PromptInputSelectTrigger>
+      {/* A narrow panel truncates the name; the tooltip keeps it readable (#217). */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PromptInputSelectTrigger
+            size="sm"
+            aria-label="Agent model"
+            className="h-7 min-w-0 max-w-44 gap-1 rounded-md px-2 text-xs dark:bg-transparent dark:hover:bg-accent"
+          >
+            <PromptInputSelectValue />
+          </PromptInputSelectTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{runModelLabel(value.modelId, selectedKey)}</TooltipContent>
+      </Tooltip>
       <PromptInputSelectContent position="popper" align="start" className="max-h-80">
         <SelectGroup>
           <SelectLabel>{PLATFORM_PROVIDER.label}</SelectLabel>
