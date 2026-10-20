@@ -351,7 +351,10 @@ export async function POST(request: Request) {
         // them. Both filenames are written: frameworks disagree about which they
         // load, and `.env.local` takes precedence in Next.js while Vite reads
         // `.env`. Writing both means the app works whichever it expects.
-        if (envEntries.length > 0) {
+        //
+        // Not for a static site: nothing there reads them, and the static
+        // server would hand the secrets to anyone requesting /.env (#262).
+        if (envEntries.length > 0 && plan !== "static") {
           const dotenv = serialiseDotenv(envEntries);
           await sandbox.files.write(`${WORK_DIR}/.env`, dotenv);
           await sandbox.files.write(`${WORK_DIR}/.env.local`, dotenv);
