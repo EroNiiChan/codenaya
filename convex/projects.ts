@@ -10,6 +10,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { deleteProjectBatch } from "./projectCascade";
 import { copyProjectFiles } from "./projectCopy";
 import { userSkillKey } from "../src/features/skills/types";
@@ -35,11 +36,11 @@ export async function getOwnedProject(
   const project = await ctx.db.get("projects", id);
 
   if (!project || project.deletingAt !== undefined) {
-    throw new Error("Project not found");
+    throw appError("NOT_FOUND", "Project not found");
   }
 
   if (project.ownerId !== ownerId) {
-    throw new Error("Unauthorized access to this project");
+    throw appError("FORBIDDEN", "Unauthorized access to this project");
   }
 
   return project;
@@ -48,7 +49,7 @@ export async function getOwnedProject(
 function assertValidName(name: string) {
   const error = validateProjectName(name);
   if (error) {
-    throw new Error(error);
+    throw appError("INVALID_ARGUMENT", error);
   }
 }
 

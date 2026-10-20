@@ -52,6 +52,16 @@ describe("system file functions are scoped to the run's project", () => {
     expect(await read(b.fileId)).toBeNull();
   });
 
+  test("getFileById resolves a malformed or wrong-table id to null", async () => {
+    const t = convexTest(schema, modules);
+    const { a } = await seedProjects(t);
+    const read = (fileId: string) =>
+      t.query(api.system.getFileById, { internalKey: INTERNAL_KEY, projectId: a.projectId, fileId });
+
+    expect(await read("src/App.tsx")).toBeNull();
+    expect(await read(a.projectId)).toBeNull();
+  });
+
   test("a foreign file cannot be updated, renamed or deleted", async () => {
     const t = convexTest(schema, modules);
     const { a, b } = await seedProjects(t);
