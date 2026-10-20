@@ -1,80 +1,40 @@
+const CLOSER: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
+const QUOTES = "\"'`";
+
 /**
- * Reconciles an inline suggestion with the text immediately after the cursor.
- * Handles auto-closed delimiters like ), ], }, quotes (" ' `).
+ * How many characters after the cursor an accepted suggestion replaces (#268).
+ *
+ * CodeMirror auto-closes brackets and quotes, so typing `multiply(` leaves a
+ * `)` after the cursor. When the suggestion closes that pair itself
+ * (`a: number) {`), the auto-inserted closer is replaced instead of
+ * duplicated. A closer only counts at the suggestion's own depth 0, so
+ * `fn(x)` inside `console.log(|)` keeps the outer `)`; a suggestion that
+ * never closes the pair is inserted before it, as before.
  */
-export function reconcileSuggestion(
-  suggestion: string,
-  textAfterCursor: string
-): { insert: string; replaceLength: number } {
-  if (!suggestion) {
-    return { insert: "", replaceLength: 0 };
-  }
+export function autoClosedOverlap(suggestion: string, textAfterCursor: string): number {
+  const closers = /^[)\]}"'`]*/.exec(textAfterCursor)![0];
+  // Brackets and strings the suggestion opened itself.
+  const open: string[] = [];
+  let matched = 0;
 
-  let finalSuggestion = suggestion;
+  for (const char of suggestion) {
+    const expected = closers[matched];
+    if (expected === undefined) break;
+    const inner = open.at(-1);
 
-  // Check if textAfterCursor starts with an auto-closed delimiter
-  const autoCloseMatch = textAfterCursor.match(/^([)\]}'"`]+)/);
-  if (autoCloseMatch) {
-    const closedChar = autoCloseMatch[1][0];
-
-    // If the suggestion omitted the auto-closed delimiter but continued with body/statement tokens,
-    // insert the delimiter where it belongs so valid code is produced.
-    if (!finalSuggestion.includes(closedChar)) {
-      if (closedChar === ")") {
-        // e.g. suggestion is "a: number, b: number {" -> insert ")" before "{" or "=>" or ";"
-        const match = finalSuggestion.match(/(\s*(=>|\{|;))/);
-        if (match && match.index !== undefined) {
-          finalSuggestion =
-            finalSuggestion.slice(0, match.index) +
-            ")" +
-            finalSuggestion.slice(match.index);
-        }
-      } else if (closedChar === "]" || closedChar === "}") {
-        const match = finalSuggestion.match(/(\s*;)/);
-        if (match && match.index !== undefined) {
-          finalSuggestion =
-            finalSuggestion.slice(0, match.index) +
-            closedChar +
-            finalSuggestion.slice(match.index);
-        }
-      } else if (['"', "'", "`"].includes(closedChar)) {
-        const match = finalSuggestion.match(/(\s*([;,)}\]]))/);
-        if (match && match.index !== undefined) {
-          finalSuggestion =
-            finalSuggestion.slice(0, match.index) +
-            closedChar +
-            finalSuggestion.slice(match.index);
-        }
-      }
+    if (inner && QUOTES.includes(inner)) {
+      if (char === inner) open.pop();
+    } else if (!inner && QUOTES.includes(expected)) {
+      // Inside the auto-closed string: only its own quote ends it.
+      if (char === expected) matched++;
+    } else if (inner && char === CLOSER[inner]) {
+      open.pop();
+    } else if (!inner && char === expected) {
+      matched++;
+    } else if (char in CLOSER || QUOTES.includes(char)) {
+      open.push(char);
     }
   }
 
-  // Determine replaceLength in textAfterCursor:
-  // If finalSuggestion spans over auto-closed characters that are currently after the cursor,
-  // we must replace them so they aren't duplicated.
-  let replaceLength = 0;
-
-  if (textAfterCursor.length > 0) {
-    const firstChar = textAfterCursor[0];
-    if (
-      [")", "]", "}", '"', "'", "`"].includes(firstChar) &&
-      finalSuggestion.includes(firstChar)
-    ) {
-      let maxMatch = 0;
-      for (let len = 1; len <= textAfterCursor.length; len++) {
-        const prefix = textAfterCursor.slice(0, len);
-        if (finalSuggestion.includes(prefix)) {
-          maxMatch = len;
-        } else {
-          break;
-        }
-      }
-      replaceLength = maxMatch;
-    }
-  }
-
-  return {
-    insert: finalSuggestion,
-    replaceLength,
-  };
+  return matched;
 }

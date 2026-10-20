@@ -57,6 +57,7 @@ Follow these steps IN ORDER:
 3. Only if steps 1 and 2 don't apply: suggest what should be typed at the cursor position, using context from full_code.
 
 Your suggestion is inserted immediately after the cursor, so never suggest code that's already in the file.
+after_cursor stays in place after your suggestion. If your completion goes past an auto-closed ")", "]", "}" or quote at the start of after_cursor, include that character in your suggestion; it is merged, not duplicated.
 </instructions>`;
 
 export async function POST(request: Request) {
