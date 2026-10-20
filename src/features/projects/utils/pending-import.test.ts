@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PENDING_REMIX_KEY } from "@/features/showcase/utils/pending-remix";
+import { PENDING_INTENT_KEY } from "@/lib/pending-intent";
 
 import { savePendingImport, takePendingImport } from "./pending-import";
 
@@ -24,7 +24,7 @@ describe("pending import", () => {
 
     savePendingImport("octocat/Hello-World");
 
-    expect(JSON.parse(storage.getItem(PENDING_REMIX_KEY)!)).toEqual({
+    expect(JSON.parse(storage.getItem(PENDING_INTENT_KEY)!)).toEqual({
       kind: "import",
       repo: "octocat/Hello-World",
     });
@@ -36,10 +36,10 @@ describe("pending import", () => {
     const storage = memoryStorage();
     vi.stubGlobal("localStorage", storage);
 
-    storage.setItem(PENDING_REMIX_KEY, "not json");
+    storage.setItem(PENDING_INTENT_KEY, "not json");
     expect(takePendingImport()).toBeNull();
 
-    storage.setItem(PENDING_REMIX_KEY, JSON.stringify({ kind: "remix", showcaseId: "abc" }));
+    storage.setItem(PENDING_INTENT_KEY, JSON.stringify({ kind: "remix", showcaseId: "abc" }));
     expect(takePendingImport()).toBeNull();
   });
 
