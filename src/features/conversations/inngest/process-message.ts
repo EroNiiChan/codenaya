@@ -366,6 +366,7 @@ export const processMessage = inngest.createFunction(
                     api.system.claimUserConnectionRefresh,
                     {
                       internalKey,
+                      projectId,
                       connectionId: args.connectionId as Id<"userConnections">,
                       leaseId: args.leaseId,
                       refreshSkewMs: args.refreshSkewMs,
@@ -377,6 +378,7 @@ export const processMessage = inngest.createFunction(
                     api.system.completeUserConnectionRefresh,
                     {
                       internalKey,
+                      projectId,
                       connectionId: args.connectionId as Id<"userConnections">,
                       leaseId: args.leaseId,
                       maskedPreview: args.maskedPreview,
@@ -388,6 +390,7 @@ export const processMessage = inngest.createFunction(
                 fail: async (args) =>
                   await convex.mutation(api.system.failUserConnectionRefresh, {
                     internalKey,
+                    projectId,
                     connectionId: args.connectionId as Id<"userConnections">,
                     leaseId: args.leaseId,
                     reauthRequired: args.reauthRequired,
@@ -421,7 +424,6 @@ export const processMessage = inngest.createFunction(
           ? {
               internalKey,
               projectId,
-              ownerId: mcpOwnerId,
               messageId,
             }
           : undefined;
@@ -448,6 +450,7 @@ export const processMessage = inngest.createFunction(
             for (const connectionId of built.reauthConnectionIds) {
               await convex.mutation(api.system.updateUserConnectionStatus, {
                 internalKey,
+                projectId,
                 connectionId: connectionId as Id<"userConnections">,
                 status: "needs_reauth",
                 statusMessage:

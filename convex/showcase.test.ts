@@ -298,9 +298,7 @@ describe("unlisted entries", () => {
     expect(await t.query(api.showcase.getById, { id })).toBeNull();
 
     // Its owner still sees it as published, and can't publish it twice.
-    expect(await user.query(api.showcase.isProjectPublished, { projectId })).toMatchObject({
-      _id: id,
-    });
+    expect(await user.query(api.showcase.isProjectPublished, { projectId })).toBe(true);
     await expect(
       user.mutation(api.showcase.publish, {
         projectId,
@@ -367,5 +365,50 @@ describe("unlisted entries", () => {
         "SHOWCASE_UNLISTED_OWNER_IDS"
       );
     });
+  });
+});
+
+describe("showcase.isProjectPublished", () => {
+  test("answers its owner with a boolean and refuses anyone else (#239)", async () => {
+    const t = convexTest(schema, modules);
+    const [id] = await seed(t, [{ title: "Todo", publishedAt: 1 }]);
+    const projectId = await t.run(async (ctx) => (await ctx.db.get(id))!.projectId);
+
+    const alice = t.withIdentity({ subject: "user_alice" });
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(true);
+    await expect(
+      t.withIdentity({ subject: "user_bob" }).query(api.showcase.isProjectPublished, { projectId })
+    ).rejects.toThrow();
+
+    await t.run((ctx) => ctx.db.patch(id, { status: "removed" }));
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(false);
+  });
+});
+
+describe("showcase.importToWorkspace", () => {
+  const importAs = (t: T, subject: string, showcaseProjectId: Id<"showcaseProjects">) =>
+    t.withIdentity({ subject }).mutation(api.showcase.importToWorkspace, { showcaseProjectId });
+  const importCountOf = (t: T, id: Id<"showcaseProjects">) =>
+    t.run(async (ctx) => (await ctx.db.get(id))?.importCount);
+
+  test("counts one import per user (#239)", async () => {
+    const t = convexTest(schema, modules);
+    const [id] = await seed(t, [{ title: "Todo", publishedAt: 1 }]);
+
+    await importAs(t, "user_bob", id);
+    await importAs(t, "user_bob", id);
+    expect(await importCountOf(t, id)).toBe(1);
+
+    await importAs(t, "user_carol", id);
+    expect(await importCountOf(t, id)).toBe(2);
+  });
+
+  test("refuses a source project that is being deleted (#239)", async () => {
+    const t = convexTest(schema, modules);
+    const [id] = await seed(t, [{ title: "Todo", publishedAt: 1 }]);
+    await t.run(async (ctx) => ctx.db.patch((await ctx.db.get(id))!.projectId, { deletingAt: 1 }));
+
+    await expect(importAs(t, "user_bob", id)).rejects.toThrow("Project not found");
+    expect(await importCountOf(t, id)).toBe(0);
   });
 });
