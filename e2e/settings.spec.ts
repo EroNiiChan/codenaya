@@ -57,13 +57,17 @@ test.describe("settings", () => {
         // Clerk's own navbar (desktop sidebar and mobile menu row) is hidden.
         await expect(page.locator(".cl-navbar")).toBeHidden();
         await expect(page.locator(".cl-navbarMobileMenuRow")).toBeHidden();
-        await expect(page.getByRole("button", { name: "Billing" })).toHaveCount(0);
 
         const tabs = page.getByRole("navigation", { name: "Account" });
         await tabs.getByRole("link", { name: "Security" }).click();
         await expect(page).toHaveURL(/\/settings\/account\/security$/);
         await expect(tabs.locator('[aria-current="page"]')).toHaveText("Security");
         await expect(page.locator(".cl-profileSection__activeDevices")).toBeVisible();
+
+        // Clerk's Billing page is not served by URL either.
+        await page.goto("/settings/account/billing");
+        await expect(page.getByText("Page not found")).toBeVisible();
+        await expect(page.locator(".cl-userProfile-root")).toHaveCount(0);
       });
     }
 

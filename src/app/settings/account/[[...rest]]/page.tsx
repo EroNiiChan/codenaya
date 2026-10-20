@@ -1,4 +1,5 @@
 import { UserProfile } from "@clerk/nextjs";
+import { notFound } from "next/navigation";
 
 import { AccountTabs } from "@/features/settings/components/account-tabs";
 import { SettingsHeader } from "@/features/settings/components/settings-header";
@@ -30,7 +31,14 @@ const appearance = {
   },
 };
 
-const AccountSettingsPage = () => {
+type AccountSettingsPageProps = {
+  params: Promise<{ rest?: string[] }>;
+};
+
+const AccountSettingsPage = async ({ params }: AccountSettingsPageProps) => {
+  // Clerk still serves its Billing page by URL; billing ships on Polar (#105).
+  if ((await params).rest?.[0] === "billing") notFound();
+
   return (
     <>
       <SettingsHeader
