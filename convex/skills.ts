@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 import { BUILTIN_SKILLS } from "../src/features/skills/builtin";
 import { BUILTIN_SKILL_NAMES } from "../src/features/skills/builtin/names";
@@ -46,7 +47,7 @@ const MAX_PROJECT_SETTINGS =
 async function getOwnedSkill(ctx: Ctx, skillId: Id<"skills">, ownerId: string) {
   const skill = await ctx.db.get("skills", skillId);
   if (!skill || skill.ownerId !== ownerId) {
-    throw new Error("Skill not found");
+    throw appError("NOT_FOUND", "Skill not found");
   }
   return skill;
 }
@@ -66,7 +67,7 @@ const projectQuery = (ctx: Ctx, projectId: Id<"projects">) =>
 function assertValid(fields: Pick<Doc<"skills">, "name" | "description" | "body">) {
   const error = validateSkill(fields);
   if (error) {
-    throw new Error(error);
+    throw appError("INVALID_ARGUMENT", error);
   }
 }
 
@@ -83,7 +84,7 @@ async function assertNameAvailable(
   skillId?: Id<"skills">,
 ) {
   if (BUILTIN_SKILL_NAMES.includes(name)) {
-    throw new Error(`"${name}" is the name of a built-in skill`);
+    throw appError("CONFLICT", `"${name}" is the name of a built-in skill`);
   }
 
   const sameName = ctx.db
@@ -98,7 +99,7 @@ async function assertNameAvailable(
       other.projectId === undefined ||
       other.projectId === projectId
     ) {
-      throw new Error(`You already have a skill named "${name}"`);
+      throw appError("CONFLICT", `You already have a skill named "${name}"`);
     }
   }
 }
@@ -264,7 +265,10 @@ export const create = mutation({
       (!args.sourceUrl.startsWith("https://github.com/") ||
         args.sourceUrl.length > 2048)
     ) {
-      throw new Error("Imported skills must link to their GitHub source");
+      throw appError(
+        "INVALID_ARGUMENT",
+        "Imported skills must link to their GitHub source",
+      );
     }
 
     const project = args.projectId
@@ -276,7 +280,8 @@ export const create = mutation({
       : await libraryQuery(ctx, ownerId).take(MAX_LIBRARY_SKILLS);
     const max = project ? MAX_PROJECT_SKILLS : MAX_LIBRARY_SKILLS;
     if (existing.length >= max) {
-      throw new Error(
+      throw appError(
+        "LIMIT_EXCEEDED",
         project
           ? `A project can have at most ${max} project skills`
           : `You can have at most ${max} skills in your library`,
@@ -371,7 +376,7 @@ export const setProjectSkillEnabled = mutation({
 
     const skills = await resolveProjectSkills(ctx, project);
     if (!skills.some((skill) => skill.key === args.skillKey)) {
-      throw new Error("Skill not found");
+      throw appError("NOT_FOUND", "Skill not found");
     }
 
     await writeSetting(ctx, project, args.skillKey, args.enabled);

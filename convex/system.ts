@@ -319,12 +319,17 @@ export const getFileById = query({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
-    fileId: v.id("files"),
+    // The agent supplies this id, so a malformed one is a missing file, not
+    // an ArgumentValidationError the caller would have to match by name.
+    fileId: v.string(),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    return await getProjectFile(ctx, args.projectId, args.fileId);
+    const fileId = ctx.db.normalizeId("files", args.fileId);
+    if (!fileId) return null;
+
+    return await getProjectFile(ctx, args.projectId, fileId);
   },
 });
 

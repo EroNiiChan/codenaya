@@ -1,7 +1,6 @@
-import { ConvexError } from "convex/values";
-
 import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { appError } from "./errors";
 
 /**
  * Bounded, resumable deletion of everything that hangs off a project.
@@ -80,7 +79,7 @@ export async function getUnclaimedStorage(
 ) {
   const file = await ctx.db.system.get("_storage", storageId);
   if (!file || (await isStorageReferenced(ctx, storageId))) {
-    throw new ConvexError({ code: "NOT_FOUND", message: "Upload not found" });
+    throw appError("NOT_FOUND", "Upload not found");
   }
   return file;
 }
