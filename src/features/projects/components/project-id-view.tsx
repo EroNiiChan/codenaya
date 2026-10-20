@@ -264,7 +264,11 @@ export const ProjectIdView = ({
         {/* Center: view tabs (phones use the bottom tab bar; desktops keep
             the chat beside them, so they only switch Code / Preview) */}
         {!isMobile && (
-          <div className="flex items-center p-0.5 bg-muted/40 rounded-lg border border-border/40">
+          <div
+            role="tablist"
+            aria-label="Workspace views"
+            className="flex items-center p-0.5 bg-muted/40 rounded-lg border border-border/40"
+          >
             {VIEW_TABS.filter(({ view }) => isCompact || view !== "chat").map(
               ({ view, label }) => (
                 <Tab

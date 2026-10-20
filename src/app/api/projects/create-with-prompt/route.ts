@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
 
 import { DEFAULT_CONVERSATION_TITLE } from "@/features/conversations/constants";
 import {
@@ -46,8 +47,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json();
-  const { prompt, model, templateId } = requestSchema.parse(body);
+  const { data, invalid } = await parseJsonBody(request, requestSchema);
+
+  if (invalid) {
+    return invalid;
+  }
+
+  const { prompt, model, templateId } = data;
   const template = templateId ? getStarterTemplate(templateId) : undefined;
 
   if (detectCredential(prompt).detected) {

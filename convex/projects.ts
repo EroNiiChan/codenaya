@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -10,6 +10,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { deleteProjectBatch } from "./projectCascade";
 import { copyProjectFiles } from "./projectCopy";
 import { userSkillKey } from "../src/features/skills/types";
@@ -36,11 +37,11 @@ export async function getOwnedProject(
 
   // Typed, so the project page can tell "gone" from other errors (#266).
   if (!project || project.deletingAt !== undefined) {
-    throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+    throw appError("NOT_FOUND", "Project not found");
   }
 
   if (project.ownerId !== ownerId) {
-    throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized access to this project" });
+    throw appError("FORBIDDEN", "Unauthorized access to this project");
   }
 
   return project;
@@ -49,7 +50,7 @@ export async function getOwnedProject(
 function assertValidName(name: string) {
   const error = validateProjectName(name);
   if (error) {
-    throw new Error(error);
+    throw appError("INVALID_ARGUMENT", error);
   }
 }
 

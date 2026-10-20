@@ -1,7 +1,8 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { releaseStorageIfUnreferenced } from "./projectCascade";
 import { Doc, Id } from "./_generated/dataModel";
 
@@ -36,11 +37,11 @@ export const getFiles = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     return await ctx.db
@@ -62,11 +63,11 @@ export const getFilesWithUrls = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const files = await ctx.db
@@ -99,11 +100,11 @@ export const getFile = query({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     return file;
@@ -132,11 +133,11 @@ export const getFilePath = query({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const path: { _id: string; name: string }[] = [];
@@ -168,11 +169,11 @@ export const getFolderContents = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const files = await ctx.db
@@ -211,11 +212,11 @@ export const createFile = mutation({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
@@ -234,7 +235,7 @@ export const createFile = mutation({
       (file) => file.name === args.name && file.type === "file"
     );
 
-    if (existing) throw new ConvexError({ code: "CONFLICT", message: "File already exists" });
+    if (existing) throw appError("CONFLICT", "File already exists");
 
     const now = Date.now();
 
@@ -267,11 +268,11 @@ export const createFolder = mutation({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
@@ -290,7 +291,7 @@ export const createFolder = mutation({
       (file) => file.name === args.name && file.type === "folder"
     );
 
-    if (existing) throw new ConvexError({ code: "CONFLICT", message: "Folder already exists" });
+    if (existing) throw appError("CONFLICT", "Folder already exists");
 
     const now = Date.now();
 
@@ -323,11 +324,11 @@ export const renameFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     // Check if a file with the new name already exists in the same parent folder
@@ -348,10 +349,10 @@ export const renameFile = mutation({
     );
 
     if (existing) {
-      throw new ConvexError({
-        code: "CONFLICT",
-        message: `A ${file.type} with this name already exists in this location`,
-      });
+      throw appError(
+        "CONFLICT",
+        `A ${file.type} with this name already exists in this location`
+      );
     }
 
     const now = Date.now();
@@ -382,11 +383,11 @@ export const deleteFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     // Recursively delete file/folder and all descendants
@@ -445,11 +446,11 @@ export const updateFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Project not found" });
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new ConvexError({ code: "FORBIDDEN", message: "Unauthorized to access this project" });
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const now = Date.now();

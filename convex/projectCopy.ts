@@ -8,6 +8,7 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
+import { appError } from "./errors";
 import { releaseStorageIfUnreferenced } from "./projectCascade";
 
 /**
@@ -37,7 +38,8 @@ export async function copyProjectFiles(
     .take(MAX_COPY_FILES + 1);
 
   if (sourceFiles.length > MAX_COPY_FILES) {
-    throw new Error(
+    throw appError(
+      "LIMIT_EXCEEDED",
       `Projects with more than ${MAX_COPY_FILES} files can't be copied`,
     );
   }

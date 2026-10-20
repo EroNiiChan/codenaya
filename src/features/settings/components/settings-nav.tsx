@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { tabsListClassName, tabsTriggerClassName } from "@/components/ui/tabs";
 
 import { SETTINGS_NAV } from "../nav";
 
@@ -16,7 +16,7 @@ const useActiveHref = () => {
   )?.href;
 };
 
-/** Sidebar on desktop, scrollable tabs below `lg`. */
+/** Sidebar on desktop, scrollable tab-style links below `lg`. */
 export const SettingsNav = () => {
   const activeHref = useActiveHref();
 
@@ -44,21 +44,24 @@ export const SettingsNav = () => {
         </ul>
       </nav>
 
-      <Tabs value={activeHref ?? ""} className="lg:hidden">
-        <TabsList
-          aria-label="Settings"
-          className="w-full justify-start overflow-x-auto"
-        >
-          {SETTINGS_NAV.map(({ href, label, icon: Icon }) => (
-            <TabsTrigger key={href} value={href} asChild>
-              <Link href={href}>
-                <Icon aria-hidden="true" className="hidden sm:block" />
-                {label}
-              </Link>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {/* Page links styled as tabs; `data-state` reuses the tab active style. */}
+      <nav
+        aria-label="Settings"
+        className={cn(tabsListClassName, "w-full justify-start overflow-x-auto lg:hidden")}
+      >
+        {SETTINGS_NAV.map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            aria-current={href === activeHref ? "page" : undefined}
+            data-state={href === activeHref ? "active" : "inactive"}
+            className={tabsTriggerClassName}
+          >
+            <Icon aria-hidden="true" className="hidden sm:block" />
+            {label}
+          </Link>
+        ))}
+      </nav>
     </>
   );
 };

@@ -39,11 +39,11 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { convexErrorMessage } from "@/lib/convex-error";
 import { SKILLS_SETTINGS_URL } from "@/features/settings/nav";
 
 import type { ProjectSkillSummary } from "../types";
 import {
-  skillErrorMessage,
   useProjectSkills,
   useRemoveSkill,
   useSetProjectSkillEnabled,
@@ -96,7 +96,7 @@ export const ProjectSkillsPanel = ({
     try {
       await setEnabled({ projectId, skillKey: skill.key, enabled });
     } catch (error) {
-      toast.error(skillErrorMessage(error, `Unable to update ${skill.name}`));
+      toast.error(convexErrorMessage(error, `Unable to update ${skill.name}`));
     }
   };
 
@@ -113,7 +113,7 @@ export const ProjectSkillsPanel = ({
           ),
       );
     } catch (error) {
-      toast.error(skillErrorMessage(error, "Unable to update skills"));
+      toast.error(convexErrorMessage(error, "Unable to update skills"));
     }
   };
 
@@ -126,7 +126,7 @@ export const ProjectSkillsPanel = ({
       setPendingDelete(null);
     } catch (error) {
       toast.error(
-        skillErrorMessage(error, `Unable to delete ${pendingDelete.name}`),
+        convexErrorMessage(error, `Unable to delete ${pendingDelete.name}`),
       );
     } finally {
       setDeleting(false);

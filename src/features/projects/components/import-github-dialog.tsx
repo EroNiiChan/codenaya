@@ -125,7 +125,7 @@ export const ImportGithubDialog = ({
           </form.Field>
           {githubNotLinked && (
             <div className="mt-4">
-              <GithubNotLinkedAlert />
+              <GithubNotLinkedAlert description="This repository is private or doesn't exist. Public repositories import without GitHub; connect GitHub to import private ones." />
             </div>
           )}
           <DialogFooter className="mt-4">
