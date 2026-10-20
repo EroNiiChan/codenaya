@@ -74,12 +74,12 @@ test.describe("settings", () => {
         for (const { path, content } of tabs) {
           await page.goto(path);
           await expect(content).toBeVisible();
-          // Sidebar on desktop, tabs below `lg`.
-          const nav =
-            width >= 1024
-              ? page.getByRole("navigation", { name: "Settings" })
-              : page.getByRole("tablist", { name: "Settings" });
+          // Sidebar on desktop, tab-style links below `lg`: either way page
+          // links marking the current one, not tabs (#327).
+          const nav = page.getByRole("navigation", { name: "Settings" });
           await expect(nav).toBeVisible();
+          await expect(nav.locator('[aria-current="page"]')).toHaveAttribute("href", path);
+          await expect(nav.locator("[aria-controls], [role='tab']")).toHaveCount(0);
           expect(await page.evaluate(horizontalOverflow)).toBe(0);
         }
 

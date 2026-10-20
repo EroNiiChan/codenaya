@@ -79,6 +79,20 @@ test.describe("chat panel overflow", () => {
       await page.getByRole("tab", { name: "Chat" }).click();
       await expect(liveRun).toBeVisible();
       expect(await chatOverflow(page)).toEqual([]);
+
+      // The failed step's truncated error expands from the keyboard or a tap,
+      // not only a hover tooltip (#327).
+      await page
+        .locator('[data-run-status="completed"]')
+        .getByRole("button", { name: /Worked for/ })
+        .click();
+      const stepError = page.getByRole("button", { name: /^Patch failed/ });
+      await expect(stepError).toHaveAttribute("aria-expanded", "false");
+      await stepError.focus();
+      await page.keyboard.press("Enter");
+      await expect(stepError).toHaveAttribute("aria-expanded", "true");
+      expect(await stepError.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      expect(await chatOverflow(page)).toEqual([]);
     } finally {
       await stopRun();
     }
