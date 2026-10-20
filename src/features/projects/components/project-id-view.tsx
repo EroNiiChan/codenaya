@@ -280,7 +280,7 @@ export const ProjectIdView = ({
 
         {/* Right: Publish + Export + Help + User (phones hide it while renaming to make room) */}
         <div className={cn("flex items-center gap-1.5 shrink-0", rename.isRenaming && "hidden @xl:flex")}>
-          {isPublished === null && (
+          {isPublished === false && (
             <button
               onClick={() => setPublishDialogOpen(true)}
               aria-label="Publish"

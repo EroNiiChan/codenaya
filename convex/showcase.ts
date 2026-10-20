@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { getOwnedProject } from "./projects";
 import { copyProjectFiles } from "./projectCopy";
 import { countProjectBuilt } from "./stats";
 
@@ -164,10 +165,13 @@ export const getMyPublished = query({
   },
 });
 
+/** Whether the caller's project has a showcase entry; a yes/no, so no ids leak (#239). */
 export const isProjectPublished = query({
   args: { projectId: v.id("projects") },
+  returns: v.boolean(),
   handler: async (ctx, args) => {
-    await verifyAuth(ctx);
+    const identity = await verifyAuth(ctx);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const existing = await ctx.db
       .query("showcaseProjects")
@@ -175,8 +179,7 @@ export const isProjectPublished = query({
       .take(1);
 
     // An unlisted entry is still published as far as its owner is concerned.
-    const published = existing.find((e) => e.status !== "removed");
-    return published ?? null;
+    return existing.some((e) => e.status !== "removed");
   },
 });
 
@@ -259,11 +262,7 @@ export const publish = mutation({
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
-    const project = await ctx.db.get(args.projectId);
-    if (!project) throw new Error("Project not found");
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const existing = await ctx.db
       .query("showcaseProjects")
@@ -420,6 +419,11 @@ export const importToWorkspace = mutation({
     if (!showcaseItem || showcaseItem.status !== "published") {
       throw new Error("Project not found");
     }
+    // A source mid-deletion is gone: its files are being removed batch by batch.
+    const source = await ctx.db.get("projects", showcaseItem.projectId);
+    if (!source || source.deletingAt !== undefined) {
+      throw new Error("Project not found");
+    }
 
     const now = Date.now();
     const newProjectId = await ctx.db.insert("projects", {
@@ -431,10 +435,25 @@ export const importToWorkspace = mutation({
 
     await copyProjectFiles(ctx, showcaseItem.projectId, newProjectId);
 
-    await ctx.db.patch(args.showcaseProjectId, {
-      importCount: showcaseItem.importCount + 1,
-      updatedAt: now,
-    });
+    // One import per user counts, like votes and views, so re-importing can't
+    // rig the "Most imported" sort (#239).
+    const counted = await ctx.db
+      .query("showcaseImports")
+      .withIndex("by_userId_and_showcaseProjectId", (q) =>
+        q.eq("userId", identity.subject).eq("showcaseProjectId", args.showcaseProjectId)
+      )
+      .unique();
+    if (!counted) {
+      await ctx.db.insert("showcaseImports", {
+        showcaseProjectId: args.showcaseProjectId,
+        userId: identity.subject,
+        importedAt: now,
+      });
+      await ctx.db.patch(args.showcaseProjectId, {
+        importCount: showcaseItem.importCount + 1,
+        updatedAt: now,
+      });
+    }
 
     return newProjectId;
   },
