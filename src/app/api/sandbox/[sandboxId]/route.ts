@@ -2,7 +2,9 @@ import { requireUserId } from "@/features/auth/server/require-user-id";
 import {
   forgetSandbox,
   getOwnedSandbox,
+  requestReinstall,
 } from "@/features/sandbox-preview/server/sandbox-registry";
+import { RESTART_VITE_COMMAND } from "@/features/sandbox-preview/server/restart-vite";
 
 interface RouteParams {
   params: Promise<{ sandboxId: string }>;
@@ -66,7 +68,8 @@ export async function POST(request: Request, { params }: RouteParams) {
  * PATCH /api/sandbox/[sandboxId]
  *
  * Syncs file changes to a running sandbox for hot-reload.
- * Accepts an array of { path, content } objects.
+ * Accepts an array of { path, content } objects. A changed package.json
+ * re-runs the install so dependencies added after the boot are there (#254).
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
   const { userId, unauthorized } = await requireUserId();
@@ -78,8 +81,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   const { sandboxId } = await params;
 
   const body = await request.json();
-  const { files } = body as {
+  const { files, installCommand } = body as {
     files: { path: string; content: string }[];
+    installCommand?: string;
   };
 
   if (!files || files.length === 0) {
@@ -102,6 +106,19 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         data: file.content,
       }))
     );
+
+    // The instance that booted the sandbox installs through the boot stream,
+    // where the output reaches the terminal. Any other instance installs here.
+    if (
+      files.some((file) => file.path === "package.json") &&
+      !requestReinstall(sandboxId)
+    ) {
+      await sandbox.commands.run(installCommand || "npm install", {
+        cwd: WORK_DIR,
+        timeoutMs: 5 * 60 * 1000,
+      });
+      await sandbox.commands.run(RESTART_VITE_COMMAND, { cwd: WORK_DIR });
+    }
 
     return Response.json({ success: true, synced: files.length });
   } catch (error) {

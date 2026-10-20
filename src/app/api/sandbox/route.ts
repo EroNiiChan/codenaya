@@ -15,6 +15,8 @@ import {
   forgetSandbox,
   rememberSandbox,
 } from "@/features/sandbox-preview/server/sandbox-registry";
+import { debounceSerial } from "@/features/sandbox-preview/server/debounce-serial";
+import { RESTART_VITE_COMMAND } from "@/features/sandbox-preview/server/restart-vite";
 import {
   missingReferencedFiles,
   undeclaredPackages,
@@ -42,6 +44,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 
 const SANDBOX_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour (E2B free plan max)
 const WORK_DIR = "/home/user/app";
+/** A package.json sync waits this long for more edits before re-installing. */
+const REINSTALL_DEBOUNCE_MS = 2000;
 
 /**
  * The base image ships Node 20.9, too old for Vite 7 (#178). E2B_TEMPLATE
@@ -217,6 +221,36 @@ export async function POST(request: Request) {
       };
 
       let sandbox: Sandbox | null = null;
+      const installCmd = settings?.installCommand || "npm install";
+
+      const runInstall = (target: Sandbox) =>
+        target.commands.run(installCmd, {
+          cwd: WORK_DIR,
+          timeoutMs: 5 * 60 * 1000,
+          // Install may run postinstall scripts or a build that needs config.
+          envs: toProcessEnv(envEntries),
+          onStdout: (data) => send({ type: "output", data }),
+          onStderr: (data) => send({ type: "output", data }),
+        });
+
+      // The first build boots the preview from its starter while the agent is
+      // still writing, so dependencies it adds to package.json later have to be
+      // installed here, with the output on this stream (#254).
+      const reinstall = debounceSerial(async () => {
+        if (!sandbox) return;
+        send({ type: "output", data: `\npackage.json changed.\n$ ${installCmd}\n` });
+        try {
+          const result = await runInstall(sandbox);
+          if (result.exitCode !== 0) {
+            throw new Error(`${installCmd} failed with exit code ${result.exitCode}`);
+          }
+          send({ type: "output", data: "\nDependencies installed.\n" });
+          await sandbox.commands.run(RESTART_VITE_COMMAND, { cwd: WORK_DIR });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unknown error";
+          send({ type: "output", data: `\nError: ${message}\n` });
+        }
+      }, REINSTALL_DEBOUNCE_MS);
 
       try {
         // Name the missing file now rather than leave Vite's overlay to (#190).
@@ -249,7 +283,7 @@ export async function POST(request: Request) {
         });
 
         // File syncs reuse this handle instead of reconnecting (#179).
-        rememberSandbox(sandbox, userId);
+        rememberSandbox(sandbox, userId, reinstall.schedule);
 
         send({
           type: "output",
@@ -326,18 +360,10 @@ export async function POST(request: Request) {
         }
 
         // --- Install dependencies ---
-        const installCmd = settings?.installCommand || "npm install";
         send({ type: "status", status: "installing" });
         send({ type: "output", data: `$ ${installCmd}\n` });
 
-        const installResult = await sandbox.commands.run(installCmd, {
-          cwd: WORK_DIR,
-          timeoutMs: 5 * 60 * 1000,
-          // Install may run postinstall scripts or a build that needs config.
-          envs: toProcessEnv(envEntries),
-          onStdout: (data) => send({ type: "output", data }),
-          onStderr: (data) => send({ type: "output", data }),
-        });
+        const installResult = await runInstall(sandbox);
 
         if (installResult.exitCode !== 0) {
           throw new Error(
@@ -448,6 +474,7 @@ export async function POST(request: Request) {
           }
         }
       } finally {
+        reinstall.cancel();
         if (sandbox) {
           forgetSandbox(sandbox.sandboxId);
         }

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { api } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
+import { deleteProjectBatch } from "./projectCascade";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -285,5 +286,100 @@ describe("projects", () => {
 
     const logo = (await rowsOf(t, "files", copyId)).find((f) => f.name === "logo.png");
     expect(await t.run((ctx) => ctx.db.system.get(logo!.storageId!))).not.toBeNull();
+  });
+});
+
+/** Runs a project's whole deletion cascade now, ahead of any scheduled work. */
+const deleteProjectNow = (t: T, projectId: Id<"projects">) =>
+  t.run(async (ctx) => {
+    while (!(await deleteProjectBatch(ctx, projectId)));
+  });
+
+const blobExists = async (t: T, storageId: Id<"_storage">) =>
+  (await t.run((ctx) => ctx.db.system.get(storageId))) !== null;
+
+const logoOf = async (t: T, projectId: Id<"projects">) =>
+  (await rowsOf(t, "files", projectId)).find((f) => f.name === "logo.png")!;
+
+// #221: a copy shares the source's blobs until copyBlobs has run.
+describe("copied projects never delete the source's blobs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("another user's showcase import, deleted before copyBlobs runs", async () => {
+    // Fake timers keep the scheduled copyBlobs from running until we say so.
+    vi.useFakeTimers();
+    const { t, bob } = setup();
+    const { projectId, storageId } = await seedProject(t, ALICE);
+    const showcase = (await rowsOf(t, "showcaseProjects", projectId))[0];
+
+    const importId = await bob.mutation(api.showcase.importToWorkspace, {
+      showcaseProjectId: showcase._id,
+    });
+    const imported = await logoOf(t, importId);
+    expect(imported.storageId).toBe(storageId);
+
+    await bob.mutation(api.files.deleteFile, { id: imported._id });
+    expect(await blobExists(t, storageId)).toBe(true);
+
+    await deleteProjectNow(t, importId);
+    expect(await blobExists(t, storageId)).toBe(true);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect((await logoOf(t, projectId)).storageId).toBe(storageId);
+    expect(await blobExists(t, storageId)).toBe(true);
+  });
+
+  test("a duplicate, deleted before copyBlobs runs", async () => {
+    vi.useFakeTimers();
+    const { t, alice } = setup();
+    const { projectId, storageId } = await seedProject(t, ALICE);
+
+    const copyId = await alice.mutation(api.projects.duplicate, { id: projectId });
+    await alice.mutation(api.files.deleteFile, { id: (await logoOf(t, copyId))._id });
+    await deleteProjectNow(t, copyId);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect(await blobExists(t, storageId)).toBe(true);
+  });
+
+  test("deleting the source before copyBlobs runs keeps the copy's blob, then frees the old one", async () => {
+    vi.useFakeTimers();
+    const { t, alice } = setup();
+    const { projectId, storageId } = await seedProject(t, ALICE);
+
+    const copyId = await alice.mutation(api.projects.duplicate, { id: projectId });
+    await deleteProjectNow(t, projectId);
+    expect(await blobExists(t, storageId)).toBe(true);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const logo = await logoOf(t, copyId);
+    expect(logo.storageId).not.toBe(storageId);
+    expect(await blobExists(t, logo.storageId!)).toBe(true);
+    // Nothing references the old blob any more, so it is not leaked.
+    expect(await blobExists(t, storageId)).toBe(false);
+  });
+
+  test("the last reference to a shared blob frees it", async () => {
+    vi.useFakeTimers();
+    const { t, alice } = setup();
+    const { projectId, storageId } = await seedProject(t, ALICE);
+
+    const copyId = await alice.mutation(api.projects.duplicate, { id: projectId });
+    await alice.mutation(api.files.deleteFile, { id: (await logoOf(t, copyId))._id });
+    expect(await blobExists(t, storageId)).toBe(true);
+    await alice.mutation(api.files.deleteFile, { id: (await logoOf(t, projectId))._id });
+    expect(await blobExists(t, storageId)).toBe(false);
+  });
+
+  test("other users can't delete the publisher's files", async () => {
+    const { t, bob } = setup();
+    const { projectId, storageId } = await seedProject(t, ALICE);
+
+    await expect(
+      bob.mutation(api.files.deleteFile, { id: (await logoOf(t, projectId))._id }),
+    ).rejects.toThrow(/Unauthorized/);
+    expect(await blobExists(t, storageId)).toBe(true);
   });
 });
