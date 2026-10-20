@@ -334,7 +334,7 @@ describe("unlisted entries", () => {
     expect(await t.query(api.showcase.getById, { id })).toBeNull();
 
     // Its owner still sees it as published, and can't publish it twice.
-    expect(await user.query(api.showcase.isProjectPublished, { projectId })).toBe(true);
+    expect(await user.query(api.showcase.isProjectPublished, { projectId })).toBe(id);
     await expect(
       user.mutation(api.showcase.publish, {
         projectId,
@@ -449,19 +449,55 @@ describe("showcase.incrementView (#269)", () => {
 });
 
 describe("showcase.isProjectPublished", () => {
-  test("answers its owner with a boolean and refuses anyone else (#239)", async () => {
+  test("answers its owner with the entry id and refuses anyone else (#239)", async () => {
     const t = convexTest(schema, modules);
     const [id] = await seed(t, [{ title: "Todo", publishedAt: 1 }]);
     const projectId = await t.run(async (ctx) => (await ctx.db.get(id))!.projectId);
 
     const alice = t.withIdentity({ subject: "user_alice" });
-    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(true);
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(id);
     await expect(
       t.withIdentity({ subject: "user_bob" }).query(api.showcase.isProjectPublished, { projectId })
     ).rejects.toThrow("Unauthorized");
 
     await t.run((ctx) => ctx.db.patch(id, { status: "removed" }));
-    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(false);
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBeNull();
+  });
+
+  test("publish -> unpublish -> republish keeps one published entry (#210)", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "user_alice" });
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Todo", ownerId: "user_alice", updatedAt: 0 })
+    );
+    const publish = async (title: string) =>
+      alice.mutation(api.showcase.publish, {
+        projectId,
+        title,
+        previewImageId: await storeImage(t),
+        description: "",
+        techStack: [],
+        designStyle: [],
+        category: "tool",
+      });
+
+    const id = await publish("First");
+    const firstPreview = (await t.run((ctx) => ctx.db.get(id)))!.previewImageId!;
+    await t.run((ctx) => ctx.db.patch(id, { upvotes: 3, featured: true }));
+    await alice.mutation(api.showcase.unpublish, { id });
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBeNull();
+
+    // Republishing refreshes the same entry, votes included, and a second publish is refused.
+    expect(await publish("Second")).toBe(id);
+    expect(await t.run((ctx) => ctx.db.system.get(firstPreview))).toBeNull();
+    expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(id);
+    await expect(publish("Third")).rejects.toThrow("already published");
+
+    const rows = await t.run((ctx) => ctx.db.query("showcaseProjects").collect());
+    expect(rows.map(({ title, status, upvotes, featured }) => ({ title, status, upvotes, featured }))).toEqual([
+      { title: "Second", status: "published", upvotes: 3, featured: undefined },
+    ]);
+    expect(await t.run((ctx) => ctx.db.system.get(rows[0].previewImageId!))).not.toBeNull();
   });
 });
 
