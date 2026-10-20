@@ -15,13 +15,24 @@ import {
  * resulting workflow run id on the assistant message so it can be cancelled
  * later via Convex lookup.
  */
-export async function startProcessMessageWorkflow(input: ProcessMessageInput) {
-  const run = await start(processMessageWorkflow, [input]);
+export async function startProcessMessageWorkflow({
+  internalKey,
+  messageId,
+  conversationId,
+  projectId,
+  message,
+  mode,
+}: ProcessMessageInput & { internalKey: string }) {
+  // Listed field by field: the input is persisted in the run's event log, so
+  // the internal key (or anything else a caller adds) must not ride along (#211).
+  const run = await start(processMessageWorkflow, [
+    { messageId, conversationId, projectId, message, mode },
+  ]);
 
   try {
     await convex.mutation(api.system.setMessageWorkflowRunId, {
-      internalKey: input.internalKey,
-      messageId: input.messageId,
+      internalKey,
+      messageId,
       workflowRunId: run.runId,
     });
   } catch (persistErr) {

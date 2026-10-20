@@ -53,7 +53,9 @@ export const createSetEnvVarTool = ({
       "Store an environment variable for this project so the running preview can " +
       "use it. Use this for anything an integration gives you — database URLs, API " +
       "keys, project references. NEVER write a credential into a source file; store " +
-      "it here and reference it with process.env.KEY in code. Keys starting with " +
+      "it here and read it with import.meta.env.KEY in a Vite app or process.env.KEY " +
+      "in Next.js. Secrets are for server code only: never read one in browser code " +
+      "or give it a public prefix. Keys starting with " +
       "NEXT_PUBLIC_, VITE_ or PUBLIC_ are treated as public and are visible in the " +
       "browser; everything else is encrypted and only available in the cloud sandbox.",
     parameters: z.object({
@@ -92,7 +94,8 @@ export const createSetEnvVarTool = ({
           });
           return (
             `Stored public variable ${trimmedKey}. It is available in both preview ` +
-            `engines. Reference it as process.env.${trimmedKey}.`
+            `engines. Reference it as import.meta.env.${trimmedKey} in a Vite app ` +
+            `(only VITE_ keys reach Vite browser code) or process.env.${trimmedKey} in Next.js.`
           );
         }
 
@@ -115,8 +118,11 @@ export const createSetEnvVarTool = ({
         });
 
         return (
-          `Stored secret ${trimmedKey} (encrypted). Reference it as ` +
-          `process.env.${trimmedKey}. It is injected into the cloud sandbox preview ` +
+          `Stored secret ${trimmedKey} (encrypted). Read it only from server code: ` +
+          `process.env.${trimmedKey} in Next.js server code, or a backend function ` +
+          `(Supabase Edge Function, Convex action) for a Vite app, which has no server. ` +
+          `Never read it in browser code or rename it with a VITE_ or NEXT_PUBLIC_ ` +
+          `prefix: that publishes it in the bundle. It is injected into the cloud sandbox preview ` +
           `but withheld from the in-browser preview, which cannot hold secrets. ` +
           `Do not write this value into any file.`
         );
