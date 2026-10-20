@@ -216,8 +216,7 @@ if (notFound) return notFound;
   it can correct itself. Throw only for transient failures. Wrap the mutation in
   `toolStep?.run(...)`. `tools/update-file.ts` is the template.
 - **LLM access goes through OpenRouter only** (`src/lib/openrouter.ts`) or the user's
-  BYOK key (`features/ai-providers`). No new provider SDK clients. `src/inngest/functions.ts`
-  (`demoGenerate`, which uses `@ai-sdk/anthropic` and isn't registered) is dead code.
+  BYOK key (`features/ai-providers`). No new provider SDK clients.
 - **Prompt text and model-visible strings** go in `constants.ts` next to the function.
 
 ## 6. UI

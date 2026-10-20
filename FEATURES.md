@@ -44,7 +44,7 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `project-card.tsx`, `projects-command-dialog.tsx`, `showcase/components/community-rail.tsx`;
   `projects.get`, `showcase.getTrending`.
 - E2E: `dashboard-composer.spec.ts`, `dashboard-responsive.spec.ts`.
-- Gap: `projects-list.tsx` is dead code (#51). No e2e presses Cmd+I.
+- Gap: no e2e presses Cmd+I.
 
 **F3. Create project from prompt**: Works
 - Steps: dashboard composer or New project dialog (starter chips, Enhance, model picker) →

@@ -134,8 +134,6 @@ export function createInvocationTracker() {
   };
 }
 
-export type McpInvocationTracker = ReturnType<typeof createInvocationTracker>;
-
 /**
  * Durable-execution primitives the MCP path needs.
  *
