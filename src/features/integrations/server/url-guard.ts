@@ -77,13 +77,22 @@ const BLOCKED_IPV4: ReadonlyArray<[string, string]> = [
  * addresses are normalised down to IPv4 during parsing so the IPv4 rules above
  * apply. Without that normalisation, `::ffff:169.254.169.254` would bypass the
  * link-local block entirely — a well-known filter evasion.
+ *
+ * The other ranges that embed an IPv4 address (IPv4-compatible, NAT64, 6to4,
+ * Teredo) are blocked whole rather than by their embedded address: each can
+ * reach a private IPv4 host through a gateway, and none is a plausible home for
+ * a public MCP server or model API.
  */
 const BLOCKED_IPV6: ReadonlyArray<[string, string]> = [
   ["::/128", "unspecified address"],
   ["::1/128", "loopback"],
+  ["::/96", "IPv4-compatible (deprecated)"],
   ["64:ff9b::/96", "NAT64 translation"],
+  ["64:ff9b:1::/48", "local-use NAT64 translation"],
   ["100::/64", "discard-only range"],
+  ["2001::/32", "Teredo tunnelling"],
   ["2001:db8::/32", "documentation range"],
+  ["2002::/16", "6to4 tunnelling"],
   ["fc00::/7", "unique local address"],
   ["fe80::/10", "link-local"],
   ["ff00::/8", "multicast"],

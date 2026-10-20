@@ -245,6 +245,14 @@ export default defineSchema({
     .index("by_userId_and_showcaseProjectId", ["userId", "showcaseProjectId"])
     .index("by_showcaseProjectId", ["showcaseProjectId"]),
 
+  showcaseImports: defineTable({
+    showcaseProjectId: v.id("showcaseProjects"),
+    userId: v.string(),
+    importedAt: v.number(),
+  })
+    .index("by_userId_and_showcaseProjectId", ["userId", "showcaseProjectId"])
+    .index("by_showcaseProjectId", ["showcaseProjectId"]),
+
   // ─── Skills ───
 
   /**

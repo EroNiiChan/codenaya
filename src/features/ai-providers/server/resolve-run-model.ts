@@ -18,6 +18,7 @@ import {
   titleModelFor,
 } from "../registry";
 import { buildAgentKitModel } from "./agentkit-model";
+import { assertSafeProviderBaseUrl } from "./base-url";
 import { openProviderKey } from "./sealed-key";
 import { OUT_OF_CREDIT_PATTERN, isOutOfCredit, testConnection } from "./test-connection";
 import { api } from "../../../../convex/_generated/api";
@@ -197,7 +198,8 @@ export interface RunModel {
 
 /**
  * Run-side resolution. Throws `ProviderKeyError` when the key is gone, not
- * owned by the project's owner, marked invalid, or no longer offers the model.
+ * owned by the project's owner, marked invalid, no longer offers the model, or
+ * its custom endpoint no longer passes the SSRF guard.
  * Call it in the function body, never inside `step.run`.
  */
 export async function resolveRunModel({
@@ -237,6 +239,21 @@ export async function resolveRunModel({
     throw new ProviderKeyError(
       keyFailureMessage(`Your ${key.label} key no longer offers ${choice.modelId}.`),
     );
+  }
+
+  // The base URL was checked when the key was saved, but its host can since
+  // resolve somewhere private (DNS rebinding). AgentKit sends inference through
+  // `step.ai.infer` or a plain `fetch`, neither of which takes our guarded fetch,
+  // so re-check before every run instead.
+  if (key.baseUrl) {
+    const verdict = await assertSafeProviderBaseUrl(key.baseUrl);
+    if (!verdict.ok) {
+      throw new ProviderKeyError(
+        keyFailureMessage(
+          `The endpoint for your ${key.label} key is no longer allowed. ${verdict.reason.replace(/\.?$/, ".")}`,
+        ),
+      );
+    }
   }
 
   const apiKey = await openProviderKey(key);

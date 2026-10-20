@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { getOwnedProject } from "./projects";
 
 /**
  * User-facing integration functions, called from React through the
@@ -62,29 +63,6 @@ function toConnectionSummary(doc: Doc<"userConnections">): UserConnectionSummary
   };
 }
 
-/**
- * Assert the caller owns `projectId`, returning the project.
- *
- * Exported for `envVars.ts`, which enforces the same boundary.
- */
-export async function assertProjectOwner(
-  ctx: QueryCtx | MutationCtx,
-  projectId: Id<"projects">,
-  userId: string,
-): Promise<Doc<"projects">> {
-  const project = await ctx.db.get("projects", projectId);
-
-  if (!project) {
-    throw new Error("Project not found");
-  }
-
-  if (project.ownerId !== userId) {
-    throw new Error("Unauthorized to access this project");
-  }
-
-  return project;
-}
-
 async function assertConnectionOwner(
   ctx: QueryCtx | MutationCtx,
   connectionId: Id<"userConnections">,
@@ -134,7 +112,7 @@ export const listProjectConnections = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const links = await ctx.db
       .query("projectConnections")
@@ -203,7 +181,7 @@ export const linkConnectionToProject = mutation({
 
     // Both sides must belong to the caller. Checking only the project would let
     // a user borrow someone else's credential into their own project.
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
     await assertConnectionOwner(ctx, args.userConnectionId, identity.subject);
 
     const existing = await ctx.db
@@ -346,7 +324,7 @@ export const listPendingApprovals = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const pending = await ctx.db
       .query("mcpApprovals")

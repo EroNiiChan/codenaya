@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { getOwnedProject } from "./projects";
 import {
   MAX_CHAT_IMAGES,
   MAX_CHAT_IMAGE_BYTES,
@@ -20,17 +21,7 @@ const requireOwnedProject = async (
   projectId: Id<"projects">,
 ) => {
   const identity = await verifyAuth(ctx);
-  const project = await ctx.db.get("projects", projectId);
-
-  if (!project) {
-    throw new Error("Project not found");
-  }
-
-  if (project.ownerId !== identity.subject) {
-    throw new Error("Unauthorized to access this project");
-  }
-
-  return project;
+  return await getOwnedProject(ctx, projectId, identity.subject);
 };
 
 export const generateUploadUrl = mutation({
