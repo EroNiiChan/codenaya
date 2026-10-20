@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   openProviderKey: vi.fn(),
+  lookup: vi.fn(),
 }));
 
 vi.mock("@/lib/convex-client", () => ({ convex: { query: mocks.query } }));
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
+vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
 
 import { DEFAULT_AGENT_MODEL_ID } from "@/features/conversations/agent-models";
 
@@ -53,6 +55,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("OPENROUTER_API_KEY", "sk-or-platform");
   mocks.openProviderKey.mockResolvedValue(SECRET);
+  mocks.lookup.mockResolvedValue([{ address: "104.18.32.7", family: 4 }]);
 });
 
 describe("validateModelChoice (API route)", () => {
@@ -199,6 +202,19 @@ describe("resolveRunModel (agent run)", () => {
 
     expect(target(run.coding()).url).toContain("api.groq.test");
     expect(target(run.title()).id).toBe("llama-4-scout");
+  });
+
+  it("refuses a custom endpoint whose host now resolves to a private address", async () => {
+    mocks.query.mockResolvedValue(customKey);
+    mocks.lookup.mockResolvedValue([{ address: "169.254.169.254", family: 4 }]);
+
+    const error = await resolve({ keyId: "key_2", modelId: "llama-4-scout" }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ProviderKeyError);
+    expect(error.message).toContain("link-local (cloud metadata) address is not allowed. Update it");
+    expect(mocks.lookup).toHaveBeenCalledWith("api.groq.test", expect.anything());
+    // Refused before the key is unsealed, so no request can carry it.
+    expect(mocks.openProviderKey).not.toHaveBeenCalled();
   });
 
   it.each([
