@@ -1,5 +1,5 @@
 import { getFunctionName } from "convex/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ mutation: vi.fn(), query: vi.fn() }));
 
@@ -21,8 +21,12 @@ const server = {
   displayName: "Supabase",
 } as ResolvedMcpServer;
 
-// Steps run inline and durable sleeps return at once, so polling costs no time.
-const runner = { run: <T>(_id: string, fn: () => Promise<T>) => fn(), sleep: async () => {} };
+// Steps run inline; a durable sleep moves the fake clock on, so polling costs no
+// time and a gate that never settles still reaches its deadline.
+const runner = {
+  run: <T>(_id: string, fn: () => Promise<T>) => fn(),
+  sleep: async (_id: string, ms: number) => void vi.setSystemTime(Date.now() + ms),
+};
 
 const ask = () =>
   createConvexApprovalGate(ctx)({
@@ -39,9 +43,14 @@ const calls = (name: string) =>
 describe("createConvexApprovalGate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ now: 0 });
     mocks.mutation.mockImplementation(async (ref) =>
       getFunctionName(ref) === "system:createMcpApproval" ? "approval_1" : true
     );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("creates a redacted approval row and returns a single-use claim once approved", async () => {
@@ -94,15 +103,9 @@ describe("createConvexApprovalGate", () => {
   });
 
   it("expires the row when nobody answers in time", async () => {
-    vi.useFakeTimers({ now: 0 });
-    // Each poll moves the clock a minute on, so the 15-minute deadline passes.
-    mocks.query.mockImplementation(async () => {
-      vi.setSystemTime(Date.now() + 60_000);
-      return { status: "pending", expiresAt: 0 };
-    });
+    mocks.query.mockResolvedValue({ status: "pending", expiresAt: 0 });
 
     const decision = await ask();
-    vi.useRealTimers();
 
     expect(decision).toMatchObject({ approved: false });
     expect(decision.reason).toContain("no answer within 15 minutes");

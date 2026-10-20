@@ -46,7 +46,7 @@ vi.mock("@/inngest/client", () => ({
 
 import { exportToGithub } from "./export-to-github";
 
-type File = {
+type ProjectFile = {
   _id: string;
   name: string;
   type: "file" | "folder";
@@ -63,7 +63,7 @@ const runJob = () =>
     step: { run: (_name: string, fn: () => unknown) => fn(), sleep: async () => {} },
   });
 
-const projectFiles = (files: File[]) => mocks.query.mockResolvedValue(files);
+const projectFiles = (files: ProjectFile[]) => mocks.query.mockResolvedValue(files);
 
 describe("exportToGithub", () => {
   beforeEach(() => {

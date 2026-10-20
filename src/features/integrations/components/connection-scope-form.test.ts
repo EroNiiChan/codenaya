@@ -5,12 +5,15 @@ import { describeProviderScope } from "./connection-scope-form";
 
 describe("describeProviderScope", () => {
   it("summarises a query-param string and a list against the provider's options", () => {
+    const supabase = getProvider("supabase");
+    const total = supabase?.scopeOptions?.features?.length;
+
     expect(
-      describeProviderScope(getProvider("supabase"), {
+      describeProviderScope(supabase, {
         projectRef: "  abc123 ",
         features: ["database", "docs"],
       })
-    ).toEqual(["Project reference abc123", "2 of 8 feature groups"]);
+    ).toEqual(["Project reference abc123", `2 of ${total} feature groups`]);
   });
 
   it("counts a header list with no declared options without a total", () => {
