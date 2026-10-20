@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  // Third-party agent skills, run by the agent tooling, not by the app.
+  "ignore": [".agents/**"],
+  // Installed outside npm (see README), run by the package.json scripts.
+  "ignoreBinaries": ["infisical"],
+  "ignoreDependencies": [
+    // `/// <reference types="vite/client" />` in convex tests; vite ships with vitest.
+    "vite",
+    // Loaded by Next from postcss.config.mjs; the version is pinned in "overrides".
+    "postcss"
+  ],
+  // Exports used inside their own file are not dead code.
+  "ignoreExportsUsedInFile": true,
+  // Vendored shadcn/ai-elements primitives export every part by design.
+  "ignoreIssues": {
+    "src/components/ui/**": ["exports", "types"],
+    "src/components/ai-elements/**": ["exports", "types"]
+  }
+}

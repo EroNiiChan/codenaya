@@ -86,18 +86,6 @@ export function qualifyToolName(namespace: string, toolName: string): string {
   return `${namespace}__${toolName}`;
 }
 
-/** Split a qualified name back into its parts. */
-export function parseQualifiedToolName(
-  qualified: string,
-): { namespace: string; toolName: string } | null {
-  const index = qualified.indexOf("__");
-  if (index <= 0 || index + 2 >= qualified.length) return null;
-  return {
-    namespace: qualified.slice(0, index),
-    toolName: qualified.slice(index + 2),
-  };
-}
-
 /**
  * Open a client against a resolved server.
  *
