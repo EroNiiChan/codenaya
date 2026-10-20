@@ -45,9 +45,8 @@ export async function POST(request: Request) {
     return notFound;
   }
 
-  const githubToken = await getGithubToken(userId);
-
-  if (!githubToken) {
+  // Checked here for a clear error; the job looks the token up itself (#211).
+  if (!(await getGithubToken(userId))) {
     return githubNotLinkedResponse();
   }
 
@@ -58,8 +57,7 @@ export async function POST(request: Request) {
       repoName,
       visibility,
       description,
-      githubToken,
-      internalKey,
+      userId,
     },
   });
 

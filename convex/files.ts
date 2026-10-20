@@ -1,9 +1,32 @@
 import { ConvexError, v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { releaseStorageIfUnreferenced } from "./projectCascade";
 import { Doc, Id } from "./_generated/dataModel";
+
+// File and parent ids come from the client or from model output, so every file
+// and parent folder a write touches must belong to that write's project (#209, #239).
+export const getProjectFile = async (
+  ctx: QueryCtx,
+  projectId: Id<"projects">,
+  fileId: Id<"files">
+) => {
+  const file = await ctx.db.get("files", fileId);
+  return file && file.projectId === projectId ? file : null;
+};
+
+export const assertProjectFolder = async (
+  ctx: QueryCtx,
+  projectId: Id<"projects">,
+  parentId: Id<"files"> | undefined
+) => {
+  if (!parentId) return;
+  const parent = await getProjectFile(ctx, projectId, parentId);
+  if (!parent || parent.type !== "folder") {
+    throw new Error("Parent folder not found");
+  }
+};
 
 export const getFiles = query({
   args: { projectId: v.id("projects") },
@@ -123,7 +146,8 @@ export const getFilePath = query({
       const file = (await ctx.db.get("files", currentId)) as 
         | Doc<"files">
         | undefined;
-      if (!file) break;
+      // A parent from another project is never part of this file's path (#239).
+      if (!file || file.projectId !== project._id) break;
 
       path.unshift({ _id: file._id, name: file.name });
       currentId = file.parentId;
@@ -192,6 +216,8 @@ export const createFile = mutation({
       throw new Error("Unauthorized to access this project");
     }
 
+    await assertProjectFolder(ctx, args.projectId, args.parentId);
+
     // Check if file with same name already exists in this parent folder
     const files = await ctx.db
       .query("files")
@@ -243,6 +269,8 @@ export const createFolder = mutation({
     if (project.ownerId !== identity.subject) {
       throw new Error("Unauthorized to access this project");
     }
+
+    await assertProjectFolder(ctx, args.projectId, args.parentId);
 
     // Check if folder with same name already exists in this parent folder
     const files = await ctx.db

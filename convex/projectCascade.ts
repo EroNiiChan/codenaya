@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
@@ -66,6 +68,24 @@ async function isStorageReferenced(
 }
 
 /**
+ * The metadata of an uploaded blob that no row references yet. A storage id
+ * from a client or a job proves nothing about who uploaded it, so a blob that
+ * already belongs to something (another project's file, a showcase preview, a
+ * chat image) is refused instead of being claimed or deleted (#211). Missing
+ * and referenced blobs get the same error, so ids can't be probed.
+ */
+export async function getUnclaimedStorage(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+) {
+  const file = await ctx.db.system.get("_storage", storageId);
+  if (!file || (await isStorageReferenced(ctx, storageId))) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Upload not found" });
+  }
+  return file;
+}
+
+/**
  * Deletes a blob once nothing references it. Blobs can be shared: copied
  * projects point at the source's blobs until `projectCopy.copyBlobs` gives
  * them their own, and checkpoints keep the blobs of files they can restore.
@@ -81,7 +101,7 @@ export async function releaseStorageIfUnreferenced(
 }
 
 /**
- * One batch of a showcase entry's teardown: votes, then views, then the entry
+ * One batch of a showcase entry's teardown: votes, views, imports, then the entry
  * and its preview image. Returns `true` once the entry is gone.
  */
 export async function deleteShowcaseBatch(
@@ -103,6 +123,14 @@ export async function deleteShowcaseBatch(
     )
     .take(CASCADE_BATCH_SIZE);
   if (await deleteRows(ctx, "showcaseViews", views)) return false;
+
+  const imports = await ctx.db
+    .query("showcaseImports")
+    .withIndex("by_showcaseProjectId", (q) =>
+      q.eq("showcaseProjectId", showcase._id),
+    )
+    .take(CASCADE_BATCH_SIZE);
+  if (await deleteRows(ctx, "showcaseImports", imports)) return false;
 
   await ctx.db.delete("showcaseProjects", showcase._id);
   if (showcase.previewImageId) {

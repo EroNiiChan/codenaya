@@ -62,16 +62,7 @@ export const updateSettings = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.id);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to update this project");
-    }
+    await getOwnedProject(ctx, args.id, identity.subject);
 
     await ctx.db.patch("projects", args.id, {
       settings: args.settings,

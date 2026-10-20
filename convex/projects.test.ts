@@ -383,3 +383,32 @@ describe("copied projects never delete the source's blobs", () => {
     expect(await blobExists(t, storageId)).toBe(true);
   });
 });
+
+describe("project-scoped public mutations", () => {
+  test("refuse a project that is being deleted (#239)", async () => {
+    const t = convexTest(schema, modules);
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Gone", ownerId: ALICE, updatedAt: 0, deletingAt: 1 })
+    );
+    const alice = t.withIdentity({ subject: ALICE });
+
+    for (const write of [
+      () => alice.mutation(api.projects.updateSettings, { id: projectId, settings: {} }),
+      () => alice.mutation(api.conversations.create, { projectId, title: "Chat" }),
+      () => alice.mutation(api.chatImages.generateUploadUrl, { projectId }),
+      () => alice.mutation(api.envVars.setPublicEnvVar, { projectId, key: "NEXT_PUBLIC_A", value: "1" }),
+      () => alice.mutation(api.skills.setAllProjectSkillsEnabled, { projectId, enabled: true }),
+      () =>
+        alice.mutation(api.showcase.publish, {
+          projectId,
+          title: "Gone",
+          description: "",
+          techStack: [],
+          designStyle: [],
+          category: "tool",
+        }),
+    ]) {
+      await expect(write()).rejects.toThrow("Project not found");
+    }
+  });
+});

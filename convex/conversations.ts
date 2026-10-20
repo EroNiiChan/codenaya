@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 
 import { verifyAuth } from "./auth";
 import { withImageUrls } from "./chatImages";
+import { getOwnedProject } from "./projects";
 
 export const create = mutation({
   args: {
@@ -11,16 +12,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const conversationId = await ctx.db.insert("conversations", {
       projectId: args.projectId,
