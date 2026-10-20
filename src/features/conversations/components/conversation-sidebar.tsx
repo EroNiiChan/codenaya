@@ -521,8 +521,8 @@ export const ConversationSidebar = ({
                 />
               </PromptInputTools>
               <div className="flex shrink-0 items-center gap-2">
-                {/* Only once the model name fits beside it (#217). */}
-                <span className="hidden items-center gap-1 text-[11px] text-muted-foreground/70 @[520px]:inline-flex">
+                {/* Only once even the longest model name (max-w-44) fits beside it (#217). */}
+                <span className="hidden items-center gap-1 text-[11px] text-muted-foreground/70 @[560px]:inline-flex">
                   <kbd className="inline-flex h-4 items-center rounded border px-1 font-sans">
                     <CornerDownLeftIcon className="size-2.5" />
                     <span className="sr-only">Enter</span>

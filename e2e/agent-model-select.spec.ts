@@ -29,6 +29,9 @@ test.describe("chat agent model switcher", () => {
     const name = trigger.locator('[data-slot="select-value"]');
     await expect(name).not.toBeEmpty();
     expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    // Focus shows the full name too, for panels narrow enough to truncate it.
+    await trigger.focus();
+    await expect(page.getByRole("tooltip")).toContainText((await name.textContent())!);
     await trigger.click();
     // Scoped to the platform group: the user's own keys add groups of their own.
     const platform = page.getByRole("group", { name: "Codenaya" });
