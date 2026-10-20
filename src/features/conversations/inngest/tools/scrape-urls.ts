@@ -4,11 +4,13 @@ import {
   FIRECRAWL_NOT_CONFIGURED_MESSAGE,
   getFirecrawl,
 } from "@/lib/firecrawl";
+import { MAX_SCRAPED_CHARS, MAX_SCRAPE_URLS } from "@/lib/scrape-limits";
 
 const paramsSchema = z.object({
   urls: z
     .array(z.url("Invalid URL format"))
-    .min(1, "Provide at least one URL to scrape"),
+    .min(1, "Provide at least one URL to scrape")
+    .max(MAX_SCRAPE_URLS, `Scrape at most ${MAX_SCRAPE_URLS} URLs at a time`),
 });
 
 export const createScrapeUrlsTool = () => {
@@ -45,7 +47,7 @@ export const createScrapeUrlsTool = () => {
               if (result.markdown) {
                 results.push({
                   url,
-                  content: result.markdown,
+                  content: result.markdown.slice(0, MAX_SCRAPED_CHARS),
                 });
               }
             } catch {

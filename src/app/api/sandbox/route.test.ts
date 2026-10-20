@@ -10,17 +10,28 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   sandboxCreate: vi.fn(),
   sandboxConnect: vi.fn(),
+  sandboxList: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/convex-client", () => ({ convex: { query: mocks.query } }));
 vi.mock("e2b", () => ({
-  Sandbox: { create: mocks.sandboxCreate, connect: mocks.sandboxConnect },
+  Sandbox: {
+    create: mocks.sandboxCreate,
+    connect: mocks.sandboxConnect,
+    list: mocks.sandboxList,
+  },
   AuthenticationError: class extends Error {},
   RateLimitError: class extends Error {},
 }));
 
 import { POST } from "./route";
+import {
+  SANDBOX_CREATE_RATE_LIMIT,
+  checkRateLimit,
+  resetRateLimits,
+} from "@/lib/rate-limit";
+import { MAX_LIVE_SANDBOXES } from "@/features/sandbox-preview/server/project-sandbox";
 import { PATCH } from "./[sandboxId]/route";
 
 const params = { params: Promise.resolve({ sandboxId: "sbx_1" }) };
@@ -38,6 +49,7 @@ const routes = [
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRateLimits();
   vi.stubEnv("E2B_API_KEY", "e2b-test");
   mocks.auth.mockResolvedValue({ userId: "user_1" });
 });
@@ -62,5 +74,53 @@ describe.each(routes)("$name", ({ call }) => {
     expect(mocks.query).not.toHaveBeenCalled();
     expect(mocks.sandboxCreate).not.toHaveBeenCalled();
     expect(mocks.sandboxConnect).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/sandbox cost caps (#242)", () => {
+  const boot = () =>
+    POST(request("POST", JSON.stringify({ files: [{ path: "index.html", content: "" }] })));
+  const liveSandboxes = (count: number) =>
+    mocks.sandboxList.mockReturnValue({
+      nextItems: async () => Array.from({ length: count }, (_, i) => ({ sandboxId: `sbx_${i}` })),
+    });
+
+  it("answers 429 past the per-user rate limit without asking E2B", async () => {
+    for (let i = 0; i < SANDBOX_CREATE_RATE_LIMIT.limit; i++) {
+      checkRateLimit("user_1", SANDBOX_CREATE_RATE_LIMIT);
+    }
+
+    const res = await boot();
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(mocks.sandboxList).not.toHaveBeenCalled();
+    expect(mocks.sandboxCreate).not.toHaveBeenCalled();
+  });
+
+  it("answers 429 rate_limit when the user already has the max live sandboxes", async () => {
+    liveSandboxes(MAX_LIVE_SANDBOXES);
+
+    const res = await boot();
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ code: "rate_limit" });
+    expect(mocks.sandboxList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: { metadata: { userId: "user_1" }, state: ["running"] },
+      }),
+    );
+    expect(mocks.sandboxCreate).not.toHaveBeenCalled();
+  });
+
+  it("boots below the cap", async () => {
+    liveSandboxes(MAX_LIVE_SANDBOXES - 1);
+    mocks.sandboxCreate.mockRejectedValue(new Error("stop after the cap check"));
+
+    const res = await boot();
+
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(mocks.sandboxCreate).toHaveBeenCalled();
   });
 });

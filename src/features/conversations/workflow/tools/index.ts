@@ -2,6 +2,7 @@ import { z } from "zod";
 import { tool } from "ai";
 
 import { convex } from "@/lib/convex-client";
+import { MAX_SCRAPED_CHARS, MAX_SCRAPE_URLS } from "@/lib/scrape-limits";
 
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -277,7 +278,7 @@ async function scrapeUrlsStep(opts: { urls: string[] }) {
     try {
       const result = await firecrawl.scrape(url, { formats: ["markdown"] });
       if (result.markdown) {
-        results.push({ url, content: result.markdown });
+        results.push({ url, content: result.markdown.slice(0, MAX_SCRAPED_CHARS) });
       } else {
         results.push({ url, content: `No markdown returned for ${url}` });
       }
@@ -460,6 +461,7 @@ export function createCodingTools({ projectId }: ToolFactoryOptions) {
         urls: z
           .array(z.url("Invalid URL format"))
           .min(1, "Provide at least one URL to scrape")
+          .max(MAX_SCRAPE_URLS, `Scrape at most ${MAX_SCRAPE_URLS} URLs at a time`)
           .describe("Array of URLs to scrape for content"),
       }),
       execute: async ({ urls }) =>
