@@ -120,9 +120,12 @@ export const describeToolCall = (
 /**
  * The error message of an AgentKit tool result, or undefined on success.
  * Tools here report failures by returning an "Error..." string; AgentKit wraps
- * thrown errors as `{ error }`.
+ * thrown errors as `{ error }`. Ids in the message resolve to paths via `pathOf`.
  */
-export const toolResultError = (content: unknown): string | undefined => {
+export const toolResultError = (
+  content: unknown,
+  pathOf?: (id: string) => string | undefined,
+): string | undefined => {
   if (!content || typeof content !== "object") return undefined;
   const { data, error } = content as { data?: unknown; error?: unknown };
   let message: string | undefined;
@@ -134,7 +137,23 @@ export const toolResultError = (content: unknown): string | undefined => {
   } else if (typeof data === "string" && /^error\b/i.test(data.trim())) {
     message = data.trim();
   }
-  return message ? sanitizeAgentText(message).slice(0, MAX_ERROR) : undefined;
+  return message ? sanitizeAgentText(message, pathOf).slice(0, MAX_ERROR) : undefined;
+};
+
+// First line of each passing checkBuild result; the run block shows it as the row label.
+export const BUILD_VERIFIED = "Build verified";
+export const STATIC_CHECKS_PASSED = "Static checks passed";
+export const BUILD_NOT_CHECKED = "Build not checked";
+/** Starts a checkBuild result that failed for reasons outside the project's code. */
+export const BUILD_CHECK_UNFINISHED = "Error: The build check could not finish";
+
+/**
+ * The first line of a passing checkBuild result ("Build verified", "Static
+ * checks passed"), which the run block shows as the row's label.
+ */
+export const buildCheckLabel = (content: unknown): string | undefined => {
+  const data = (content as { data?: unknown } | null)?.data;
+  return typeof data === "string" ? data.trim().split("\n")[0].slice(0, MAX_ERROR) || undefined : undefined;
 };
 
 /** Cap for interim "thinking" text recorded alongside tool calls. */
@@ -151,6 +170,8 @@ const LABELLED_ID = new RegExp(
   String.raw`\s*\(?\bid:\s*["'\x60]?(${ID_BODY})\b["'\x60]?\)?`,
   "gi",
 );
+// Tool errors: 'File with ID "abc…" not found.'
+const WITH_ID = new RegExp(String.raw`\s+with ID ["'\x60](${ID_BODY})["'\x60]`, "gi");
 
 const sanitizeProse = (
   text: string,
@@ -163,6 +184,11 @@ const sanitizeProse = (
     .replace(LABELLED_ID, (match, id: string) => {
       const path = pathOf?.(id);
       return path ? ` (${path})` : "";
+    })
+    // An unresolved id would read 'File with ID "a file" not found': drop it.
+    .replace(WITH_ID, (match, id: string) => {
+      const path = pathOf?.(id);
+      return path ? ` "${path}"` : "";
     })
     .replace(DOC_ID, (id) => pathOf?.(id) ?? "a file");
 

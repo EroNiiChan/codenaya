@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Allotment } from "allotment";
+import { motion, useReducedMotion } from "motion/react";
 import {
+  ChevronDownIcon,
   Loader2Icon,
   TerminalSquareIcon,
   AlertTriangleIcon,
@@ -20,14 +22,21 @@ import { PreviewSettingsPopover } from "@/features/sandbox-preview/components/pr
 import { PreviewTerminal } from "@/features/sandbox-preview/components/preview-terminal";
 import { PreviewBuilding } from "@/features/sandbox-preview/components/preview-building";
 import {
+  PreviewStatusBadge,
+  PreviewTerminalStrip,
+  usePreviewTerminal,
+} from "@/features/sandbox-preview/components/preview-terminal-strip";
+import {
   PREVIEW_DEVICE_WIDTHS,
   PreviewDeviceToggle,
   usePreviewDevice,
   type PreviewDevice,
 } from "@/features/sandbox-preview/components/preview-device-toggle";
 import type { SandboxErrorKind } from "@/features/sandbox-preview/utils/sandbox-error";
+import { hasRootPackageJson } from "@/features/sandbox-preview/utils/file-tree";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 import { EnvVarsDialog } from "./env-vars-dialog";
 import { useProject } from "../hooks/use-projects";
@@ -44,13 +53,29 @@ import { Id } from "../../../../convex/_generated/dataModel";
 
 type PreviewEngine = "sandbox" | "webcontainer";
 
-export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
+const WAITING_FOR_BUILD = "Waiting for the first build...";
+
+/** What the collapsed terminal shows until the engine writes its first line. */
+const stripPlaceholder = (building: boolean, isLoading: boolean) => {
+  if (building) return WAITING_FOR_BUILD;
+  if (isLoading) return "Starting...";
+  return "No output yet";
+};
+
+export const PreviewView = ({
+  projectId,
+  firstBuild,
+}: {
+  projectId: Id<"projects">;
+  /** The agent is writing a new project's first build (see ProjectIdView). */
+  firstBuild: boolean;
+}) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
   const project = useProject(projectId);
   const files = useFiles(projectId);
-  const [showTerminal, setShowTerminal] = useState(true);
+  const [terminalChoice, setTerminalChoice] = usePreviewTerminal();
   const [refreshKey, setRefreshKey] = useState(0);
   const [device, setDevice] = usePreviewDevice();
   
@@ -58,21 +83,18 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const engineParam = searchParams.get("engine") as PreviewEngine | null;
   const activeEngine = engineParam === "webcontainer" ? "webcontainer" : "sandbox";
 
-  // A run that starts before package.json exists is writing the first build.
-  // Booting against it would install a half-written project, so hold the boot
-  // until that run ends; the engine's own gate then starts it.
+  // During the first build the E2B sandbox boots as soon as package.json
+  // exists, so it is warm when the run ends: later files reach it through the
+  // file sync, and a changed package.json re-runs the install (#254).
+  // WebContainer doesn't re-install, so it still waits for the run to end.
   const activeRun = useActiveRun(projectId);
-  const hasPackageJson = files?.some(
-    (file) => file.type === "file" && !file.parentId && file.name === "package.json",
-  );
-  const [firstBuild, setFirstBuild] = useState(false);
-  if (!firstBuild && activeRun && files && !hasPackageJson) setFirstBuild(true);
-  if (firstBuild && activeRun === null) setFirstBuild(false);
-  const holdBoot = activeRun === undefined || firstBuild;
+  const hasPackageJson = files ? hasRootPackageJson(files) : false;
+  const holdSandbox = activeRun === undefined || (firstBuild && !hasPackageJson);
+  const holdWebContainer = activeRun === undefined || firstBuild;
 
   const sandbox = useSandbox({
     files,
-    enabled: activeEngine === "sandbox" && !holdBoot,
+    enabled: activeEngine === "sandbox" && !holdSandbox,
     projectId,
     settings: project?.settings,
   });
@@ -84,7 +106,7 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
 
   const webcontainer = useWebContainer({
     files,
-    enabled: activeEngine === "webcontainer" && !holdBoot,
+    enabled: activeEngine === "webcontainer" && !holdWebContainer,
     publicEnv,
     settings: project?.settings,
   });
@@ -92,6 +114,27 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const activeInstance = activeEngine === "sandbox" ? sandbox : webcontainer;
   const { status, previewUrl, error, restart, terminalOutput } = activeInstance;
   const errorKind = activeEngine === "sandbox" ? sandbox.errorKind : null;
+  const reduceMotion = useReducedMotion();
+
+  // A failed start opens the terminal even when the user keeps it closed, but
+  // that isn't saved as their choice: closing it again only lasts for this error.
+  const [errorDismissed, setErrorDismissed] = useState(false);
+  if (errorDismissed && status !== "error") setErrorDismissed(false);
+  const showTerminal =
+    terminalChoice === "open" || (status === "error" && !errorDismissed);
+  const toggleTerminal = () => {
+    if (!showTerminal) return setTerminalChoice("open");
+    setTerminalChoice("closed");
+    if (status === "error") setErrorDismissed(true);
+  };
+
+  // A boot that started mid-build can fail on files the agent hadn't written
+  // yet; boot once more against the finished build.
+  const wasFirstBuild = useRef(firstBuild);
+  useEffect(() => {
+    if (wasFirstBuild.current && !firstBuild && status === "error") restart();
+    wasFirstBuild.current = firstBuild;
+  }, [firstBuild, status, restart]);
 
   // Only ever called from a user action. WebContainer needs the COOP/COEP headers
   // next.config.ts sets for `?engine=webcontainer`, so switching is a full page
@@ -110,6 +153,21 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
     firstBuild && activeRun && files ? (
       <PreviewBuilding steps={activeRun.steps} files={files} />
     ) : null;
+  const content = (
+    <PreviewContent
+      error={error}
+      isLoading={isLoading}
+      status={status}
+      activeEngine={activeEngine}
+      previewUrl={previewUrl}
+      refreshKey={refreshKey}
+      device={device}
+      restart={restart}
+      errorKind={errorKind}
+      onUseWebContainer={() => switchEngine("webcontainer")}
+      building={building}
+    />
+  );
 
   // Ticks the dashboard's "Open the preview" step.
   useEffect(() => {
@@ -231,7 +289,7 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
           )}
           {previewUrl && <span className="truncate">{previewUrl}</span>}
           {!isLoading && !previewUrl && !error && (
-            <span>{building ? "Waiting for the first build..." : "Ready to preview"}</span>
+            <span>{building ? WAITING_FOR_BUILD : "Ready to preview"}</span>
           )}
         </div>
 
@@ -275,9 +333,10 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
             size="icon"
             variant="ghost"
             className="size-8 rounded-md hover:bg-muted"
-            title="Toggle terminal"
+            title={showTerminal ? "Hide logs" : "Show logs"}
             aria-label="Toggle terminal"
-            onClick={() => setShowTerminal((value) => !value)}
+            aria-pressed={showTerminal}
+            onClick={toggleTerminal}
           >
             <TerminalSquareIcon className="size-4" />
           </Button>
@@ -301,48 +360,49 @@ export const PreviewView = ({ projectId }: { projectId: Id<"projects"> }) => {
           >
             <Allotment.Pane minSize={100}>
               <div className="size-full pb-1.5">
-                <PreviewContent
-                  error={error}
-                  isLoading={isLoading}
-                  status={status}
-                  activeEngine={activeEngine}
-                  previewUrl={previewUrl}
-                  refreshKey={refreshKey}
-                  device={device}
-                  restart={restart}
-                  errorKind={errorKind}
-                  onUseWebContainer={() => switchEngine("webcontainer")}
-                  building={building}
-                />
+                {content}
               </div>
             </Allotment.Pane>
 
             <Allotment.Pane minSize={100} maxSize={500} preferredSize={200}>
               <div className="size-full pt-1.5">
-                <div className="size-full rounded-xl bg-background border border-border/50 shadow-sm overflow-hidden flex flex-col">
-                  <div className="h-9 flex items-center px-4 text-xs font-medium gap-1.5 text-muted-foreground border-b border-border/50 shrink-0 bg-muted/20">
+                <motion.div
+                  initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className={cn(
+                    "size-full rounded-xl bg-background border border-border/50 shadow-sm overflow-hidden flex flex-col",
+                    status === "error" && "ring-1 ring-destructive/40",
+                  )}
+                >
+                  <div className="h-9 flex items-center pl-4 pr-1.5 text-xs font-medium gap-2 text-muted-foreground border-b border-border/50 shrink-0 bg-muted/20">
                     <TerminalSquareIcon className="size-4" />
                     Terminal
+                    <PreviewStatusBadge status={status} />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      aria-expanded={true}
+                      onClick={toggleTerminal}
+                    >
+                      Hide logs
+                      <ChevronDownIcon className="size-3.5" />
+                    </Button>
                   </div>
                   <PreviewTerminal output={terminalOutput} />
-                </div>
+                </motion.div>
               </div>
             </Allotment.Pane>
           </Allotment>
         ) : (
-          <div className="size-full">
-            <PreviewContent
-              error={error}
-              isLoading={isLoading}
+          <div className="size-full flex flex-col gap-1.5">
+            <div className="flex-1 min-h-0">{content}</div>
+            <PreviewTerminalStrip
               status={status}
-              activeEngine={activeEngine}
-              previewUrl={previewUrl}
-              refreshKey={refreshKey}
-              device={device}
-              restart={restart}
-              errorKind={errorKind}
-              onUseWebContainer={() => switchEngine("webcontainer")}
-              building={building}
+              output={terminalOutput}
+              placeholder={stripPlaceholder(Boolean(building), isLoading)}
+              onExpand={toggleTerminal}
             />
           </div>
         )}
@@ -380,13 +440,14 @@ const PreviewContent = ({
   restart: () => void;
   errorKind: SandboxErrorKind | null;
   onUseWebContainer: () => void;
-  /** The first-build placeholder; the engine stays idle while it's shown. */
+  /** The first-build placeholder, shown over the engine until the run ends. */
   building: ReactNode;
 }) => (
   <div className="size-full rounded-xl overflow-hidden relative isolate">
     <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50 pointer-events-none z-50" />
 
-    {building}
+    {/* Laid over the engine so a pre-warmed preview loads underneath it. */}
+    {building && <div className="absolute inset-0 z-10">{building}</div>}
 
     {error && (
       <div className="size-full flex items-center justify-center text-muted-foreground bg-background p-4">
