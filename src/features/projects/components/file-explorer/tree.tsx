@@ -5,6 +5,7 @@ import { FileIcon, FolderIcon } from "@react-symbols/icons/utils";
 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import {
   useCreateFile,
@@ -63,9 +64,8 @@ export const Tree = ({
 
     try {
       await renameFile({ id: item._id, newName });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err) || "Failed to rename";
-      toast.error(message);
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't rename ${item.name}`));
     }
   };
 
@@ -76,7 +76,7 @@ export const Tree = ({
     // Validate against siblings in folderContents
     if (folderContents) {
       const exists = folderContents.some(
-        (f) => f.name.toLowerCase() === name.toLowerCase() && f.type === createType
+        (f) => f.name === name && f.type === createType
       );
       if (exists) {
         toast.error(createType === "file" ? "File already exists" : "Folder already exists");
@@ -99,9 +99,8 @@ export const Tree = ({
           parentId: item._id,
         });
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err) || "Failed to create";
-      toast.error(message);
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't create the ${createType}`));
     }
   };
 

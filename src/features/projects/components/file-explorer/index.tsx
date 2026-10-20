@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
+import { convexErrorMessage } from "@/lib/convex-error"
 
 import { useProject } from "../../hooks/use-projects"
 import { Id } from "../../../../../convex/_generated/dataModel"
@@ -43,7 +44,7 @@ export const FileExplorer = ({
     // Validate against siblings in rootFiles
     if (rootFiles) {
       const exists = rootFiles.some(
-        (f) => f.name.toLowerCase() === name.toLowerCase() && f.type === createType
+        (f) => f.name === name && f.type === createType
       );
       if (exists) {
         toast.error(createType === "file" ? "File already exists" : "Folder already exists");
@@ -66,9 +67,8 @@ export const FileExplorer = ({
           parentId: undefined,
         });
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err) || "Failed to create";
-      toast.error(message);
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't create the ${createType}`));
     }
   };
 
