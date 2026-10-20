@@ -22,6 +22,25 @@ export const projectFilesSchema = z
   .array(z.object({ path: z.string(), content: z.string() }))
   .min(1, "No files provided");
 
+/** Live preview sandboxes per user; each runs up to an hour on our E2B key (#242). */
+export const MAX_LIVE_SANDBOXES = 3;
+
+/**
+ * Whether `userId` already has MAX_LIVE_SANDBOXES running previews. E2B counts
+ * them by the `userId` metadata the preview route sets, so this holds across
+ * server instances.
+ */
+// ponytail: check-then-create, so simultaneous boots can overshoot by a few; the
+// sandbox rate limit bounds that. Use a Convex counter if it ever matters.
+export const atLiveSandboxCap = async (apiKey: string, userId: string) => {
+  const running = await Sandbox.list({
+    apiKey,
+    query: { metadata: { userId }, state: ["running"] },
+    limit: MAX_LIVE_SANDBOXES,
+  }).nextItems();
+  return running.length >= MAX_LIVE_SANDBOXES;
+};
+
 export const createProjectSandbox = (
   opts: Pick<SandboxOpts, "apiKey" | "timeoutMs" | "metadata" | "network">,
 ) => Sandbox.create(SANDBOX_TEMPLATE, opts);

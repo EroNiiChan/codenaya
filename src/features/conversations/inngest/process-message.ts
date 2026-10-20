@@ -70,6 +70,8 @@ interface MessageEvent {
   messageId: Id<"messages">;
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
+  /** Project owner. Optional only on events sent before #242. */
+  ownerId?: string;
   message: string;
   /**
    * Requested model, on the platform or one of the user's keys. Optional, and a
@@ -97,6 +99,9 @@ const modelReasoning = (raw?: string): string => {
 export const processMessage = inngest.createFunction(
   {
     id: "process-message",
+    // At most two agent runs per user at once; more wait in the queue (#242).
+    // One per project already holds: a new message cancels the running one.
+    concurrency: [{ key: "event.data.ownerId", limit: 2 }],
     cancelOn: [
       {
         event: "message/cancel",

@@ -39,7 +39,7 @@ interface Bucket {
 /**
  * Keyed by `${scope}:${userId}` — per user, not per IP.
  *
- * Both protected routes require a Clerk session, so a user id is available and is a
+ * Every limited route requires a Clerk session, so a user id is available and is a
  * far better key than an IP: it is not shared by everyone behind a NAT and cannot be
  * rotated by the caller.
  */
@@ -224,6 +224,40 @@ export const QUICK_EDIT_RATE_LIMIT: RateLimitConfig = {
 export const SKILL_IMPORT_RATE_LIMIT: RateLimitConfig = {
   scope: "skills-import",
   limit: 10,
+  windowMs: 60_000,
+};
+
+/**
+ * Every chat message starts a full agent run on the platform model (#242).
+ * Ten a minute is well above someone chatting while stopping a send loop.
+ */
+export const AGENT_MESSAGE_RATE_LIMIT: RateLimitConfig = {
+  scope: "agent-message",
+  limit: 10,
+  windowMs: 60_000,
+};
+
+/** Each call creates a project and starts an agent run (#242). */
+export const CREATE_WITH_PROMPT_RATE_LIMIT: RateLimitConfig = {
+  scope: "create-with-prompt",
+  limit: 5,
+  windowMs: 60_000,
+};
+
+/**
+ * Each call boots an E2B sandbox that lives up to an hour (#242). Ten a
+ * minute leaves room for restarting a broken preview a few times.
+ */
+export const SANDBOX_CREATE_RATE_LIMIT: RateLimitConfig = {
+  scope: "sandbox-create",
+  limit: 10,
+  windowMs: 60_000,
+};
+
+/** Each call creates a project and an import job (#242). */
+export const GITHUB_IMPORT_RATE_LIMIT: RateLimitConfig = {
+  scope: "github-import",
+  limit: 5,
   windowMs: 60_000,
 };
 

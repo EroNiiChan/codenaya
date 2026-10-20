@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   mutation: vi.fn(),
   openProviderKey: vi.fn(),
+  getFirecrawl: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
@@ -16,9 +17,11 @@ vi.mock("@/lib/convex-client", () => ({
 vi.mock("@/features/ai-providers/server/sealed-key", () => ({
   openProviderKey: mocks.openProviderKey,
 }));
+vi.mock("@/lib/firecrawl", () => ({ getFirecrawl: mocks.getFirecrawl }));
 
 import { POST as suggestionPOST } from "./suggestion/route";
 import { POST as quickEditPOST } from "./quick-edit/route";
+import { MAX_SCRAPED_CHARS, MAX_SCRAPE_URLS } from "@/lib/scrape-limits";
 
 const post = (body: unknown) =>
   new Request("http://localhost/api/editor", {
@@ -125,5 +128,58 @@ describe.each(routes)("POST /api/$name", ({ call, result }) => {
       error: expect.stringContaining("Work key key was rejected"),
       code: "provider_key",
     });
+  });
+});
+
+describe("editor AI input caps (#242)", () => {
+  const huge = "x".repeat(200_001);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
+    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "ik");
+    mocks.auth.mockResolvedValue({ userId: "user_1" });
+    mocks.query.mockResolvedValue(null);
+    mocks.generateObject.mockResolvedValue({ object: { editedCode: "const a = 1" } });
+  });
+
+  it.each([
+    [
+      "suggestion",
+      () =>
+        suggestionPOST(
+          post({
+            fileName: "index.ts",
+            code: huge,
+            currentLine: "",
+            textBeforeCursor: "",
+            textAfterCursor: "",
+            lineNumber: 1,
+          }),
+        ),
+    ],
+    ["quick-edit", () => quickEditPOST(post({ selectedCode: huge, instruction: "use const" }))],
+  ])("%s answers 400 for code over 200k characters", async (_name, call) => {
+    const res = await call();
+
+    expect(res.status).toBe(400);
+    expect(mocks.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("quick-edit scrapes at most MAX_SCRAPE_URLS URLs and truncates each page", async () => {
+    const scrape = vi.fn(async () => ({ markdown: "~".repeat(MAX_SCRAPED_CHARS) + "TAIL" }));
+    mocks.getFirecrawl.mockReturnValue({ scrape });
+    const urls = Array.from({ length: MAX_SCRAPE_URLS + 1 }, (_, i) => `https://example.com/${i}`);
+
+    const res = await quickEditPOST(
+      post({ selectedCode: "let a = 1", instruction: `follow ${urls.join(" ")}` }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(scrape).toHaveBeenCalledTimes(MAX_SCRAPE_URLS);
+    const [{ prompt }] = mocks.generateObject.mock.calls[0];
+    // Counted, not matched: `toContain` on long runs of one char is very slow.
+    expect(prompt.split("~").length - 1).toBe(MAX_SCRAPE_URLS * MAX_SCRAPED_CHARS);
+    expect(prompt).not.toContain("TAIL");
   });
 });
