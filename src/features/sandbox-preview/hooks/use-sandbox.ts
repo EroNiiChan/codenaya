@@ -116,7 +116,7 @@ export const useSandbox = ({
         setError(null);
         setTerminalOutput("");
         setPhase(null);
-      setBootHistory({});
+        setBootHistory({});
 
         const flatFiles = buildFlatFileList(files);
         syncedContentRef.current = new Map(
@@ -151,7 +151,6 @@ export const useSandbox = ({
 
         const decoder = new TextDecoder();
         let buffer = "";
-        let logLength = 0;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -174,14 +173,12 @@ export const useSandbox = ({
                   setStatus(event.status);
                   break;
                 case "output":
-                  logLength += event.data.length;
                   setTerminalOutput((prev) => prev + event.data);
                   break;
                 case "phase":
                   if (isBootPhase(event.phase)) {
                     setPhase(event.phase);
-                    const logAt = logLength;
-                    setBootHistory((history) => recordBootPhase(history, event.phase, event.at, logAt));
+                    setBootHistory((history) => recordBootPhase(history, event.phase, event.at));
                   }
                   break;
                 case "ready":
@@ -340,7 +337,7 @@ export const useSandbox = ({
     setErrorKind(null);
     setTerminalOutput("");
     setPhase(null);
-      setBootHistory({});
+    setBootHistory({});
     setRestartKey((k) => k + 1);
   }, [killSandbox]);
 
