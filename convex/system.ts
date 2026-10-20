@@ -8,6 +8,7 @@ import {
   runModelValidator,
 } from "./schema";
 import { createCheckpoint } from "./checkpoints";
+import { appError } from "./errors";
 import {
   getUnclaimedStorage,
   releaseBlobs,
@@ -29,7 +30,7 @@ const validateInternalKey = (key: string) => {
   }
 
   if (!keysMatch(key, internalKey)) {
-    throw new Error("Invalid internal key");
+    throw appError("UNAUTHENTICATED", "Invalid internal key");
   }
 };
 
@@ -836,7 +837,7 @@ export const createUserConnection = mutation({
     if (args.projectId) {
       const project = await ctx.db.get("projects", args.projectId);
       if (!project || project.ownerId !== args.userId) {
-        throw new Error("Project not found or owned by another user");
+        throw appError("NOT_FOUND", "Project not found or owned by another user");
       }
     }
 
@@ -914,7 +915,7 @@ export const updateUserConnectionStatus = mutation({
     validateInternalKey(args.internalKey);
 
     if (!(await projectOwnerConnectionOrNull(ctx, args.projectId, args.connectionId))) {
-      throw new Error("Connection not found");
+      throw appError("NOT_FOUND", "Connection not found");
     }
 
     await ctx.db.patch("userConnections", args.connectionId, {
@@ -1181,14 +1182,14 @@ export const setSecretEnvVar = mutation({
     // The row's ownerId decides who may delete it later (`envVars.deleteEnvVar`),
     // so it must be the project's real owner (#211).
     if (!(await ownedProjectOrNull(ctx, args.projectId, args.ownerId))) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (
       args.sourceConnectionId &&
       !(await projectOwnerConnectionOrNull(ctx, args.projectId, args.sourceConnectionId))
     ) {
-      throw new Error("Connection not found");
+      throw appError("NOT_FOUND", "Connection not found");
     }
 
     const existing = await ctx.db
@@ -1257,7 +1258,7 @@ export const createOauthFlowState = mutation({
     if (args.projectId) {
       const project = await ctx.db.get("projects", args.projectId);
       if (!project || project.ownerId !== args.userId) {
-        throw new Error("Project not found or owned by another user");
+        throw appError("NOT_FOUND", "Project not found or owned by another user");
       }
     }
 
@@ -1591,7 +1592,7 @@ export const setPublicEnvVarInternal = mutation({
     // The row's ownerId decides who may delete it later (`envVars.deleteEnvVar`),
     // so it must be the project's real owner (#211).
     if (!(await ownedProjectOrNull(ctx, args.projectId, args.ownerId))) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     const existing = await ctx.db
@@ -1684,7 +1685,7 @@ export const updateAiProviderKeyStatus = mutation({
 
     const key = await ctx.db.get("aiProviderKeys", args.keyId);
     if (!key || key.userId !== args.userId) {
-      throw new Error("AI provider key not found");
+      throw appError("NOT_FOUND", "AI provider key not found");
     }
 
     const now = Date.now();

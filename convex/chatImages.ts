@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 import { getUnclaimedStorage } from "./projectCascade";
 import {
@@ -78,7 +79,7 @@ export const assertOwnedImages = async (
       .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
       .unique();
     if (!image || image.projectId !== projectId || image.ownerId !== ownerId) {
-      throw new Error("Image not found");
+      throw appError("NOT_FOUND", "Image not found");
     }
   }
 };

@@ -1,9 +1,26 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 
 import { verifyAuth } from "./auth";
 import { withImageUrls } from "./chatImages";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
+
+/** The conversation, when `ownerId` owns its project. */
+const getOwnedConversation = async (
+  ctx: QueryCtx,
+  id: Id<"conversations">,
+  ownerId: string,
+) => {
+  const conversation = await ctx.db.get("conversations", id);
+  // Conversations are only deleted with their project, so this reads as "gone".
+  if (!conversation) {
+    throw appError("NOT_FOUND", "Conversation not found");
+  }
+  await getOwnedProject(ctx, conversation.projectId, ownerId);
+  return conversation;
+};
 
 export const create = mutation({
   args: {
@@ -31,23 +48,7 @@ export const getById = query({
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
-    const conversation = await ctx.db.get("conversations", args.id);
-
-    if (!conversation) {
-      throw new Error("Conversation not found");
-    }
-
-    const project = await ctx.db.get("projects", conversation.projectId);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-
-    return conversation;
+    return await getOwnedConversation(ctx, args.id, identity.subject);
   },
 });
 
@@ -58,15 +59,7 @@ export const getByProject = query({
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     return await ctx.db
       .query("conversations")
@@ -83,21 +76,7 @@ export const getMessages = query({
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
-    const conversation = await ctx.db.get("conversations", args.conversationId);
-
-    if (!conversation) {
-      throw new Error("Conversation not found");
-    }
-
-    const project = await ctx.db.get("projects", conversation.projectId);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
+    await getOwnedConversation(ctx, args.conversationId, identity.subject);
 
     const messages = await ctx.db
       .query("messages")
@@ -123,15 +102,7 @@ export const getActiveRun = query({
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw new Error("Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const message = await ctx.db
       .query("messages")
