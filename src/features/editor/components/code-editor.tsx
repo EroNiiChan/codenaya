@@ -57,6 +57,7 @@ export const CodeEditor = ({
         keymap.of([indentWithTab]),
         minimap(),
         indentationMarkers(),
+        EditorView.contentAttributes.of({ "aria-label": `Editor: ${fileName}` }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChange(update.state.doc.toString());

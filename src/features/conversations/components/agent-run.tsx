@@ -260,6 +260,7 @@ const StepRow = ({
     entryIndex === undefined ? undefined : { animationDelay: staggerDelay(entryIndex, 60) },
   );
   const entryClass = entry && "animate-fade-up motion-reduce:animate-none";
+  const [errorExpanded, setErrorExpanded] = useState(false);
 
   if (row.step.kind === "thinking") {
     return row.step.text ? (
@@ -297,9 +298,20 @@ const StepRow = ({
         {verified && <CheckCircle2Icon className="mt-[3px] size-3.5 shrink-0 text-muted-foreground" />}
       </div>
       {failed && row.step.error && (
-        <p className="truncate pb-1 pl-7 text-xs text-muted-foreground" title={row.step.error}>
+        // A button so touch and keyboard users can expand the full error;
+        // `title` stays for mouse users.
+        <button
+          type="button"
+          aria-expanded={errorExpanded}
+          onClick={() => setErrorExpanded((expanded) => !expanded)}
+          title={row.step.error}
+          className={cn(
+            "block w-full rounded-sm pb-1 pl-7 text-left text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+            errorExpanded ? "whitespace-pre-wrap break-words" : "truncate",
+          )}
+        >
           {row.step.error}
-        </p>
+        </button>
       )}
     </div>
   );
