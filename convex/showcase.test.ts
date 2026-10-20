@@ -163,7 +163,43 @@ describe("public showcase queries", () => {
       expect(entry).toMatchObject({ title: "Weather widget", ownerName: "Alice" });
       expect(entry).not.toHaveProperty("projectId");
       expect(entry).not.toHaveProperty("ownerId");
+      expect(entry).not.toHaveProperty("previewImageId");
     }
+  });
+});
+
+describe("showcase.publish", () => {
+  const entry = {
+    title: "Todo",
+    description: "",
+    techStack: [],
+    designStyle: [],
+    category: "tool",
+  };
+
+  test("refuses a preview the caller didn't upload, and accepts a fresh one (#211)", async () => {
+    const t = convexTest(schema, modules);
+    const bob = t.withIdentity({ subject: "user_bob", name: "Bob" });
+    const [aliceEntry] = await seed(t, [{ title: "Alice's", publishedAt: 1, previewImageId: await storeImage(t) }]);
+    const alicePreview = (await t.run((ctx) => ctx.db.get(aliceEntry)))!.previewImageId!;
+    const missing = await t.run(async (ctx) => {
+      const id = await ctx.storage.store(new Blob(["png"]));
+      await ctx.storage.delete(id);
+      return id;
+    });
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Todo", ownerId: "user_bob", updatedAt: 0 })
+    );
+
+    for (const previewImageId of [alicePreview, missing]) {
+      await expect(
+        bob.mutation(api.showcase.publish, { ...entry, projectId, previewImageId })
+      ).rejects.toThrow("Upload not found");
+    }
+
+    const fresh = await storeImage(t);
+    const id = await bob.mutation(api.showcase.publish, { ...entry, projectId, previewImageId: fresh });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.previewImageId).toBe(fresh);
   });
 });
 
@@ -365,6 +401,50 @@ describe("unlisted entries", () => {
         "SHOWCASE_UNLISTED_OWNER_IDS"
       );
     });
+  });
+});
+
+describe("showcase.incrementView (#269)", () => {
+  const ANON = "anon_123e4567-e89b-42d3-a456-426614174000";
+  const viewsOf = (t: T, id: Id<"showcaseProjects">) =>
+    t.run(async (ctx) => (await ctx.db.get(id))?.viewCount);
+
+  test("counts each viewer once, never the owner, and ignores malformed anonymous ids", async () => {
+    const t = convexTest(schema, modules);
+    const [id] = await seed(t, [{ title: "Counter", publishedAt: 1 }]);
+    const owner = t.withIdentity({ subject: "user_alice" });
+    const bob = t.withIdentity({ subject: "user_bob" });
+
+    await owner.mutation(api.showcase.incrementView, { id });
+    expect(await viewsOf(t, id)).toBe(0);
+
+    await bob.mutation(api.showcase.incrementView, { id });
+    await bob.mutation(api.showcase.incrementView, { id });
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: ANON });
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: ANON });
+    expect(await viewsOf(t, id)).toBe(2);
+
+    // A Clerk-shaped id can't pre-claim Bob's view; no id counts nothing.
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: "user_carol" });
+    await t.mutation(api.showcase.incrementView, { id });
+    expect(await viewsOf(t, id)).toBe(2);
+  });
+
+  test("publish names an email-only author by their email's local part", async () => {
+    const t = convexTest(schema, modules);
+    const user = t.withIdentity({ subject: "user_ada", email: "ada.l@example.com" });
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Counter", ownerId: "user_ada", updatedAt: 0 })
+    );
+    const id = await user.mutation(api.showcase.publish, {
+      projectId,
+      title: "Counter",
+      description: "",
+      techStack: [],
+      designStyle: [],
+      category: "tool",
+    });
+    expect(await t.run(async (ctx) => (await ctx.db.get(id))?.ownerName)).toBe("ada.l");
   });
 });
 

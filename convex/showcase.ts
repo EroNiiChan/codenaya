@@ -7,6 +7,7 @@ import { internalMutation, mutation, query, type QueryCtx } from "./_generated/s
 import { verifyAuth } from "./auth";
 import { getOwnedProject } from "./projects";
 import { copyProjectFiles } from "./projectCopy";
+import { getUnclaimedStorage } from "./projectCascade";
 import { countProjectBuilt } from "./stats";
 
 // ─── Queries ───
@@ -51,15 +52,17 @@ const matchesTags = (item: Doc<"showcaseProjects">, tags: ShowcaseTags) =>
 /**
  * A published entry as anyone may see it, with its preview image URL. The
  * project and owner ids stay private: API routes act on a project id, so a
- * public one would hand every visitor a target (#208).
+ * public one would hand every visitor a target (#208). The preview's storage
+ * id stays private too: it is a handle on the blob, the URL is all a viewer
+ * needs (#211).
  */
 const toPublicEntry = async (
   ctx: QueryCtx,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- left out on purpose
-  { projectId, ownerId, ...entry }: Doc<"showcaseProjects">
+  { projectId, ownerId, previewImageId, ...entry }: Doc<"showcaseProjects">
 ) => {
-  const previewUrl = entry.previewImageId
-    ? await ctx.storage.getUrl(entry.previewImageId)
+  const previewUrl = previewImageId
+    ? await ctx.storage.getUrl(previewImageId)
     : null;
   return { ...entry, previewUrl };
 };
@@ -263,6 +266,11 @@ export const publish = mutation({
     const identity = await verifyAuth(ctx);
 
     await getOwnedProject(ctx, args.projectId, identity.subject);
+    // A preview must be a fresh upload: an id something else holds would
+    // publish someone else's blob under a public URL (#211).
+    if (args.previewImageId) {
+      await getUnclaimedStorage(ctx, args.previewImageId);
+    }
 
     const existing = await ctx.db
       .query("showcaseProjects")
@@ -276,10 +284,18 @@ export const publish = mutation({
 
     const now = Date.now();
 
+    const rawEmail = identity.email;
+    const emailLocalPart = rawEmail ? rawEmail.split("@")[0] : null;
+    const authorName =
+      identity.name ||
+      identity.nickname ||
+      emailLocalPart ||
+      "Anonymous";
+
     const showcaseId = await ctx.db.insert("showcaseProjects", {
       projectId: args.projectId,
       ownerId: identity.subject,
-      ownerName: identity.name ?? "Anonymous",
+      ownerName: authorName,
       ownerAvatarUrl: identity.pictureUrl,
       title: args.title,
       description: args.description,
@@ -380,19 +396,35 @@ export const vote = mutation({
   },
 });
 
+const ANONYMOUS_ID = /^anon_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export const incrementView = mutation({
-  args: { id: v.id("showcaseProjects") },
+  args: {
+    id: v.id("showcaseProjects"),
+    anonymousId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return;
-
     const item = await ctx.db.get(args.id);
     if (!item || item.status !== "published") return;
+
+    // Do not count the publisher's own visits
+    if (identity && identity.subject === item.ownerId) {
+      return;
+    }
+
+    // Anonymous ids must look like the client's own (`anon_<uuid>`), so they
+    // can't collide with a Clerk subject and pre-claim a user's view (#269).
+    // ponytail: fresh UUIDs still inflate the count; add a rate limit if
+    // rankings (#233) start to depend on it.
+    const anonymousId = args.anonymousId?.match(ANONYMOUS_ID) ? args.anonymousId : undefined;
+    const viewerId = identity ? identity.subject : anonymousId;
+    if (!viewerId) return;
 
     const existingView = await ctx.db
       .query("showcaseViews")
       .withIndex("by_userId_and_showcaseProjectId", (q) =>
-        q.eq("userId", identity.subject).eq("showcaseProjectId", args.id)
+        q.eq("userId", viewerId).eq("showcaseProjectId", args.id)
       )
       .unique();
 
@@ -400,7 +432,7 @@ export const incrementView = mutation({
 
     await ctx.db.insert("showcaseViews", {
       showcaseProjectId: args.id,
-      userId: identity.subject,
+      userId: viewerId,
       viewedAt: Date.now(),
     });
 

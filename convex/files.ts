@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
@@ -232,7 +232,7 @@ export const createFile = mutation({
       (file) => file.name === args.name && file.type === "file"
     );
 
-    if (existing) throw new Error("File already exists");
+    if (existing) throw new ConvexError({ code: "CONFLICT", message: "File already exists" });
 
     const now = Date.now();
 
@@ -286,7 +286,7 @@ export const createFolder = mutation({
       (file) => file.name === args.name && file.type === "folder"
     );
 
-    if (existing) throw new Error("Folder already exists");
+    if (existing) throw new ConvexError({ code: "CONFLICT", message: "Folder already exists" });
 
     const now = Date.now();
 
@@ -344,9 +344,10 @@ export const renameFile = mutation({
     );
 
     if (existing) {
-      throw new Error(
-        `A ${file.type} with this name already exists in this location`
-      );
+      throw new ConvexError({
+        code: "CONFLICT",
+        message: `A ${file.type} with this name already exists in this location`,
+      });
     }
 
     const now = Date.now();

@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "@clerk/ui/themes/shadcn.css";
 
+/* Streamdown marks ordered lists with `list-decimal`, but Tailwind does not scan
+   node_modules and nothing in src/ uses it, so Preflight would strip the
+   numbers (#286). */
+@source inline("list-decimal");
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -297,4 +297,28 @@ describe("internal-key writes verify ownership from the database (#239)", () => 
       })
     ).rejects.toThrow("Connection not found");
   });
+
+  test("env-var writes refuse an ownerId that isn't the project owner (#211)", async () => {
+    const { t, projectId } = await setupTwoTenants();
+    const scope = { internalKey: INTERNAL_KEY, projectId, key: "API_URL" };
+
+    await expect(
+      t.mutation(api.system.setSecretEnvVar, {
+        ...scope,
+        ownerId: BOB,
+        secretRef: "ref",
+        maskedPreview: "x",
+        source: "manual",
+        ...sealed,
+      })
+    ).rejects.toThrow("Project not found");
+    await expect(
+      t.mutation(api.system.setPublicEnvVarInternal, { ...scope, ownerId: BOB, value: "x" })
+    ).rejects.toThrow("Project not found");
+    expect(await t.run((ctx) => ctx.db.query("projectEnvVars").collect())).toEqual([]);
+
+    await t.mutation(api.system.setPublicEnvVarInternal, { ...scope, ownerId: ALICE, value: "x" });
+    const rows = await t.run((ctx) => ctx.db.query("projectEnvVars").collect());
+    expect(rows.map((row) => row.ownerId)).toEqual([ALICE]);
+  });
 });
