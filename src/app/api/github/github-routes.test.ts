@@ -52,6 +52,8 @@ describe.each(routes)("POST /api/github/$name", ({ call }) => {
     // Export checks the caller owns the project (#208).
     mocks.query.mockResolvedValue({ _id: "p1", ownerId: "user_1" });
     mocks.inngestSend.mockResolvedValue({ ids: ["evt_1"] });
+    // The import route checks GitHub for public repos (#364): private by default.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
   });
 
   it("returns 401 when signed out", async () => {
@@ -86,6 +88,55 @@ describe.each(routes)("POST /api/github/$name", ({ call }) => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: GITHUB_NOT_LINKED });
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/github/import without a linked GitHub account (#364)", () => {
+  const importRepo = () =>
+    importPOST(post({ url: "https://github.com/octocat/Hello-World" }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
+    mocks.auth.mockResolvedValue({ userId: "user_1", has: () => false });
+    mocks.getUserOauthAccessToken.mockResolvedValue({ data: [] });
+    mocks.createProject.mockResolvedValue("p1");
+    mocks.inngestSend.mockResolvedValue({ ids: ["evt_1"] });
+  });
+
+  it("imports a public repo", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ private: false }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await importRepo();
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/repos/octocat/Hello-World",
+      expect.anything()
+    );
+    expect(mocks.inngestSend.mock.calls[0][0].data).toMatchObject({
+      owner: "octocat",
+      repo: "Hello-World",
+      userId: "user_1",
+    });
+  });
+
+  it.each([
+    ["private", () => Response.json({ private: true })],
+    ["missing", () => new Response("", { status: 404 })],
+  ])("asks to connect GitHub for a %s repo", async (_, respond) => {
+    vi.stubGlobal("fetch", vi.fn(async () => respond()));
+
+    const res = await importRepo();
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: GITHUB_NOT_LINKED,
+      error: expect.stringMatching(/private/),
+    });
+    expect(mocks.createProject).not.toHaveBeenCalled();
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 });
