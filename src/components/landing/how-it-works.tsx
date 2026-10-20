@@ -60,8 +60,8 @@ export const LandingHowItWorks = () => {
               }}
               className="relative flex items-start gap-6 md:gap-10 py-8 md:py-10 border-b border-border/40 last:border-b-0 last:pb-0"
             >
-              {/* Decorative: the step order is already the reading order (#216). */}
-              <span aria-hidden="true" className="text-4xl md:text-5xl font-bold text-brand/40 font-mono shrink-0">
+              {/* Number */}
+              <span className="text-4xl md:text-5xl font-bold text-brand-text/75 font-mono shrink-0">
                 {step.number}
               </span>
 
