@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { appErrorMessage, getAppError } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 
 import { getProvider } from "../catalog";
@@ -135,23 +136,25 @@ const ApprovalCard = ({ approval, now }: ApprovalCardProps) => {
           : `Denied ${approval.toolName}`
       );
     } catch (error: unknown) {
-      const message =
-        error instanceof Error && error.message ? error.message : "";
+      const appError = getAppError(error);
 
-      // The server patches the row to `expired` and throws when the deadline
+      // The server throws CONFLICT with status `expired` when the deadline
       // passed mid-decision. That is a distinct outcome from a failed write and
       // saying "something went wrong" would leave the user retrying a button
       // that can never succeed.
-      if (/expired/i.test(message)) {
+      if (appError?.code === "CONFLICT" && appError.status === "expired") {
         setExpiredError(true);
         toast.error(
           "This request expired before it was answered — the agent stopped waiting. Ask again to retry."
         );
-      } else if (/already (approved|denied|expired)/i.test(message)) {
+      } else if (appError?.code === "CONFLICT") {
         toast.error("This request was already answered.");
       } else {
         toast.error(
-          message || "Unable to record your decision. Please try again."
+          appErrorMessage(
+            error,
+            "Unable to record your decision. Please try again."
+          )
         );
       }
     } finally {

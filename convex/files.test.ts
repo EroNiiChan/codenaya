@@ -68,6 +68,14 @@ describe("files.createFile / createFolder", () => {
     );
     expect(children.map((f) => f.name).sort()).toEqual(["app.ts", "b.ts", "lib"]);
   });
+
+  test("reject a duplicate name with a CONFLICT code (#354)", async () => {
+    const { alice, projectId, folderId } = await setup();
+
+    await expect(
+      alice.mutation(api.files.createFile, { projectId, parentId: folderId, name: "app.ts", content: "" })
+    ).rejects.toMatchObject({ data: { code: "CONFLICT", message: "File already exists" } });
+  });
 });
 
 describe("files.getFilePath", () => {

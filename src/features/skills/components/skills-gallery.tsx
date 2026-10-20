@@ -49,10 +49,10 @@ import {
 } from "@/components/ui/input-group";
 import { ItemGroup } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
+import { appErrorMessage } from "@/lib/convex-error";
 
 import { BUILTIN_SKILL_ATTRIBUTIONS, BUILTIN_SKILLS } from "../builtin";
 import {
-  skillErrorMessage,
   useLibrarySkills,
   useRemoveSkill,
 } from "../hooks/use-skills";
@@ -108,7 +108,7 @@ export const SkillsGallery = () => {
       setPendingDelete(null);
     } catch (error) {
       toast.error(
-        skillErrorMessage(error, `Unable to delete ${pendingDelete.name}`),
+        appErrorMessage(error, `Unable to delete ${pendingDelete.name}`),
       );
     } finally {
       setDeleting(false);

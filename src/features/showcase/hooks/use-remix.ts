@@ -4,6 +4,7 @@ import { useConvexAuth } from "convex/react";
 import { toast } from "sonner";
 
 import { SIGN_UP_URL } from "@/features/auth/constants";
+import { appErrorMessage } from "@/lib/convex-error";
 
 import { Id } from "../../../../convex/_generated/dataModel";
 import { savePendingRemix, takePendingRemix } from "../utils/pending-remix";
@@ -36,8 +37,7 @@ export const useRemix = (showcaseId: Id<"showcaseProjects">) => {
           toast.success("Remixed into your workspace!");
           router.push(`/projects/${newProjectId}`);
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err) || "Failed to remix";
-          toast.error(message);
+          toast.error(appErrorMessage(err, "Failed to remix"));
         }
       }),
     [importToWorkspace, router, showcaseId],

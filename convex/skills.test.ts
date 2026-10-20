@@ -52,6 +52,9 @@ describe("skills", () => {
       alice.mutation(api.skills.create, skill("Bad--Name")),
     ).rejects.toThrow(/Skill name/);
     await expect(
+      alice.mutation(api.skills.create, skill("Bad--Name")),
+    ).rejects.toMatchObject({ data: { code: "INVALID_ARGUMENT" } });
+    await expect(
       alice.mutation(api.skills.create, { ...skill("long"), body: "b".repeat(20_001) }),
     ).rejects.toThrow(/20,000/);
 

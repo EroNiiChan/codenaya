@@ -8,6 +8,7 @@ import { modelIdsFor } from "../src/features/ai-providers/registry";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 
 /**
  * User-facing BYOK functions. Keys are created and tested by the Next.js
@@ -54,7 +55,7 @@ async function assertKeyOwner(
 ): Promise<Doc<"aiProviderKeys">> {
   const key = await ctx.db.get("aiProviderKeys", keyId);
   if (!key || key.userId !== userId) {
-    throw new Error("AI provider key not found");
+    throw appError("NOT_FOUND", "AI provider key not found");
   }
   return key;
 }
@@ -133,7 +134,7 @@ export const setPreferences = mutation({
         )
       : isAgentModelId(defaultModelId);
     if (!allowed) {
-      throw new Error("Model is not available for this provider");
+      throw appError("INVALID_ARGUMENT", "Model is not available for this provider");
     }
 
     const preferences = await getPreferencesRow(ctx, identity.subject);

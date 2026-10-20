@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 import { copyProjectFiles } from "./projectCopy";
 import { getUnclaimedStorage } from "./projectCascade";
@@ -279,7 +280,7 @@ export const publish = mutation({
 
     const alreadyPublished = existing.find((e) => e.status !== "removed");
     if (alreadyPublished) {
-      throw new Error("Project is already published to showcase");
+      throw appError("CONFLICT", "Project is already published to showcase");
     }
 
     const now = Date.now();
@@ -425,12 +426,12 @@ export const importToWorkspace = mutation({
 
     const showcaseItem = await ctx.db.get(args.showcaseProjectId);
     if (!showcaseItem || showcaseItem.status !== "published") {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
     // A source mid-deletion is gone: its files are being removed batch by batch.
     const source = await ctx.db.get("projects", showcaseItem.projectId);
     if (!source || source.deletingAt !== undefined) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     const now = Date.now();

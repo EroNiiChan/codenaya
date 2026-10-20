@@ -45,14 +45,3 @@ export const useCreateSkill = () => useMutation(api.skills.create);
 export const useUpdateSkill = () => useMutation(api.skills.update);
 
 export const useRemoveSkill = () => useMutation(api.skills.remove);
-
-/**
- * The reason a skills mutation failed. Convex wraps thrown errors as
- * "[CONVEX M(skills:create)] … Uncaught Error: <message>\n    at …"; keep only
- * the message, or fall back when the deployment hides it.
- */
-export const skillErrorMessage = (error: unknown, fallback: string) => {
-  const message = error instanceof Error ? error.message : "";
-  const match = message.match(/Uncaught Error: (.+)/);
-  return match?.[1]?.trim() ?? fallback;
-};

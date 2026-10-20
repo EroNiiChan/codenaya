@@ -16,12 +16,6 @@ import { createUpdateFileTool } from "./update-file";
 import { createRenameFileTool } from "./rename-file";
 import { createDeleteFilesTool } from "./delete-files";
 
-// The error Convex returns when an arg fails `v.id("files")`.
-const invalidIdError = () =>
-  new Error(
-    '[Request ID: x] Server Error\nArgumentValidationError: Value does not match validator.\nPath: .fileId\nValue: "src/App.tsx"\nValidator: v.id("files")',
-  );
-
 // Runs the step body inline, so a throw inside step.run propagates like it
 // would to Inngest (which retries the step).
 const step = { run: vi.fn(async (_id: string, fn: () => unknown) => fn()) };
@@ -33,12 +27,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+// `system.getFileById` resolves a malformed ID to null (convex/system.test.ts),
+// so the tools see it like any missing file.
 describe("getFileByAgentId", () => {
-  it("resolves a malformed ID to null instead of throwing", async () => {
-    mocks.query.mockRejectedValue(invalidIdError());
-    await expect(getFileByAgentId(internalKey, projectId, "src/App.tsx")).resolves.toBeNull();
-  });
-
   it("rethrows other errors so Inngest can retry them", async () => {
     mocks.query.mockRejectedValue(new Error("fetch failed"));
     await expect(getFileByAgentId(internalKey, projectId, "f1")).rejects.toThrow("fetch failed");
@@ -50,7 +41,7 @@ describe("readFiles tool", () => {
     createReadFilesTool({ projectId, internalKey }).handler({ fileIds }, ctx);
 
   it("returns a tool error for malformed IDs without throwing inside the step", async () => {
-    mocks.query.mockRejectedValue(invalidIdError());
+    mocks.query.mockResolvedValue(null);
     expect(await read(["src/App.tsx"])).toBe(
       "Error: No files found with provided IDs. Use listFiles to get valid fileIDs.",
     );
@@ -59,7 +50,7 @@ describe("readFiles tool", () => {
 
   it("skips malformed IDs and still reads valid ones", async () => {
     mocks.query
-      .mockRejectedValueOnce(invalidIdError())
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ _id: "f1", name: "App.tsx", content: "x" });
     expect(JSON.parse((await read(["bad", "f1"])) as string)).toEqual([
       { id: "f1", name: "App.tsx", content: "x" },
@@ -73,7 +64,7 @@ describe("single-file tools", () => {
     ["renameFile", () => createRenameFileTool({ projectId, internalKey }).handler({ fileId: "bad", newName: "a.ts" }, ctx)],
     ["deleteFiles", () => createDeleteFilesTool({ projectId, internalKey }).handler({ fileIds: ["bad"] }, ctx)],
   ])("%s returns a not-found tool error for a malformed ID", async (_name, call) => {
-    mocks.query.mockRejectedValue(invalidIdError());
+    mocks.query.mockResolvedValue(null);
     expect(await call()).toBe(
       'Error: File with ID "bad" not found. Use listFiles to get valid file IDs.',
     );

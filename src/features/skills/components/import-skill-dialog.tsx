@@ -23,9 +23,10 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { appErrorMessage } from "@/lib/convex-error";
 
 import type { SkillFields } from "../limits";
-import { skillErrorMessage, useCreateSkill } from "../hooks/use-skills";
+import { useCreateSkill } from "../hooks/use-skills";
 import { SkillMarkdown } from "./skill-markdown";
 
 type ImportedSkill = SkillFields & { sourceUrl: string };
@@ -103,7 +104,7 @@ const ImportSkillForm = ({ onDone }: { onDone: () => void }) => {
       toast.success(`Imported ${preview.name}`);
       onDone();
     } catch (saveError) {
-      setError(skillErrorMessage(saveError, "Unable to save the skill"));
+      setError(appErrorMessage(saveError, "Unable to save the skill"));
     } finally {
       setIsLoading(false);
     }
