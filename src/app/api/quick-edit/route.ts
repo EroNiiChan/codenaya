@@ -2,9 +2,10 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
-import { parseJsonBody } from "@/lib/parse-json-body";
+import { codeText, parseJsonBody, promptText } from "@/lib/parse-json-body";
 
 import { getFirecrawl } from "@/lib/firecrawl";
+import { MAX_SCRAPED_CHARS, MAX_SCRAPE_URLS } from "@/lib/scrape-limits";
 import { withEditorModel } from "@/features/ai-providers/server/editor-model";
 import {
   QUICK_EDIT_RATE_LIMIT,
@@ -21,9 +22,9 @@ const quickEditSchema = z.object({
 });
 
 const quickEditRequestSchema = z.object({
-  selectedCode: z.string().min(1, "selectedCode is required"),
-  fullCode: z.string().optional(),
-  instruction: z.string().min(1, "instruction is required"),
+  selectedCode: codeText.min(1, "selectedCode is required"),
+  fullCode: codeText.optional(),
+  instruction: promptText.min(1, "instruction is required"),
 });
 
 const URL_REGEX = /https?:\/\/[^\s)>\]]+/g;
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
 
     const { selectedCode, fullCode, instruction } = data;
 
-    const urls: string[] = instruction.match(URL_REGEX) || [];
+    const urls = (instruction.match(URL_REGEX) || []).slice(0, MAX_SCRAPE_URLS);
     let documentationContext = "";
     // Firecrawl is optional: without a key, edit without documentation context.
     const firecrawl = getFirecrawl();
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
             });
 
             if (result.markdown) {
-              return `<doc url="${url}">\n${result.markdown}\n</doc>`;
+              return `<doc url="${url}">\n${result.markdown.slice(0, MAX_SCRAPED_CHARS)}\n</doc>`;
             }
 
             return null;

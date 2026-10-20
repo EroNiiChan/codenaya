@@ -20,6 +20,8 @@ interface ImportGithubRepoEvent {
 export const importGithubRepo = inngest.createFunction(
   {
     id: "import-github-repo",
+    // One import per user at a time; more wait in the queue (#242).
+    concurrency: [{ key: "event.data.userId", limit: 1 }],
     triggers: [{ event: "github/import.repo" }],
     onFailure: async ({ event, step }) => {
       const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;

@@ -27,6 +27,12 @@ import {
   DISPATCH_FAILED_ERROR,
   DISPATCH_FAILED_MESSAGE,
 } from "@/lib/message-processor";
+import {
+  AGENT_MESSAGE_RATE_LIMIT,
+  CREATE_WITH_PROMPT_RATE_LIMIT,
+  checkRateLimit,
+  resetRateLimits,
+} from "@/lib/rate-limit";
 
 const post = (body: unknown) =>
   new Request("http://localhost/api", {
@@ -37,21 +43,25 @@ const post = (body: unknown) =>
 const routes = [
   {
     name: "messages",
-    call: () => messagesPOST(post({ conversationId: "c1", message: "Build a todo app" })),
+    call: (message = "Build a todo app") =>
+      messagesPOST(post({ conversationId: "c1", message })),
     successBody: { success: true, eventId: "evt_1", messageId: "m_assistant" },
     failureBody: { messageId: "m_assistant" },
+    rateLimit: AGENT_MESSAGE_RATE_LIMIT,
   },
   {
     name: "projects/create-with-prompt",
-    call: () => createWithPromptPOST(post({ prompt: "Build a todo app" })),
+    call: (prompt = "Build a todo app") => createWithPromptPOST(post({ prompt })),
     successBody: { projectId: "p1" },
     failureBody: { projectId: "p1" },
+    rateLimit: CREATE_WITH_PROMPT_RATE_LIMIT,
   },
 ];
 
-describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody }) => {
+describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rateLimit }) => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetRateLimits();
     vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
     vi.stubEnv("MESSAGE_PROCESSOR", "inngest");
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -83,6 +93,26 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody }) =>
       expect.anything(),
       expect.objectContaining({ content: DISPATCH_FAILED_MESSAGE }),
     );
+    // The key of process-message's per-user concurrency (#242).
+    expect(mocks.inngestSend.mock.calls[0][0].data).toMatchObject({ ownerId: "user_1" });
+  });
+
+  it("answers 429 past the per-user limit without starting a run (#242)", async () => {
+    for (let i = 0; i < rateLimit.limit; i++) checkRateLimit("user_1", rateLimit);
+
+    const res = await call();
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(mocks.mutation).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("answers 400 for a prompt over 50k characters (#242)", async () => {
+    const res = await call("x".repeat(50_001));
+
+    expect(res.status).toBe(400);
+    expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
   it("marks the placeholder failed and returns 502 when dispatch throws", async () => {

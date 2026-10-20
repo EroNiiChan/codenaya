@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
-import { parseJsonBody } from "@/lib/parse-json-body";
+import { parseJsonBody, promptText } from "@/lib/parse-json-body";
+import {
+  CREATE_WITH_PROMPT_RATE_LIMIT,
+  checkRateLimit,
+  rateLimitedResponse,
+} from "@/lib/rate-limit";
 
 import { DEFAULT_CONVERSATION_TITLE } from "@/features/conversations/constants";
 import {
@@ -25,7 +30,7 @@ import {
 import { api } from "../../../../../convex/_generated/api";
 
 const requestSchema = z.object({
-  prompt: z.string().min(1),
+  prompt: promptText.min(1),
   model: modelChoiceSchema,
   /** Seeds the project with a starter template's files first (#119). */
   templateId: z.enum(STARTER_TEMPLATE_IDS).optional(),
@@ -36,6 +41,11 @@ export async function POST(request: Request) {
 
   if (unauthorized) {
     return unauthorized;
+  }
+
+  const rateLimit = checkRateLimit(userId, CREATE_WITH_PROMPT_RATE_LIMIT);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit);
   }
 
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -124,6 +134,7 @@ export async function POST(request: Request) {
     messageId: assistantMessageId,
     conversationId,
     projectId,
+    ownerId: userId,
     message: prompt,
     model: runModel,
   });
