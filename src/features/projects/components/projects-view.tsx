@@ -53,17 +53,17 @@ export const ProjectsView = ({ linkedRepo = null }: ProjectsViewProps) => {
   }, [createProject]);
 
   // A repo from an "Open in Codenaya" link kept across sign-up, when the
-  // visitor didn't come back through /import. The user still confirms;
-  // nothing is imported here.
+  // visitor didn't come back through /import. Always taken, so it can't
+  // resurface later. The user still confirms; nothing is imported here.
   useEffect(() => {
     const repo = parseGithubRepo(takePendingImport() ?? "");
-    if (!repo) return;
+    if (linkedRepo || !repo) return;
     // Take-once localStorage state can only be read after mount; a lazy
     // initialiser would run twice in Strict Mode.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImportRepo(repo);
     setImportDialogOpen(true);
-  }, []);
+  }, [linkedRepo]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

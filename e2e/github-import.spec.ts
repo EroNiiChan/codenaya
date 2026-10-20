@@ -41,7 +41,7 @@ test.describe("GitHub import", () => {
       "https://github.com/octocat/Hello-World",
     );
     // Nothing is imported until the user confirms.
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/\?import=octocat(\/|%2F)Hello-World$/);
   });
 
   test("a malformed Open in Codenaya link explains itself (#231)", async ({ page }) => {
