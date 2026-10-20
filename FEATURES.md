@@ -19,8 +19,6 @@ gaps are tracked in #236.
 
 Open bugs only. Gaps found in code without an issue are listed on the flow itself.
 
-- #144: Settings > Account embeds Clerk's profile with double navigation, off-brand styling
-  and a Billing tab.
 - #259: file/folder delete and checkpoint restore have no confirm or undo; the ⌘Backspace
   hint does nothing.
 - #260: project "Copy link" copies an owner-only URL; there is no read-only share link.
@@ -224,12 +222,13 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 - E2E: `starter-templates.spec.ts`.
 
 **F16. Settings**: Works
-- Steps: user menu → Settings → tabs Account (Clerk profile), AI providers (F17), Skills
-  (F18), Integrations (F12), Appearance (System / Light / Dark).
-- Code: `src/app/settings/*`, `features/settings/nav.ts`, `components/settings-nav.tsx`,
-  `integrations-settings.tsx`, `appearance-settings.tsx`.
+- Steps: user menu → Settings → tabs Account (Clerk profile with Profile / Security tabs and
+  no Billing page, #144), AI providers (F17), Skills (F18), Integrations (F12), Appearance
+  (System / Light / Dark).
+- Code: `src/app/settings/*` (`account/[[...rest]]/page.tsx` hides Clerk's navbar and 404s
+  its billing URL), `features/settings/nav.ts`, `components/settings-nav.tsx`,
+  `account-tabs.tsx`, `integrations-settings.tsx`, `appearance-settings.tsx`.
 - E2E: `settings.spec.ts`.
-- Gap: see #144.
 
 **F17. Bring your own key (BYOK) AI providers**: Works
 - Steps: Settings → AI providers → add an OpenRouter, OpenAI, Anthropic or custom
