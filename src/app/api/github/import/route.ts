@@ -38,9 +38,8 @@ export async function POST(request: Request) {
   // https://github.com/itsmrad/codenaya
   // { owner: "itsmrad", repo: "codenaya" }
 
-  const githubToken = await getGithubToken(userId);
-
-  if (!githubToken) {
+  // Checked here for a clear error; the job looks the token up itself (#211).
+  if (!(await getGithubToken(userId))) {
     return githubNotLinkedResponse();
   }
 
@@ -65,7 +64,7 @@ export async function POST(request: Request) {
       owner,
       repo,
       projectId,
-      githubToken,
+      userId,
     },
   });
 

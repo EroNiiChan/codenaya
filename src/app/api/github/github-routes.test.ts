@@ -71,11 +71,12 @@ describe.each(routes)("POST /api/github/$name", ({ call }) => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ success: true, eventId: "evt_1" });
-    expect(mocks.inngestSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ githubToken: "gho_test" }),
-      })
-    );
+    // Inngest stores event payloads: the job resolves the token itself (#211).
+    const [{ data }] = mocks.inngestSend.mock.calls[0];
+    expect(data).toMatchObject({ projectId: "p1", userId: "user_1" });
+    expect(data).not.toHaveProperty("githubToken");
+    expect(data).not.toHaveProperty("internalKey");
+    expect(JSON.stringify(data)).not.toMatch(/gho_test|test-key/);
   });
 
   it("returns GITHUB_NOT_LINKED when no GitHub account is linked", async () => {

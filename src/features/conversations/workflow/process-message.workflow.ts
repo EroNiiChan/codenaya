@@ -23,8 +23,8 @@ import {
   persistConversationTitle,
 } from "./steps";
 
+/** Persisted in the run's event log: no secrets (#211). */
 export interface ProcessMessageInput {
-  internalKey: string;
   messageId: Id<"messages">;
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
@@ -47,7 +47,6 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
   "use workflow";
 
   const {
-    internalKey,
     messageId,
     conversationId,
     projectId,
@@ -59,7 +58,6 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
   try {
     // 1. Load conversation context (history + conversation row)
     const ctx = await loadConversationContext({
-      internalKey,
       conversationId,
       excludeMessageId: messageId,
     });
@@ -74,7 +72,6 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
       const title = await generateConversationTitle({ message });
       if (title) {
         await persistConversationTitle({
-          internalKey,
           conversationId,
           title,
         });
@@ -102,14 +99,13 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
       systemPrompt += PLAN_MODE_PROMPT;
     } else {
       await createProjectCheckpoint({
-        internalKey,
         projectId,
         messageId,
         label: message,
       });
     }
 
-    const tools = createCodingTools({ internalKey, projectId });
+    const tools = createCodingTools({ projectId });
 
     // 4. Run the durable agent against Gemini 3.1 Pro Preview on Vertex AI.
     const agent = new DurableAgent({
@@ -165,7 +161,6 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
 
     // 6. Persist the assistant response (also flips status to completed)
     await persistAssistantMessage({
-      internalKey,
       messageId,
       content: assistantText,
     });
@@ -176,7 +171,7 @@ export async function processMessageWorkflow(input: ProcessMessageInput) {
     // Wrapped in its own try/catch so a markMessageFailed throw cannot
     // mask the real root cause we're rethrowing below.
     try {
-      await markMessageFailed({ internalKey, messageId });
+      await markMessageFailed({ messageId });
     } catch (markErr) {
       console.warn(
         "[workflow] markMessageFailed threw while handling original error",

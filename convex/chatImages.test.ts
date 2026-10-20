@@ -111,7 +111,49 @@ describe("chatImages.register", () => {
     await alice.mutation(api.chatImages.register, { projectId, storageId });
     await expect(
       alice.mutation(api.chatImages.register, { projectId, storageId }),
-    ).rejects.toThrow(/already registered/);
+    ).rejects.toThrow(/Upload not found/);
+  });
+
+  test("refuses and keeps a blob another user's file or showcase preview holds (#211)", async () => {
+    const { t, bob, projectId, upload } = await setup();
+    const fileBlob = await upload("application/pdf");
+    const previewBlob = await upload("image/png");
+    const bobProjectId = await t.run(async (ctx) => {
+      await ctx.db.insert("files", {
+        projectId,
+        name: "spec.pdf",
+        type: "file",
+        storageId: fileBlob,
+        updatedAt: 0,
+      });
+      await ctx.db.insert("showcaseProjects", {
+        projectId,
+        ownerId: ALICE,
+        ownerName: "Alice",
+        title: "Todo app",
+        description: "",
+        previewImageId: previewBlob,
+        techStack: [],
+        designStyle: [],
+        category: "tool",
+        upvotes: 0,
+        downvotes: 0,
+        viewCount: 0,
+        importCount: 0,
+        status: "published",
+        publishedAt: 0,
+        updatedAt: 0,
+      });
+      return await ctx.db.insert("projects", { name: "Bob's", ownerId: BOB, updatedAt: 0 });
+    });
+
+    for (const storageId of [fileBlob, previewBlob]) {
+      await expect(
+        bob.mutation(api.chatImages.register, { projectId: bobProjectId, storageId }),
+      ).rejects.toThrow(/Upload not found/);
+      expect(await t.run((ctx) => ctx.db.system.get("_storage", storageId))).not.toBeNull();
+    }
+    expect(await t.run((ctx) => ctx.db.query("chatImages").collect())).toEqual([]);
   });
 });
 

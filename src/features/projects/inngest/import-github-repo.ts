@@ -5,6 +5,7 @@ import { NonRetriableError } from "inngest";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { requireJobGithubToken } from "@/features/projects/server/github-token";
 
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -13,7 +14,7 @@ interface ImportGithubRepoEvent {
   owner: string;
   repo: string;
   projectId: Id<"projects">;
-  githubToken: string;
+  userId: string;
 }
 
 export const importGithubRepo = inngest.createFunction(
@@ -36,7 +37,7 @@ export const importGithubRepo = inngest.createFunction(
     },
   },
   async ({ event, step }) => {
-    const { owner, repo, projectId, githubToken } =
+    const { owner, repo, projectId, userId } =
       event.data as ImportGithubRepoEvent;
 
     const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -44,6 +45,7 @@ export const importGithubRepo = inngest.createFunction(
       throw new NonRetriableError("CODENAYA_CONVEX_INTERNAL_KEY is not configured");
     };
 
+    const githubToken = await requireJobGithubToken({ internalKey, userId, projectId });
     const octokit = new Octokit({ auth: githubToken });
 
     // Cleanup any existing files in the project
