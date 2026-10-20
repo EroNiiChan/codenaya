@@ -46,7 +46,7 @@ describe("coding agent integration instructions", () => {
 
   it("reads Vite env vars from import.meta.env and keeps secrets out of client code (#330)", () => {
     expect(CODING_AGENT_SYSTEM_PROMPT).toContain(
-      "In Vite apps read env vars with import.meta.env.VITE_*. NEVER use process.env in browser code",
+      "In Vite apps read env vars with import.meta.env.VITE_*. NEVER use process.env in Vite browser code",
     );
     expect(CODING_AGENT_SYSTEM_PROMPT).toContain(
       "Secrets never get a VITE_ or NEXT_PUBLIC_ prefix and never go in client code",
