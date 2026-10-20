@@ -118,7 +118,7 @@ Codenaya is a browser-based IDE inspired by Cursor AI, featuring:
 `.env.example` is the reference for every variable: required vs optional, a one-line description, and a tag for where it is read:
 
 - **[Next]** by the Next.js server (and Inngest functions, which run inside it).
-- **[Convex]** by Convex functions, which run on Convex's servers and see only the deployment's own env: `CLERK_JWT_ISSUER_DOMAIN`, `CLERK_WEBHOOK_SECRET`.
+- **[Convex]** by Convex functions, which run on Convex's servers and see only the deployment's own env: `CLERK_JWT_ISSUER_DOMAIN`, `CLERK_WEBHOOK_SECRET`, `SHOWCASE_UNLISTED_OWNER_IDS`.
 - **[Both]** in both places, with the same value: `CODENAYA_CONVEX_INTERNAL_KEY`.
 
 #### Infisical
@@ -165,6 +165,15 @@ Signed-in specs use `e2e/clerk-auth.ts`, which needs `CLERK_SECRET_KEY` and `NEX
 - `n` is `E2E_USER_INDEX` if set, else `E2E_PORT % 6 + 1`; give runs whose ports collide distinct `E2E_USER_INDEX` values. `E2E_EMAIL` pins one specific user instead.
 - `e2e/global-setup.ts` creates the user if needed, revokes its sessions idle for over an hour, signs in once and saves the session to `playwright/.auth/` (gitignored); `signIn(page)` reuses it.
 - It also sets `E2E_PROJECT_ID` to the user's `e2e fixture` project, creating it on first use. With `E2E_EMAIL` set, `E2E_PROJECT_ID` must name a project that user owns.
+
+Opt-in specs skip unless their vars are set:
+
+| Variable | Spec | Value |
+| --- | --- | --- |
+| `E2E_DISPATCH_UNREACHABLE` | `chat-dispatch-failure.spec.ts` | `1`, against a dev server whose Inngest URLs point nowhere (see the spec) |
+| `E2E_LIVE_AGENT` | `agent-vite-scaffold.spec.ts` | `1`; also needs the Inngest dev server, `E2B_API_KEY` and `E2B_TEMPLATE` |
+| `E2E_OPENAI_KEY` | `ai-providers.spec.ts` | a working OpenAI key; the server also needs `CODENAYA_LOCAL_KEK` |
+| `E2E_STORAGE_STATE`, `E2E_PREVIEW_PATH` | `preview-device.spec.ts` | a Playwright storage-state file for a signed-in user, and a `/projects/<id>` path |
 
 ## Project Structure
 

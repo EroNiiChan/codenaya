@@ -37,11 +37,11 @@ export const getFiles = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     return await ctx.db
@@ -63,11 +63,11 @@ export const getFilesWithUrls = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const files = await ctx.db
@@ -100,11 +100,11 @@ export const getFile = query({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     return file;
@@ -133,11 +133,11 @@ export const getFilePath = query({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const path: { _id: string; name: string }[] = [];
@@ -169,11 +169,11 @@ export const getFolderContents = query({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const files = await ctx.db
@@ -204,17 +204,19 @@ export const createFile = mutation({
     name: v.string(),
     content: v.string(),
   },
+  // The explorer opens the new file by this id once it's confirmed (#266).
+  returns: v.id("files"),
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
 
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
@@ -237,7 +239,7 @@ export const createFile = mutation({
 
     const now = Date.now();
 
-    await ctx.db.insert("files", {
+    const fileId = await ctx.db.insert("files", {
       projectId: args.projectId,
       name: args.name,
       content: args.content,
@@ -249,6 +251,8 @@ export const createFile = mutation({
     await ctx.db.patch("projects", args.projectId, {
       updatedAt: now,
     });
+
+    return fileId;
   },
 });
 
@@ -264,11 +268,11 @@ export const createFolder = mutation({
     const project = await ctx.db.get("projects", args.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
@@ -320,11 +324,11 @@ export const renameFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     // Check if a file with the new name already exists in the same parent folder
@@ -379,11 +383,11 @@ export const deleteFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     // Recursively delete file/folder and all descendants
@@ -442,11 +446,11 @@ export const updateFile = mutation({
     const project = await ctx.db.get("projects", file.projectId);
 
     if (!project) {
-      throw new Error("Project not found");
+      throw appError("NOT_FOUND", "Project not found");
     }
 
     if (project.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to access this project");
+      throw appError("FORBIDDEN", "Unauthorized to access this project");
     }
 
     const now = Date.now();

@@ -15,7 +15,7 @@ import {
   ENV_VAR_RATE_LIMIT,
   checkRateLimit,
   rateLimitedResponse,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 import { requireOwnedProject } from "@/features/projects/server/require-owned-project";
 import { convex } from "@/lib/convex-client";
 

@@ -13,16 +13,23 @@ const sortFiles = <T extends { type: "file" | "folder"; name: string }>(
   });
 };
 
+/** Optimistic rows use `crypto.randomUUID()`; Convex ids never contain "-" (#266). */
+export const isOptimisticFileId = (id: string | null | undefined): boolean => {
+  return typeof id === "string" && id.includes("-");
+};
+
 export const useFiles = (projectId: Id<"projects"> | null) => {
   return useQuery(api.files.getFiles, projectId ? { projectId } : "skip");
 };
 
 export const useFile = (fileId: Id<"files"> | null) => {
-  return useQuery(api.files.getFile, fileId ? { id: fileId } : "skip");
+  const shouldSkip = !fileId || isOptimisticFileId(fileId);
+  return useQuery(api.files.getFile, shouldSkip ? "skip" : { id: fileId });
 };
 
 export const useFilePath = (fileId: Id<"files"> | null) => {
-  return useQuery(api.files.getFilePath, fileId ? { id: fileId } : "skip");
+  const shouldSkip = !fileId || isOptimisticFileId(fileId);
+  return useQuery(api.files.getFilePath, shouldSkip ? "skip" : { id: fileId });
 };
 
 export const useUpdateFile = () => {

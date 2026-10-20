@@ -8,6 +8,7 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 
 /**
@@ -237,10 +238,10 @@ export const deleteEnvVar = mutation({
 
     const row = await ctx.db.get("projectEnvVars", args.id);
     if (!row) {
-      throw new Error("Environment variable not found");
+      throw appError("NOT_FOUND", "Environment variable not found");
     }
     if (row.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to delete this environment variable");
+      throw appError("FORBIDDEN", "Unauthorized to delete this environment variable");
     }
 
     await ctx.db.delete("projectEnvVars", args.id);

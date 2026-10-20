@@ -149,6 +149,38 @@ const readStartError = async (error: unknown): Promise<string> => {
   return FALLBACK_ERROR;
 };
 
+/**
+ * Asks `/oauth/start` for the authorization URL.
+ *
+ * Every failure closes `popup` before returning, so a failed start never leaves
+ * the blank placeholder window behind (#82). Exported so that guarantee can be
+ * tested without a DOM.
+ */
+export const requestAuthorizationUrl = async (
+  popup: Pick<Window, "close">,
+  body: { providerId: string; projectId?: string },
+): Promise<
+  { ok: true; authorizationUrl: string } | { ok: false; error: string }
+> => {
+  try {
+    const result = await ky
+      .post("/api/integrations/oauth/start", {
+        json: body,
+        timeout: START_TIMEOUT_MS,
+      })
+      .json<OAuthStartResponse>();
+    // Throws on a missing or relative URL, which would otherwise navigate the
+    // popup somewhere useless and leave it open.
+    return {
+      ok: true,
+      authorizationUrl: new URL(result.authorizationUrl).href,
+    };
+  } catch (error) {
+    popup.close();
+    return { ok: false, error: await readStartError(error) };
+  }
+};
+
 const popupFeatures = (): string => {
   const left =
     window.screenX + Math.max(0, (window.outerWidth - POPUP_WIDTH) / 2);
@@ -259,18 +291,12 @@ export const useOAuthPopup = (): UseOAuthPopupResult => {
         // Cosmetic only — a browser that refuses this still runs the flow.
       }
 
-      let authorizationUrl: string;
-      try {
-        const result = await ky
-          .post("/api/integrations/oauth/start", {
-            json: { providerId, projectId },
-            timeout: START_TIMEOUT_MS,
-          })
-          .json<OAuthStartResponse>();
-        authorizationUrl = result.authorizationUrl;
-      } catch (requestError) {
-        popup.close();
-        settle("error", await readStartError(requestError));
+      const started = await requestAuthorizationUrl(popup, {
+        providerId,
+        projectId,
+      });
+      if (!started.ok) {
+        settle("error", started.error);
         return;
       }
 
@@ -316,7 +342,7 @@ export const useOAuthPopup = (): UseOAuthPopupResult => {
         }
       }, CLOSED_POLL_INTERVAL_MS);
 
-      popup.location.href = authorizationUrl;
+      popup.location.href = started.authorizationUrl;
     },
     [settle],
   );

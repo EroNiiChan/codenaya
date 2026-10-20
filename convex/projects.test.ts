@@ -412,3 +412,33 @@ describe("project-scoped public mutations", () => {
     }
   });
 });
+
+describe("typed project errors (#266)", () => {
+  test("missing and foreign projects throw codes the project page can branch on", async () => {
+    const { t, alice, bob } = setup();
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "p", ownerId: ALICE, updatedAt: 0 })
+    );
+
+    await expect(bob.query(api.projects.getById, { id: projectId })).rejects.toEqual(
+      expect.objectContaining({ data: expect.objectContaining({ code: "FORBIDDEN" }) })
+    );
+    await alice.mutation(api.projects.remove, { id: projectId });
+    await expect(alice.query(api.projects.getById, { id: projectId })).rejects.toEqual(
+      expect.objectContaining({ data: expect.objectContaining({ code: "NOT_FOUND" }) })
+    );
+  });
+
+  test("createFile returns the new file's id, so the explorer can open it", async () => {
+    const { t, alice } = setup();
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "p", ownerId: ALICE, updatedAt: 0 })
+    );
+    const fileId = await alice.mutation(api.files.createFile, {
+      projectId,
+      name: "quick.ts",
+      content: "",
+    });
+    expect((await alice.query(api.files.getFile, { id: fileId })).name).toBe("quick.ts");
+  });
+});
