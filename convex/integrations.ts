@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 
 /**
@@ -71,11 +72,11 @@ async function assertConnectionOwner(
   const connection = await ctx.db.get("userConnections", connectionId);
 
   if (!connection) {
-    throw new Error("Connection not found");
+    throw appError("NOT_FOUND", "Connection not found");
   }
 
   if (connection.userId !== userId) {
-    throw new Error("Unauthorized to access this connection");
+    throw appError("FORBIDDEN", "Unauthorized to access this connection");
   }
 
   return connection;
@@ -193,7 +194,10 @@ export const linkConnectionToProject = mutation({
       (link) => link.userConnectionId === args.userConnectionId,
     );
     if (duplicate) {
-      throw new Error("This connection is already linked to the project");
+      throw appError(
+        "CONFLICT",
+        "This connection is already linked to the project",
+      );
     }
 
     const now = Date.now();
@@ -237,10 +241,13 @@ export const updateProjectConnection = mutation({
 
     const link = await ctx.db.get("projectConnections", args.id);
     if (!link) {
-      throw new Error("Project connection not found");
+      throw appError("NOT_FOUND", "Project connection not found");
     }
     if (link.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to update this project connection");
+      throw appError(
+        "FORBIDDEN",
+        "Unauthorized to update this project connection",
+      );
     }
 
     const scopeChanged =
@@ -275,10 +282,13 @@ export const unlinkProjectConnection = mutation({
 
     const link = await ctx.db.get("projectConnections", args.id);
     if (!link) {
-      throw new Error("Project connection not found");
+      throw appError("NOT_FOUND", "Project connection not found");
     }
     if (link.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to unlink this project connection");
+      throw appError(
+        "FORBIDDEN",
+        "Unauthorized to unlink this project connection",
+      );
     }
 
     await ctx.db.delete("projectConnections", args.id);
@@ -355,13 +365,17 @@ export const resolveApproval = mutation({
 
     const approval = await ctx.db.get("mcpApprovals", args.id);
     if (!approval) {
-      throw new Error("Approval request not found");
+      throw appError("NOT_FOUND", "Approval request not found");
     }
     if (approval.ownerId !== identity.subject) {
-      throw new Error("Unauthorized to resolve this approval");
+      throw appError("FORBIDDEN", "Unauthorized to resolve this approval");
     }
     if (approval.status !== "pending") {
-      throw new Error(`This request was already ${approval.status}`);
+      throw appError(
+        "CONFLICT",
+        `This request was already ${approval.status}`,
+        { status: approval.status },
+      );
     }
     if (approval.expiresAt <= Date.now()) {
       // Record the expiry so the row reflects reality, then refuse. Approving
@@ -371,7 +385,11 @@ export const resolveApproval = mutation({
         status: "expired",
         resolvedAt: Date.now(),
       });
-      throw new Error("This request expired before it was answered");
+      throw appError(
+        "CONFLICT",
+        "This request expired before it was answered",
+        { status: "expired" },
+      );
     }
 
     await ctx.db.patch("mcpApprovals", args.id, {

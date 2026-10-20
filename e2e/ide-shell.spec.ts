@@ -123,8 +123,14 @@ test.describe("IDE responsive layout", () => {
       const tab = (name: string) => nav.getByRole("tab", { name });
       const composer = page.getByPlaceholder("Describe a change or ask a question…");
 
-      // No phone tab bar; the chat opens as its own full-width view.
-      await expect(page.getByRole("tablist", { name: "Workspace views" })).toHaveCount(0);
+      // No phone tab bar: the top bar's tabs are the only view switcher (#327).
+      await expect(page.getByRole("tablist", { name: "Workspace views" })).toHaveCount(1);
+      await expect(nav.getByRole("tablist", { name: "Workspace views" }).getByRole("tab")).toHaveText([
+        "Chat",
+        "Code",
+        "Preview",
+      ]);
+      // The chat opens as its own full-width view.
       await expect(tab("Chat")).toHaveAttribute("aria-selected", "true");
       await expect(composer).toBeVisible();
       await composer.fill("draft survives tab switches");
@@ -151,8 +157,10 @@ test.describe("IDE responsive layout", () => {
       const errors = collectConsoleErrors(page);
       await openProject(page, width);
 
-      await expect(page.getByRole("tablist", { name: "Workspace views" })).toHaveCount(0);
-      await expect(page.getByRole("tab", { name: "Chat" })).toHaveCount(0);
+      // The top bar's tablist only switches Code / Preview (#327).
+      await expect(
+        page.getByRole("tablist", { name: "Workspace views" }).getByRole("tab"),
+      ).toHaveText(["Code", "Preview"]);
       const composer = page.getByPlaceholder("Describe a change or ask a question…");
       await expect(composer).toBeVisible();
       await composer.fill("hello");

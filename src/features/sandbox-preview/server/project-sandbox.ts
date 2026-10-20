@@ -1,4 +1,5 @@
 import { Sandbox, type SandboxOpts } from "e2b";
+import { z } from "zod";
 
 /**
  * Sandbox setup shared by the preview route and the agent's checkBuild tool,
@@ -15,6 +16,11 @@ export const SANDBOX_TEMPLATE = process.env.E2B_TEMPLATE?.trim() || "base";
 export const WORK_DIR = "/home/user/app";
 
 export type ProjectFile = { path: string; content: string };
+
+/** The non-empty `files` batch the sandbox routes accept from the client (#235). */
+export const projectFilesSchema = z
+  .array(z.object({ path: z.string(), content: z.string() }))
+  .min(1, "No files provided");
 
 export const createProjectSandbox = (
   opts: Pick<SandboxOpts, "apiKey" | "timeoutMs" | "metadata" | "network">,

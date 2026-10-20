@@ -53,6 +53,8 @@ test.describe("chat run block", () => {
       await expect(
         page.getByRole("navigation", { name: "Open files" }).getByRole("button", { name: "index.html", exact: true }),
       ).toBeVisible();
+      // The editor textbox is named after the open file (#327).
+      await expect(page.getByRole("textbox", { name: "Editor: index.html" })).toBeVisible();
     } finally {
       await stopRun();
     }

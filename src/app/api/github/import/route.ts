@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
 import {
   getGithubToken,
   githubNotLinkedResponse,
+  isPublicGithubRepo,
 } from "@/features/projects/server/github-token";
 
 import { api } from "../../../../../convex/_generated/api";
@@ -18,7 +20,7 @@ const requestSchema = z.object({
 function parseGitHubUrl(url: string) {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (!match) {
-    throw new Error("Invalid GitHub URL");
+    return null;
   }
 
   return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
@@ -31,16 +33,30 @@ export async function POST(request: Request) {
     return unauthorized;
   }
 
-  const body = await request.json();
-  const { url } = requestSchema.parse(body);
+  const { data, invalid } = await parseJsonBody(request, requestSchema);
 
-  const { owner, repo } = parseGitHubUrl(url);
+  if (invalid) {
+    return invalid;
+  }
+
+  const { url } = data;
+
+  const parsedUrl = parseGitHubUrl(url);
+
+  if (!parsedUrl) {
+    return NextResponse.json({ error: "Invalid GitHub URL" }, { status: 400 });
+  }
+
+  const { owner, repo } = parsedUrl;
   // https://github.com/itsmrad/codenaya
   // { owner: "itsmrad", repo: "codenaya" }
 
   // Checked here for a clear error; the job looks the token up itself (#211).
-  if (!(await getGithubToken(userId))) {
-    return githubNotLinkedResponse();
+  // Public repos import without a linked account (#364).
+  if (!(await getGithubToken(userId)) && !(await isPublicGithubRepo(owner, repo))) {
+    return githubNotLinkedResponse(
+      "This repository is private or doesn't exist. Connect GitHub to import private repositories."
+    );
   }
 
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;

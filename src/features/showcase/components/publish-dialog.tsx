@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import {
   TECH_STACK_OPTIONS,
@@ -126,8 +127,7 @@ export const PublishDialog = ({
       toast.success("Published to showcase!");
       onOpenChange(false);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err) || "Failed to publish";
-      toast.error(message);
+      toast.error(convexErrorMessage(err, "Failed to publish"));
     } finally {
       setSubmitting(false);
     }

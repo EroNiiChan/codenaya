@@ -1,7 +1,7 @@
 /**
- * Official starter templates (#119). Each one creates a project seeded with a
- * small Vite + React + Tailwind app (see `seed-files.ts`) and starts the agent
- * on a curated prompt that builds the template on top of it.
+ * Official starter templates (#119). Each one creates a project seeded with
+ * the agent's Vite + React + Tailwind starter (see `seed-files.ts`) and starts
+ * the agent on a curated prompt that builds the template on top of it.
  *
  * Plain data, shared by the dashboard, /showcase and the create route, so the
  * server only seeds templates it knows.

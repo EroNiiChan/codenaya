@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Trash2Icon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { convexErrorMessage } from "@/lib/convex-error";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -106,11 +107,7 @@ export const ConnectionCard = ({ connection }: ConnectionCardProps) => {
       );
       setConfirmOpen(false);
     } catch (error: unknown) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : "Unable to remove this connection";
-      toast.error(message);
+      toast.error(convexErrorMessage(error, "Unable to remove this connection"));
     } finally {
       setDeleting(false);
     }
