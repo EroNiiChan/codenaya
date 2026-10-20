@@ -51,6 +51,8 @@ interface ProcessMessageDispatchInput {
   messageId: Id<"messages">;
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
+  /** The project owner, the key of the per-user agent run concurrency (#242). */
+  ownerId: string;
   message: string;
   /**
    * Validated model choice; omitted means the platform default. Inngest only:
@@ -95,6 +97,7 @@ export async function dispatchProcessMessage(
       messageId: input.messageId,
       conversationId: input.conversationId,
       projectId: input.projectId,
+      ownerId: input.ownerId,
       message: input.message,
       model: input.model
         ? { keyId: input.model.keyId, modelId: input.model.modelId }

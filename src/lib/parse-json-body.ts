@@ -29,3 +29,10 @@ export const parseJsonBody = async <S extends z.ZodType>(
   }
   return { data: parsed.data, invalid: undefined };
 };
+
+/**
+ * Size caps for text a route forwards to a paid model (#242), so one request
+ * can't send megabytes of tokens. Oversized bodies get the same 400.
+ */
+export const promptText = z.string().max(50_000);
+export const codeText = z.string().max(200_000);

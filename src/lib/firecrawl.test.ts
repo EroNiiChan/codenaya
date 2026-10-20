@@ -55,4 +55,20 @@ describe("scrapeUrls tool without FIRECRAWL_API_KEY", () => {
     expect(result).toBe(`Error: ${FIRECRAWL_NOT_CONFIGURED_MESSAGE}`);
     expect(step.run).not.toHaveBeenCalled();
   });
+
+  it("rejects more than 3 URLs before scraping (#242)", async () => {
+    const { createScrapeUrlsTool } = await import(
+      "@/features/conversations/inngest/tools/scrape-urls"
+    );
+    const step = { run: vi.fn() };
+
+    const tool = createScrapeUrlsTool();
+    const result = await tool.handler(
+      { urls: ["a", "b", "c", "d"].map((p) => `https://example.com/${p}`) },
+      { step } as unknown as Parameters<typeof tool.handler>[1]
+    );
+
+    expect(result).toMatch(/^Error: Scrape at most 3 URLs/);
+    expect(step.run).not.toHaveBeenCalled();
+  });
 });
