@@ -10,6 +10,7 @@ import {
 import { StateEffect, StateField } from "@codemirror/state";
 
 import { fetcher } from "./fetcher";
+import { reconcileSuggestion } from "./reconcile";
 
 // StateEffect: A way to send "messages" to update state.
 // We define one effect type for setting the suggestion text.
@@ -205,9 +206,18 @@ const acceptSuggestionKeymap = keymap.of([
       }
 
       const cursor = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(cursor);
+      const offset = cursor - line.from;
+      const { insert, replace } = reconcileSuggestion(
+        suggestion,
+        line.text.slice(0, offset),
+        line.text.slice(offset)
+      );
+
       view.dispatch({
-        changes: { from: cursor, insert: suggestion }, // Insert the suggestion text
-        selection: { anchor: cursor + suggestion.length }, // Move cursor to end
+        // Merge with auto-closed brackets/quotes after the cursor (#268)
+        changes: { from: cursor, to: cursor + replace, insert },
+        selection: { anchor: cursor + insert.length }, // Move cursor to end
         effects: setSuggestionEffect.of(null), // Clear the suggestion
       });
       return true; // We handled Tab, don't indent
