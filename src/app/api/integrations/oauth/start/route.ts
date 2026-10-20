@@ -65,8 +65,8 @@ const PLACEHOLDER_HOSTS = [
  * value would vary across preview deployments and would also let a caller influence
  * where an authorization code is sent.
  *
- * Returns a reason string on failure so the route can explain what to fix, rather
- * than a bare undefined that becomes a generic error.
+ * Returns a reason string on failure so the server log can explain what to fix,
+ * rather than a bare undefined that becomes a generic error.
  */
 function resolveRedirectUri():
   | { ok: true; redirectUri: string }
@@ -167,7 +167,9 @@ export async function POST(request: Request) {
 
   const redirect = resolveRedirectUri();
   if (!redirect.ok) {
-    return jsonError(redirect.reason, 500);
+    // The reason names server env vars, so it belongs in the log, not the UI.
+    console.error(`[oauth/start] ${redirect.reason}`);
+    return jsonError("OAuth isn't set up for this server yet.", 500);
   }
   const redirectUri = redirect.redirectUri;
 
