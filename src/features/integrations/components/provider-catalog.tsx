@@ -95,7 +95,7 @@ const ProviderTile = ({
           {authLabel}
         </span>
         {supportsReadOnly && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
             <EyeIcon aria-hidden="true" className="size-2.5" />
             Read-only capable
           </span>

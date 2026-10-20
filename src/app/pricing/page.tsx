@@ -135,7 +135,7 @@ const PricingPage = () => {
       <MarketingNavbar />
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-10 md:px-8 md:py-16">
         <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.25em] text-brand font-mono mb-4">
+          <p className="text-xs uppercase tracking-[0.25em] text-brand-text font-mono mb-4">
             Pricing
           </p>
           <h1 className="text-3xl md:text-5xl font-bold tracking-tighter text-foreground">
