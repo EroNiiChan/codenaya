@@ -20,6 +20,12 @@ describe("parseGithubRepo", () => {
     ["http://github.com/acme/widgets", "acme/widgets"],
     ["HTTPS://GitHub.com/acme/widgets", "acme/widgets"],
     ["octocat/Hello-World/tree/main", "octocat/Hello-World"],
+    ["ssh://git@github.com/acme/widgets.git", "acme/widgets"],
+    ["git://github.com/acme/widgets.git", "acme/widgets"],
+    ["https:/github.com/acme/widgets", "acme/widgets"],
+    ["https://user:token@github.com/acme/widgets", "acme/widgets"],
+    ["https://github.com:443/acme/widgets", "acme/widgets"],
+    ["https://github.com/x/../acme/widgets", "acme/widgets"],
   ])("normalises %j to %j", (input, slug) => {
     expect(parseGithubRepo(input)).toBe(slug);
   });
@@ -39,6 +45,10 @@ describe("parseGithubRepo", () => {
     "https://github.com/octo.cat/repo/tree/main",
     "https://github.com/octocat/re%20po",
     "https://",
+    "javascript:alert(1)",
+    "file:///acme/widgets",
+    "git@github.com:acme/widgets.git",
+    "https://github.com/acme/../..",
     "https://gitlab.com/octocat/repo",
     "https://evil.com/?x=https://github.com/octocat/repo",
     "https://github.com.evil.com/octocat/repo",

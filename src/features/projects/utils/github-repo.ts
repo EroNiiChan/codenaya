@@ -12,7 +12,8 @@ const REPO_SLUG = /^[A-Za-z0-9-]{1,39}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
  */
 export const parseGithubRepo = (input: string): string | null => {
   let path = input.trim();
-  if (/^https?:\/\//i.test(path)) {
+  // Any scheme (https, ssh, git): only the host and path matter.
+  if (/^[a-z][a-z\d+.-]*:/i.test(path)) {
     let url: URL;
     try {
       url = new URL(path);
