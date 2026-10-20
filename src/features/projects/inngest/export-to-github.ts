@@ -4,6 +4,7 @@ import { NonRetriableError } from "inngest";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { requireJobGithubToken } from "@/features/projects/server/github-token";
 
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
@@ -13,7 +14,7 @@ interface ExportToGithubEvent {
   repoName: string;
   visibility: "public" | "private";
   description?: string;
-  githubToken: string;
+  userId: string;
 };
 
 type FileWithUrl = Doc<"files"> & {
@@ -51,7 +52,7 @@ export const exportToGithub = inngest.createFunction(
       repoName,
       visibility,
       description,
-      githubToken,
+      userId,
     } = event.data as ExportToGithubEvent;
 
     const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -68,6 +69,7 @@ export const exportToGithub = inngest.createFunction(
       });
     });
 
+    const githubToken = await requireJobGithubToken({ internalKey, userId, projectId });
     const octokit = new Octokit({ auth: githubToken });
 
     // Get authenticated user

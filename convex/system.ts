@@ -8,7 +8,11 @@ import {
   runModelValidator,
 } from "./schema";
 import { createCheckpoint } from "./checkpoints";
-import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
+import {
+  getUnclaimedStorage,
+  releaseBlobs,
+  releaseStorageIfUnreferenced,
+} from "./projectCascade";
 import { assertOwnedImages, withImageUrls } from "./chatImages";
 import { assertProjectFolder, getProjectFile } from "./files";
 import { resolveProjectSkills } from "./skills";
@@ -24,9 +28,24 @@ const validateInternalKey = (key: string) => {
     throw new Error("CODENAYA_CONVEX_INTERNAL_KEY is not configured");
   }
 
-  if (key !== internalKey) {
+  if (!keysMatch(key, internalKey)) {
     throw new Error("Invalid internal key");
   }
+};
+
+/**
+ * Constant-time string compare, so response timing doesn't reveal how much of
+ * a guessed key was right (#211). The Convex runtime has no
+ * `crypto.timingSafeEqual`. Only the secret's length can leak.
+ */
+const keysMatch = (given: string, secret: string) => {
+  const a = new TextEncoder().encode(given);
+  const b = new TextEncoder().encode(secret);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i++) {
+    diff |= (a[i] ?? 0) ^ b[i];
+  }
+  return diff === 0;
 };
 
 export const getConversationById = query({
@@ -610,6 +629,7 @@ export const createBinaryFile = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
     await assertProjectFolder(ctx, args.projectId, args.parentId);
+    await getUnclaimedStorage(ctx, args.storageId);
 
     const files = await ctx.db
       .query("files")
@@ -1153,6 +1173,12 @@ export const setSecretEnvVar = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    // The row's ownerId decides who may delete it later (`envVars.deleteEnvVar`),
+    // so it must be the project's real owner (#211).
+    if (!(await ownedProjectOrNull(ctx, args.projectId, args.ownerId))) {
+      throw new Error("Project not found");
+    }
+
     if (
       args.sourceConnectionId &&
       !(await projectOwnerConnectionOrNull(ctx, args.projectId, args.sourceConnectionId))
@@ -1556,6 +1582,12 @@ export const setPublicEnvVarInternal = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    // The row's ownerId decides who may delete it later (`envVars.deleteEnvVar`),
+    // so it must be the project's real owner (#211).
+    if (!(await ownedProjectOrNull(ctx, args.projectId, args.ownerId))) {
+      throw new Error("Project not found");
+    }
 
     const existing = await ctx.db
       .query("projectEnvVars")

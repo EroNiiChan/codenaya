@@ -163,7 +163,43 @@ describe("public showcase queries", () => {
       expect(entry).toMatchObject({ title: "Weather widget", ownerName: "Alice" });
       expect(entry).not.toHaveProperty("projectId");
       expect(entry).not.toHaveProperty("ownerId");
+      expect(entry).not.toHaveProperty("previewImageId");
     }
+  });
+});
+
+describe("showcase.publish", () => {
+  const entry = {
+    title: "Todo",
+    description: "",
+    techStack: [],
+    designStyle: [],
+    category: "tool",
+  };
+
+  test("refuses a preview the caller didn't upload, and accepts a fresh one (#211)", async () => {
+    const t = convexTest(schema, modules);
+    const bob = t.withIdentity({ subject: "user_bob", name: "Bob" });
+    const [aliceEntry] = await seed(t, [{ title: "Alice's", publishedAt: 1, previewImageId: await storeImage(t) }]);
+    const alicePreview = (await t.run((ctx) => ctx.db.get(aliceEntry)))!.previewImageId!;
+    const missing = await t.run(async (ctx) => {
+      const id = await ctx.storage.store(new Blob(["png"]));
+      await ctx.storage.delete(id);
+      return id;
+    });
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Todo", ownerId: "user_bob", updatedAt: 0 })
+    );
+
+    for (const previewImageId of [alicePreview, missing]) {
+      await expect(
+        bob.mutation(api.showcase.publish, { ...entry, projectId, previewImageId })
+      ).rejects.toThrow("Upload not found");
+    }
+
+    const fresh = await storeImage(t);
+    const id = await bob.mutation(api.showcase.publish, { ...entry, projectId, previewImageId: fresh });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.previewImageId).toBe(fresh);
   });
 });
 
