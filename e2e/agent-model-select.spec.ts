@@ -14,6 +14,8 @@ test.describe("chat agent model switcher", () => {
 
   test("lists the allowlist and remembers the picked model", async ({ page }) => {
     test.setTimeout(180_000);
+    // The desktop size from #217, where the default panel truncated the name.
+    await page.setViewportSize({ width: 1440, height: 900 });
     const errors = collectConsoleErrors(page);
 
     await signIn(page);
@@ -23,6 +25,10 @@ test.describe("chat agent model switcher", () => {
     await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
 
     const trigger = page.getByRole("combobox", { name: "Agent model" });
+    // The full model name fits at the default panel width (#217).
+    const name = trigger.locator('[data-slot="select-value"]');
+    await expect(name).not.toBeEmpty();
+    expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await trigger.click();
     // Scoped to the platform group: the user's own keys add groups of their own.
     const platform = page.getByRole("group", { name: "Codenaya" });
