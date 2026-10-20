@@ -41,8 +41,7 @@ const Tab = ({
     >
       <button
         type="button"
-        role="tab"
-        aria-selected={isActive}
+        aria-current={isActive ? "true" : undefined}
         onClick={() => setActiveTab(fileId)}
         onDoubleClick={() => openFile(fileId, { pinned: true })}
         className="flex items-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
@@ -64,11 +63,7 @@ const Tab = ({
       <button
         type="button"
         aria-label={`Close ${fileName}`}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          closeTab(fileId);
-        }}
+        onClick={() => closeTab(fileId)}
         className={cn(
           "p-0.5 rounded-sm hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring transition-opacity cursor-pointer",
           isActive && "opacity-100"
@@ -89,7 +84,9 @@ export const TopNavigation = ({
 
   return (
     <ScrollArea className="flex-1">
-      <nav role="tablist" className="bg-background flex items-center h-12 px-2 gap-2 border-b border-border/40">
+      {/* Not a tablist: each file pairs a select button with a close button,
+          and a tablist may only hold tabs (#265). */}
+      <nav aria-label="Open files" className="bg-background flex items-center h-12 px-2 gap-2 border-b border-border/40">
         {openTabs.map((fileId) => (
           <Tab
             key={fileId}
