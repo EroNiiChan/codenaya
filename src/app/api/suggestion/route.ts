@@ -9,7 +9,7 @@ import {
   SUGGESTION_RATE_LIMIT,
   checkRateLimit,
   rateLimitedResponse,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 
 const suggestionSchema = z.object({
   suggestion: z

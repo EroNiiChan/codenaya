@@ -11,7 +11,7 @@ vi.mock("ai", () => ({ generateObject: mocks.generateObject }));
 import {
   ENHANCE_PROMPT_RATE_LIMIT,
   resetRateLimits,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 
 import { POST } from "./route";
 

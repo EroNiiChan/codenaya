@@ -81,10 +81,8 @@ Dependencies point **down**: `app → features → components, lib`. `lib` and
   `features/ai-providers/server/resolve-run-model.ts:9-12`, which imports
   `conversations/inngest/lib/openrouter-model`: model construction lives in the
   conversations agent's private folder while two features depend on it.
-- **Shared infrastructure goes in `src/lib/`.** For example,
-  `features/integrations/server/rate-limit.ts` is the app's only rate limiter, and seven
-  routes outside `integrations` now import it. New code that needs it should import it
-  from where it is, and the PR that next touches it should move it to `src/lib/`.
+- **Shared infrastructure goes in `src/lib/`.** For example, `src/lib/rate-limit.ts` is
+  the app's only rate limiter, used by routes across several features.
 - **No import cycles between features.**
 - **Convex may import pure modules from `src/features`**, such as
   `convex/skills.ts:11-23` importing `features/skills/{limits,types,builtin}`. Those

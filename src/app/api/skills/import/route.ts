@@ -6,7 +6,7 @@ import {
   SKILL_IMPORT_RATE_LIMIT,
   checkRateLimit,
   rateLimitedResponse,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 import {
   SkillImportError,
   fetchSkillMd,
