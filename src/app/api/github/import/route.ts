@@ -7,6 +7,7 @@ import { inngest } from "@/inngest/client";
 import {
   getGithubToken,
   githubNotLinkedResponse,
+  isPublicGithubRepo,
 } from "@/features/projects/server/github-token";
 
 import { api } from "../../../../../convex/_generated/api";
@@ -39,8 +40,11 @@ export async function POST(request: Request) {
   // { owner: "itsmrad", repo: "codenaya" }
 
   // Checked here for a clear error; the job looks the token up itself (#211).
-  if (!(await getGithubToken(userId))) {
-    return githubNotLinkedResponse();
+  // Public repos import without a linked account (#364).
+  if (!(await getGithubToken(userId)) && !(await isPublicGithubRepo(owner, repo))) {
+    return githubNotLinkedResponse(
+      "This repository is private or doesn't exist. Connect GitHub to import private repositories."
+    );
   }
 
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;

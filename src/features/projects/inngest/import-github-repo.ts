@@ -5,7 +5,7 @@ import { NonRetriableError } from "inngest";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
-import { requireJobGithubToken } from "@/features/projects/server/github-token";
+import { getJobGithubToken } from "@/features/projects/server/github-token";
 
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -45,8 +45,12 @@ export const importGithubRepo = inngest.createFunction(
       throw new NonRetriableError("CODENAYA_CONVEX_INTERNAL_KEY is not configured");
     };
 
-    const githubToken = await requireJobGithubToken({ internalKey, userId, projectId });
-    const octokit = new Octokit({ auth: githubToken });
+    // No linked account: the route checked the repo is public, so read it
+    // unauthenticated (#364).
+    // ponytail: one getBlob call per file, so tokenless imports of repos with
+    // more than ~55 files hit GitHub's 60/hour limit; the archive fetch in #364 fixes that.
+    const githubToken = await getJobGithubToken({ internalKey, userId, projectId });
+    const octokit = new Octokit({ auth: githubToken ?? undefined });
 
     // Cleanup any existing files in the project
     await step.run("cleanup-project", async () => {
