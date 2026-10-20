@@ -1301,6 +1301,14 @@ export const createMcpApproval = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    // The prompt goes to whoever owns the project, read here rather than taken
+    // from the caller, and only for a link of that project (#239).
+    const project = await ctx.db.get("projects", args.projectId);
+    const link = await ctx.db.get("projectConnections", args.projectConnectionId);
+    if (!project || link?.projectId !== args.projectId) {
+      throw new Error("Project connection not found");
+    }
+
     // Idempotent on the invocation id.
     //
     // The caller already creates this row inside a memoized workflow step, so a
@@ -1317,14 +1325,6 @@ export const createMcpApproval = mutation({
         .first();
 
       if (existing) return existing._id;
-    }
-
-    // The prompt goes to whoever owns the project, read here rather than taken
-    // from the caller, and only for a link of that project (#239).
-    const project = await ctx.db.get("projects", args.projectId);
-    const link = await ctx.db.get("projectConnections", args.projectConnectionId);
-    if (!project || link?.projectId !== args.projectId) {
-      throw new Error("Project connection not found");
     }
 
     return await ctx.db.insert("mcpApprovals", {

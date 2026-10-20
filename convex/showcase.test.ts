@@ -378,7 +378,7 @@ describe("showcase.isProjectPublished", () => {
     expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(true);
     await expect(
       t.withIdentity({ subject: "user_bob" }).query(api.showcase.isProjectPublished, { projectId })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Unauthorized");
 
     await t.run((ctx) => ctx.db.patch(id, { status: "removed" }));
     expect(await alice.query(api.showcase.isProjectPublished, { projectId })).toBe(false);
