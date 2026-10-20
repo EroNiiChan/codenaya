@@ -22,9 +22,9 @@ export const getAppError = (error: unknown): AppErrorData | null => {
 };
 
 /**
- * The user-facing message of an `appError`, or `fallback`. A plain `Error`
- * from Convex carries the "[CONVEX M(...)] [Request ID: ...]" wrapper and a
- * stack frame in dev and "Server Error" in production, so it is never shown.
+ * The message of a typed `ConvexError({ code, message })`, else `fallback`.
+ * A plain `Error` thrown in a Convex function reaches the client as
+ * "Server Error" in production, so its message is never shown (#267).
  */
-export const appErrorMessage = (error: unknown, fallback: string) =>
+export const convexErrorMessage = (error: unknown, fallback: string) =>
   getAppError(error)?.message || fallback;

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { appErrorMessage } from "@/lib/convex-error";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import {
   TECH_STACK_OPTIONS,
@@ -126,7 +126,7 @@ export const PublishDialog = ({
       toast.success("Published to showcase!");
       onOpenChange(false);
     } catch (err: unknown) {
-      toast.error(appErrorMessage(err, "Failed to publish"));
+      toast.error(convexErrorMessage(err, "Failed to publish"));
     } finally {
       setSubmitting(false);
     }

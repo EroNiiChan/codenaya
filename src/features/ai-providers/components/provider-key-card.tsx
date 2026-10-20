@@ -25,7 +25,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
-import { appErrorMessage } from "@/lib/convex-error";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import { AI_PROVIDERS } from "../registry";
 import {
@@ -87,7 +87,7 @@ export const ProviderKeyCard = ({ providerKey }: ProviderKeyCardProps) => {
       toast.success(`Removed ${label}`);
       setConfirmOpen(false);
     } catch (error) {
-      toast.error(appErrorMessage(error, "Unable to remove this key"));
+      toast.error(convexErrorMessage(error, "Unable to remove this key"));
     } finally {
       setDeleting(false);
     }

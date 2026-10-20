@@ -404,6 +404,50 @@ describe("unlisted entries", () => {
   });
 });
 
+describe("showcase.incrementView (#269)", () => {
+  const ANON = "anon_123e4567-e89b-42d3-a456-426614174000";
+  const viewsOf = (t: T, id: Id<"showcaseProjects">) =>
+    t.run(async (ctx) => (await ctx.db.get(id))?.viewCount);
+
+  test("counts each viewer once, never the owner, and ignores malformed anonymous ids", async () => {
+    const t = convexTest(schema, modules);
+    const [id] = await seed(t, [{ title: "Counter", publishedAt: 1 }]);
+    const owner = t.withIdentity({ subject: "user_alice" });
+    const bob = t.withIdentity({ subject: "user_bob" });
+
+    await owner.mutation(api.showcase.incrementView, { id });
+    expect(await viewsOf(t, id)).toBe(0);
+
+    await bob.mutation(api.showcase.incrementView, { id });
+    await bob.mutation(api.showcase.incrementView, { id });
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: ANON });
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: ANON });
+    expect(await viewsOf(t, id)).toBe(2);
+
+    // A Clerk-shaped id can't pre-claim Bob's view; no id counts nothing.
+    await t.mutation(api.showcase.incrementView, { id, anonymousId: "user_carol" });
+    await t.mutation(api.showcase.incrementView, { id });
+    expect(await viewsOf(t, id)).toBe(2);
+  });
+
+  test("publish names an email-only author by their email's local part", async () => {
+    const t = convexTest(schema, modules);
+    const user = t.withIdentity({ subject: "user_ada", email: "ada.l@example.com" });
+    const projectId = await t.run((ctx) =>
+      ctx.db.insert("projects", { name: "Counter", ownerId: "user_ada", updatedAt: 0 })
+    );
+    const id = await user.mutation(api.showcase.publish, {
+      projectId,
+      title: "Counter",
+      description: "",
+      techStack: [],
+      designStyle: [],
+      category: "tool",
+    });
+    expect(await t.run(async (ctx) => (await ctx.db.get(id))?.ownerName)).toBe("ada.l");
+  });
+});
+
 describe("showcase.isProjectPublished", () => {
   test("answers its owner with a boolean and refuses anyone else (#239)", async () => {
     const t = convexTest(schema, modules);

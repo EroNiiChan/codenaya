@@ -1,6 +1,7 @@
 // @vitest-environment edge-runtime
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
+import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
@@ -68,14 +69,6 @@ describe("files.createFile / createFolder", () => {
     );
     expect(children.map((f) => f.name).sort()).toEqual(["app.ts", "b.ts", "lib"]);
   });
-
-  test("reject a duplicate name with a CONFLICT code (#354)", async () => {
-    const { alice, projectId, folderId } = await setup();
-
-    await expect(
-      alice.mutation(api.files.createFile, { projectId, parentId: folderId, name: "app.ts", content: "" })
-    ).rejects.toMatchObject({ data: { code: "CONFLICT", message: "File already exists" } });
-  });
 });
 
 describe("files.getFilePath", () => {
@@ -87,4 +80,32 @@ describe("files.getFilePath", () => {
     const path = await alice.query(api.files.getFilePath, { id: fileId });
     expect(path.map((p) => p.name)).toEqual(["src", "app.ts"]);
   });
+});
+
+const conflict = (message: string) =>
+  expect.objectContaining({ data: { code: "CONFLICT", message } });
+
+test("duplicate names throw a typed CONFLICT the explorer can show (#267)", async () => {
+  const t = convexTest(schema, modules);
+  const alice = t.withIdentity({ subject: "user_alice" });
+  const projectId = await t.run((ctx) =>
+    ctx.db.insert("projects", { name: "p", ownerId: "user_alice", updatedAt: 0 })
+  );
+  const file = { projectId, name: "a.ts", content: "" };
+  await alice.mutation(api.files.createFile, file);
+  await alice.mutation(api.files.createFile, { ...file, name: "b.ts" });
+  await alice.mutation(api.files.createFolder, { projectId, name: "src" });
+
+  const duplicate = alice.mutation(api.files.createFile, file);
+  await expect(duplicate).rejects.toBeInstanceOf(ConvexError);
+  await expect(duplicate).rejects.toEqual(conflict("File already exists"));
+  await expect(alice.mutation(api.files.createFolder, { projectId, name: "src" })).rejects.toEqual(
+    conflict("Folder already exists")
+  );
+
+  const files = await alice.query(api.files.getFolderContents, { projectId });
+  const b = files.find((f) => f.name === "b.ts")!;
+  await expect(alice.mutation(api.files.renameFile, { id: b._id, newName: "a.ts" })).rejects.toEqual(
+    conflict("A file with this name already exists in this location")
+  );
 });

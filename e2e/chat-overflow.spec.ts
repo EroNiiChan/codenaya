@@ -53,6 +53,11 @@ test.describe("chat panel overflow", () => {
       // The pasted log renders as a monospace block inside the bubble.
       await expect(page.locator('[role="log"] pre', { hasText: "import Home from" })).toBeVisible();
 
+      // Numbered steps keep their numbers, nested bullets their discs (#286).
+      const step = page.locator('[data-streamdown="ordered-list"] > li', { hasText: "Run the dev server" });
+      await expect(step.locator("xpath=..")).toHaveCSS("list-style-type", "decimal");
+      await expect(page.locator('[data-streamdown="ordered-list"] [data-streamdown="unordered-list"]')).toHaveCSS("list-style-type", "disc");
+
       // Long chip lists collapse to the first six.
       const more = liveRun.getByRole("button", { name: "+11 more" });
       await expect(more).toBeVisible();

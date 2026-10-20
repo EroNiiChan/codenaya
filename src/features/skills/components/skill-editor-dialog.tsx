@@ -26,7 +26,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { appErrorMessage } from "@/lib/convex-error";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import { BUILTIN_SKILLS } from "../builtin";
 import {
@@ -217,7 +217,7 @@ const SkillEditorForm = ({
       }
       onDone();
     } catch (error) {
-      setServerError(appErrorMessage(error, "Unable to save the skill"));
+      setServerError(convexErrorMessage(error, "Unable to save the skill"));
     } finally {
       setIsSaving(false);
     }

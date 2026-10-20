@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { appErrorMessage } from "@/lib/convex-error";
+import { convexErrorMessage } from "@/lib/convex-error";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -142,7 +142,7 @@ const ProjectConnectionItem = ({ row }: ProjectConnectionItemProps) => {
           : `${label} is paused for this project`
       );
     } catch (error: unknown) {
-      toast.error(appErrorMessage(error, "Unable to change this connection"));
+      toast.error(convexErrorMessage(error, "Unable to change this connection"));
     } finally {
       setTogglingEnabled(false);
     }
@@ -161,7 +161,7 @@ const ProjectConnectionItem = ({ row }: ProjectConnectionItemProps) => {
       );
       setEditing(false);
     } catch (error: unknown) {
-      toast.error(appErrorMessage(error, "Unable to save this scope"));
+      toast.error(convexErrorMessage(error, "Unable to save this scope"));
     }
   };
 
@@ -172,7 +172,7 @@ const ProjectConnectionItem = ({ row }: ProjectConnectionItemProps) => {
       toast.success(`Unlinked ${label} from this project`);
       setConfirmUnlinkOpen(false);
     } catch (error: unknown) {
-      toast.error(appErrorMessage(error, "Unable to unlink this connection"));
+      toast.error(convexErrorMessage(error, "Unable to unlink this connection"));
     } finally {
       setUnlinking(false);
     }
@@ -353,7 +353,7 @@ const AddConnectionList = ({ projectId, available }: AddConnectionListProps) => 
         `Linked ${connection.label} — read-only until you allow writes`
       );
     } catch (error: unknown) {
-      toast.error(appErrorMessage(error, "Unable to link this connection"));
+      toast.error(convexErrorMessage(error, "Unable to link this connection"));
     } finally {
       setLinkingId(null);
     }

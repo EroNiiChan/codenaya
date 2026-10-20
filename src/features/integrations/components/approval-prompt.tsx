@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { appErrorMessage, getAppError } from "@/lib/convex-error";
+import { convexErrorMessage, getAppError } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 
 import { getProvider } from "../catalog";
@@ -151,7 +151,7 @@ const ApprovalCard = ({ approval, now }: ApprovalCardProps) => {
         toast.error("This request was already answered.");
       } else {
         toast.error(
-          appErrorMessage(
+          convexErrorMessage(
             error,
             "Unable to record your decision. Please try again."
           )
