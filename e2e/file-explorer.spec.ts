@@ -29,7 +29,9 @@ test.describe("file explorer", () => {
       await page.keyboard.press("Enter");
       await page.getByText("quick.ts", { exact: true }).first().click();
 
-      await expect(page.getByRole("tab", { name: /quick\.ts/ })).toBeVisible({ timeout: 30_000 });
+      // The editor mounts only once a file is open. Checked this way rather than by
+      // the file's tab, whose role changes with #265.
+      await expect(page.locator(".cm-editor")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole("heading", { name: "Project not found" })).toHaveCount(0);
       expect(errors.filter((error) => !error.includes("webcontainer-api.io"))).toEqual([]);
     } finally {
