@@ -191,6 +191,24 @@ describe("checkpoints", () => {
     await expect(alice.mutation(api.checkpoints.restore, { checkpointId })).rejects.toThrow(/running agent/);
   });
 
+  // A snapshot from before the 2000-file cap is refused whole, never half-restored (#212).
+  test("refuses to restore a checkpoint over the file cap and leaves the files alone", async () => {
+    const { t, alice } = setup();
+    const { projectId, conversationId } = await seedProject(t);
+    const checkpointId = await snapshot(t, projectId, await addRun(t, projectId, conversationId));
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 2000; i++) {
+        await ctx.db.insert("checkpointFiles", { checkpointId, projectId, path: `extra/${i}.ts`, type: "file", content: "" });
+      }
+    });
+    const before = await tree(t, projectId);
+
+    await expect(alice.mutation(api.checkpoints.restore, { checkpointId })).rejects.toMatchObject({
+      data: { code: "LIMIT_EXCEEDED" },
+    });
+    expect(await tree(t, projectId)).toEqual(before);
+  });
+
   test("keeps a deleted binary file's blob while a checkpoint needs it", async () => {
     const { t, alice } = setup();
     const { projectId, conversationId } = await seedProject(t);

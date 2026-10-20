@@ -102,6 +102,7 @@ export const listUserConnections = query({
     const connections = await ctx.db
       .query("userConnections")
       .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .order("desc")
       .take(MAX_USER_CONNECTIONS);
 
     return connections
@@ -196,6 +197,13 @@ export const linkConnectionToProject = mutation({
       .query("projectConnections")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .take(MAX_PROJECT_CONNECTIONS);
+    // At the cap the duplicate check below can't see every link, so stop here.
+    if (existing.length === MAX_PROJECT_CONNECTIONS) {
+      throw appError(
+        "LIMIT_EXCEEDED",
+        `A project can have at most ${MAX_PROJECT_CONNECTIONS} connections`,
+      );
+    }
 
     const duplicate = existing.find(
       (link) => link.userConnectionId === args.userConnectionId,

@@ -128,3 +128,32 @@ describe("integrations.listPendingApprovals", () => {
     ).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
   });
 });
+
+// The duplicate check reads at most MAX_PROJECT_CONNECTIONS links, so a full
+// project refuses new ones rather than risk a duplicate (#212).
+test("linkConnectionToProject refuses a project at the link cap", async () => {
+  const { alice, id } = await setup();
+  const { projectId, projectConnectionId } = (await alice.run((ctx) => ctx.db.get("mcpApprovals", id)))!;
+  const userConnectionId = await alice.run(async (ctx) => {
+    const link = (await ctx.db.get("projectConnections", projectConnectionId))!;
+    const row = {
+      projectId,
+      userConnectionId: link.userConnectionId,
+      ownerId: ALICE,
+      enabled: true,
+      readOnly: true,
+      providerScope: {},
+      writeApproved: false,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    for (let i = 1; i < 100; i++) {
+      await ctx.db.insert("projectConnections", row);
+    }
+    return link.userConnectionId;
+  });
+
+  await expect(
+    alice.mutation(api.integrations.linkConnectionToProject, { projectId, userConnectionId }),
+  ).rejects.toMatchObject({ data: { code: "LIMIT_EXCEEDED" } });
+});

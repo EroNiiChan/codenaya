@@ -62,15 +62,17 @@ async function projectFiles(ctx: MutationCtx, projectId: Id<"projects">) {
 const checkpointRows = (ctx: MutationCtx, checkpointId: Id<"checkpoints">) =>
   ctx.db
     .query("checkpointFiles")
-    .withIndex("by_checkpoint", (q) => q.eq("checkpointId", checkpointId))
-    .take(MAX_CHECKPOINT_FILES);
+    .withIndex("by_checkpoint", (q) => q.eq("checkpointId", checkpointId));
 
 /** Deletes a checkpoint and any blob that only it was keeping alive. */
 async function deleteCheckpoint(
   ctx: MutationCtx,
   checkpoint: Doc<"checkpoints">,
 ) {
-  const rows = await checkpointRows(ctx, checkpoint._id);
+  // ponytail: a pre-#212 snapshot over the cap leaves its extra rows (and
+  // their blobs) to the project cascade; throwing here would fail every later
+  // snapshot of the project.
+  const rows = await checkpointRows(ctx, checkpoint._id).take(MAX_CHECKPOINT_FILES);
   for (const row of rows) {
     await ctx.db.delete("checkpointFiles", row._id);
   }
@@ -138,7 +140,12 @@ async function restoreCheckpoint(
   ctx: MutationCtx,
   checkpoint: Doc<"checkpoints">,
 ) {
-  const rows = await checkpointRows(ctx, checkpoint._id);
+  // A pre-#212 snapshot can be over the cap. Restoring part of it would delete
+  // every file outside that part, so refuse it whole.
+  const rows = await checkpointRows(ctx, checkpoint._id).take(MAX_CHECKPOINT_FILES + 1);
+  if (rows.length > MAX_CHECKPOINT_FILES) {
+    throw appError("LIMIT_EXCEEDED", "This checkpoint is too large to restore");
+  }
   const wanted = new Map(rows.map((row) => [row.path, row]));
   const kept = new Map<string, Doc<"files">>();
 
