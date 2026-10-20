@@ -44,6 +44,15 @@ describe("coding agent integration instructions", () => {
     );
   });
 
+  it("reads Vite env vars from import.meta.env and keeps secrets out of client code (#330)", () => {
+    expect(CODING_AGENT_SYSTEM_PROMPT).toContain(
+      "In Vite apps read env vars with import.meta.env.VITE_*. NEVER use process.env in browser code",
+    );
+    expect(CODING_AGENT_SYSTEM_PROMPT).toContain(
+      "Secrets never get a VITE_ or NEXT_PUBLIC_ prefix and never go in client code",
+    );
+  });
+
   it("starts new Vite apps from the scaffold and checks config references", () => {
     expect(CODING_AGENT_SYSTEM_PROMPT).toContain("For a NEW Vite + React app, call scaffoldViteApp FIRST");
     expect(CODING_AGENT_SYSTEM_PROMPT).toContain(
