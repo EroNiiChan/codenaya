@@ -7,6 +7,7 @@ import { internalMutation, mutation, query, type QueryCtx } from "./_generated/s
 import { verifyAuth } from "./auth";
 import { getOwnedProject } from "./projects";
 import { copyProjectFiles } from "./projectCopy";
+import { getUnclaimedStorage } from "./projectCascade";
 import { countProjectBuilt } from "./stats";
 
 // ─── Queries ───
@@ -51,15 +52,17 @@ const matchesTags = (item: Doc<"showcaseProjects">, tags: ShowcaseTags) =>
 /**
  * A published entry as anyone may see it, with its preview image URL. The
  * project and owner ids stay private: API routes act on a project id, so a
- * public one would hand every visitor a target (#208).
+ * public one would hand every visitor a target (#208). The preview's storage
+ * id stays private too: it is a handle on the blob, the URL is all a viewer
+ * needs (#211).
  */
 const toPublicEntry = async (
   ctx: QueryCtx,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- left out on purpose
-  { projectId, ownerId, ...entry }: Doc<"showcaseProjects">
+  { projectId, ownerId, previewImageId, ...entry }: Doc<"showcaseProjects">
 ) => {
-  const previewUrl = entry.previewImageId
-    ? await ctx.storage.getUrl(entry.previewImageId)
+  const previewUrl = previewImageId
+    ? await ctx.storage.getUrl(previewImageId)
     : null;
   return { ...entry, previewUrl };
 };
@@ -263,6 +266,11 @@ export const publish = mutation({
     const identity = await verifyAuth(ctx);
 
     await getOwnedProject(ctx, args.projectId, identity.subject);
+    // A preview must be a fresh upload: an id something else holds would
+    // publish someone else's blob under a public URL (#211).
+    if (args.previewImageId) {
+      await getUnclaimedStorage(ctx, args.previewImageId);
+    }
 
     const existing = await ctx.db
       .query("showcaseProjects")

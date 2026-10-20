@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
@@ -63,6 +65,24 @@ async function isStorageReferenced(
       .first(),
   ]);
   return refs.some((ref) => ref !== null);
+}
+
+/**
+ * The metadata of an uploaded blob that no row references yet. A storage id
+ * from a client or a job proves nothing about who uploaded it, so a blob that
+ * already belongs to something (another project's file, a showcase preview, a
+ * chat image) is refused instead of being claimed or deleted (#211). Missing
+ * and referenced blobs get the same error, so ids can't be probed.
+ */
+export async function getUnclaimedStorage(
+  ctx: MutationCtx,
+  storageId: Id<"_storage">,
+) {
+  const file = await ctx.db.system.get("_storage", storageId);
+  if (!file || (await isStorageReferenced(ctx, storageId))) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Upload not found" });
+  }
+  return file;
 }
 
 /**

@@ -5,6 +5,7 @@ import { convex } from "@/lib/convex-client";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
+import { readInternalKey } from "./lib/internal-key";
 import { vertexModel, VERTEX_MODELS } from "./lib/vertex-model";
 import { TITLE_GENERATOR_SYSTEM_PROMPT } from "./constants";
 
@@ -28,14 +29,13 @@ export interface ConversationContext {
 }
 
 export async function loadConversationContext(opts: {
-  internalKey: string;
   conversationId: Id<"conversations">;
   excludeMessageId: Id<"messages">;
 }): Promise<ConversationContext | null> {
   "use step";
 
   const conversation = await convex.query(api.system.getConversationById, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     conversationId: opts.conversationId,
   });
 
@@ -44,7 +44,7 @@ export async function loadConversationContext(opts: {
   }
 
   const recent = await convex.query(api.system.getRecentMessages, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     conversationId: opts.conversationId,
     limit: 10,
   });
@@ -88,14 +88,13 @@ export async function generateConversationTitle(opts: {
 }
 
 export async function persistConversationTitle(opts: {
-  internalKey: string;
   conversationId: Id<"conversations">;
   title: string;
 }) {
   "use step";
 
   await convex.mutation(api.system.updateConversationTitle, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     conversationId: opts.conversationId,
     title: opts.title,
   });
@@ -103,7 +102,6 @@ export async function persistConversationTitle(opts: {
 
 /** Checkpoint before the agent runs (#43). Best effort, like the Inngest step. */
 export async function createProjectCheckpoint(opts: {
-  internalKey: string;
   projectId: Id<"projects">;
   messageId: Id<"messages">;
   label: string;
@@ -111,47 +109,47 @@ export async function createProjectCheckpoint(opts: {
   "use step";
 
   try {
-    await convex.mutation(api.system.createProjectCheckpoint, opts);
+    await convex.mutation(api.system.createProjectCheckpoint, {
+      ...opts,
+      internalKey: readInternalKey(),
+    });
   } catch (error) {
     console.error("[checkpoints] failed to snapshot project", error);
   }
 }
 
 export async function persistAssistantMessage(opts: {
-  internalKey: string;
   messageId: Id<"messages">;
   content: string;
 }) {
   "use step";
 
   await convex.mutation(api.system.updateMessageContent, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     messageId: opts.messageId,
     content: opts.content,
   });
 }
 
 export async function markMessageCancelled(opts: {
-  internalKey: string;
   messageId: Id<"messages">;
 }) {
   "use step";
 
   await convex.mutation(api.system.updateMessageStatus, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     messageId: opts.messageId,
     status: "cancelled",
   });
 }
 
 export async function markMessageFailed(opts: {
-  internalKey: string;
   messageId: Id<"messages">;
 }) {
   "use step";
 
   await convex.mutation(api.system.updateMessageContent, {
-    internalKey: opts.internalKey,
+    internalKey: readInternalKey(),
     messageId: opts.messageId,
     content:
       "My apologies, I encountered an error while processing your request. Let me know if you need anything else!",
