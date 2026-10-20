@@ -37,10 +37,13 @@ export const SettingsNav = () => {
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
-    el.querySelector('[aria-current="page"]')?.scrollIntoView({
-      block: "nearest",
-      inline: "center",
-    });
+    // Scroll the row only; scrollIntoView could also move the page.
+    const active = el.querySelector('[aria-current="page"]');
+    if (active) {
+      const tab = active.getBoundingClientRect();
+      const row = el.getBoundingClientRect();
+      el.scrollLeft += tab.left + tab.width / 2 - (row.left + row.width / 2);
+    }
     const observer = new ResizeObserver(updateOverflow);
     observer.observe(el);
     return () => observer.disconnect();
@@ -77,7 +80,7 @@ export const SettingsNav = () => {
         onScroll={updateOverflow}
         className={cn(
           tabsListClassName,
-          "w-full justify-start overflow-x-auto lg:hidden",
+          "w-full scroll-px-12 justify-start overflow-x-auto lg:hidden",
           overflow.left && "mask-l-from-85%",
           overflow.right && "mask-r-from-85%",
         )}
