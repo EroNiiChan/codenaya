@@ -68,6 +68,11 @@ describe("checkIp blocks reserved ranges", () => {
     ["::ffff:127.0.0.1", "IPv4-mapped loopback"],
     ["::ffff:169.254.169.254", "IPv4-mapped metadata endpoint"],
     ["::ffff:10.0.0.1", "IPv4-mapped private"],
+    ["::10.0.0.1", "IPv4-compatible private"],
+    ["64:ff9b::a00:1", "NAT64 embedding 10.0.0.1"],
+    ["64:ff9b:1::a00:1", "local-use NAT64 embedding 10.0.0.1"],
+    ["2002:a00:1::1", "6to4 embedding 10.0.0.1"],
+    ["2001:0:4136:e378:8000:63bf:3fff:fdd2", "Teredo"],
   ];
 
   it.each(blocked)("blocks %s (%s)", (ip) => {
@@ -87,6 +92,7 @@ describe("checkIp allows public addresses", () => {
     "100.63.255.255", // just below CGNAT
     "100.128.0.1", // just above CGNAT
     "2606:4700::1111",
+    "2001:4860:4860::8888", // 2001::/16 but outside Teredo's 2001::/32
   ];
 
   it.each(allowed)("allows %s", (ip) => {
