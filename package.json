@@ -145,6 +145,7 @@
 		"zustand": "^5.0.9"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "4.13.0",
 		"@edge-runtime/vm": "^5.0.0",
 		"@playwright/test": "1.63.0",
 		"@tailwindcss/postcss": "^4",

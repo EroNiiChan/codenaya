@@ -38,7 +38,7 @@ export const LandingHowItWorks = () => {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           className="text-center mb-8 md:mb-10"
         >
-          <p className="text-xs uppercase tracking-[0.25em] text-brand font-mono mb-4">
+          <p className="text-xs uppercase tracking-[0.25em] text-brand-text font-mono mb-4">
             How it works
           </p>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground">
@@ -60,8 +60,8 @@ export const LandingHowItWorks = () => {
               }}
               className="relative flex items-start gap-6 md:gap-10 py-8 md:py-10 border-b border-border/40 last:border-b-0 last:pb-0"
             >
-              {/* Number */}
-              <span className="text-4xl md:text-5xl font-bold text-brand/40 font-mono shrink-0">
+              {/* Decorative: the step order is already the reading order (#216). */}
+              <span aria-hidden="true" className="text-4xl md:text-5xl font-bold text-brand/40 font-mono shrink-0">
                 {step.number}
               </span>
 
