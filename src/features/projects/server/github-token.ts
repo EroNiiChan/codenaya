@@ -64,7 +64,10 @@ export async function isPublicGithubRepo(owner: string, repo: string) {
   // check reads as "not public". Add a server read token if that starts to bite.
   const res = await fetch(
     `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
-    { headers: { Accept: "application/vnd.github+json" } }
+    {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(5000),
+    }
   );
   if (!res.ok) return false;
   const data: { private?: boolean } = await res.json();

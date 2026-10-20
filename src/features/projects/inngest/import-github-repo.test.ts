@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getUserOauthAccessToken: vi.fn(),
   octokitOptions: vi.fn(),
   getTree: vi.fn(),
+  getBlob: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -20,7 +21,7 @@ vi.mock("@/lib/convex-client", () => ({
 }));
 vi.mock("octokit", () => ({
   Octokit: class {
-    rest = { git: { getTree: mocks.getTree } };
+    rest = { git: { getTree: mocks.getTree, getBlob: mocks.getBlob } };
     constructor(options: unknown) {
       mocks.octokitOptions(options);
     }
@@ -65,5 +66,16 @@ describe("importGithubRepo", () => {
     expect(mocks.getTree).toHaveBeenCalledWith(
       expect.objectContaining({ owner: "octocat", repo: "Hello-World" })
     );
+  });
+
+  it("fails a tokenless import instead of completing a partial project", async () => {
+    mocks.getUserOauthAccessToken.mockResolvedValue({ data: [] });
+    mocks.getTree.mockResolvedValue({
+      data: { tree: [{ type: "blob", path: "README", sha: "abc" }] },
+    });
+    // Unauthenticated quota exhausted.
+    mocks.getBlob.mockRejectedValue(new Error("API rate limit exceeded"));
+
+    await expect(runJob()).rejects.toThrow("Failed to import README");
   });
 });

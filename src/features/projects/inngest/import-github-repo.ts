@@ -48,7 +48,7 @@ export const importGithubRepo = inngest.createFunction(
     // No linked account: the route checked the repo is public, so read it
     // unauthenticated (#364).
     // ponytail: one getBlob call per file, so tokenless imports of repos with
-    // more than ~55 files hit GitHub's 60/hour limit; the archive fetch in #364 fixes that.
+    // more than ~55 files hit GitHub's 60/hour limit and fail; the archive fetch in #364 fixes that.
     const githubToken = await getJobGithubToken({ internalKey, userId, projectId });
     const octokit = new Octokit({ auth: githubToken ?? undefined });
 
@@ -182,6 +182,11 @@ export const importGithubRepo = inngest.createFunction(
           }
         } catch {
           console.error(`Failed to import file: ${file.path}`);
+          // Tokenless reads hit GitHub's rate limit partway through big repos:
+          // fail the import instead of completing a partial project.
+          if (!githubToken) {
+            throw new NonRetriableError(`Failed to import ${file.path}`);
+          }
         }
       }
     });
