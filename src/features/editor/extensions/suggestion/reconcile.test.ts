@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { autoClosedOverlap } from "./reconcile";
+import { autoClosedOverlap, reconcileSuggestion } from "./reconcile";
 
 /** The line after accepting `suggestion` at the cursor between `before` and `after`. */
 const accept = (before: string, suggestion: string, after: string) =>
@@ -38,5 +38,30 @@ describe("autoClosedOverlap (#268)", () => {
 
   it("keeps a quote after the cursor that opens a string already in the file", () => {
     expect(accept("const s = ", '"pre" + ', '"abc";')).toBe('const s = "pre" + "abc";');
+  });
+});
+
+describe("reconcileSuggestion (#268)", () => {
+  const apply = (before: string, suggestion: string, after: string) => {
+    const { insert, replace } = reconcileSuggestion(suggestion, before, after);
+    return before + insert + after.slice(replace);
+  };
+
+  it("closes the pair before a block the suggestion opens past it", () => {
+    // The default model's actual reply in the issue's repro.
+    expect(apply("export function multiply(", "a: number, b: number {", ")")).toBe(
+      "export function multiply(a: number, b: number) {"
+    );
+    expect(apply("if (", "count > 0 {", ")")).toBe("if (count > 0) {");
+  });
+
+  it("keeps the plain insert for arrow bodies and object literals", () => {
+    expect(apply("arr.forEach(", "x => {", ")")).toBe("arr.forEach(x => {)");
+    expect(apply("foo(", "{", ")")).toBe("foo({)");
+    expect(apply("foo(a, ", "{", ")")).toBe("foo(a, {)");
+  });
+
+  it("uses the overlap when the suggestion closes the pair itself", () => {
+    expect(apply("multiply(", "a: number): number {", ")")).toBe("multiply(a: number): number {");
   });
 });

@@ -50,3 +50,27 @@ export function autoClosedOverlap(
 
   return matched;
 }
+
+/**
+ * What an accepted suggestion inserts at the cursor, and how many characters
+ * after it that replaces (#268).
+ *
+ * Models often write a signature or condition past an auto-closed `)` as if
+ * it weren't there (`multiply(` + `a: number {`). When the suggestion ends by
+ * opening a block, the pair is closed before that `{` rather than leaving
+ * `{)`. Arrow bodies (`x => {`) and object literals (`{`, `a, {`) keep the
+ * plain insert, since their `{` belongs inside the parentheses.
+ */
+export function reconcileSuggestion(
+  suggestion: string,
+  textBeforeCursor: string,
+  textAfterCursor: string
+): { insert: string; replace: number } {
+  const replace = autoClosedOverlap(suggestion, textBeforeCursor, textAfterCursor);
+  const signature = /^(.*[\w)\]>"'`])\s*\{$/.exec(suggestion)?.[1];
+
+  if (replace === 0 && textAfterCursor.startsWith(")") && signature && !suggestion.includes("=>")) {
+    return { insert: `${signature})${suggestion.slice(signature.length)}`, replace: 1 };
+  }
+  return { insert: suggestion, replace };
+}
