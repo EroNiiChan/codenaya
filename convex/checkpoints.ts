@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import { deleteStorageIfPresent } from "./projectCascade";
+import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
 import { getOwnedProject } from "./projects";
 
 /**
@@ -13,7 +13,7 @@ import { getOwnedProject } from "./projects";
  * A checkpoint is one `checkpoints` row plus one `checkpointFiles` row per
  * file or folder, keyed by path. Text is copied; binary files keep pointing at
  * their storage blob, which is why a deleted file only frees its blob once no
- * checkpoint references it (`releaseFileStorage`).
+ * checkpoint references it (`releaseStorageIfUnreferenced`).
  */
 
 /** Checkpoints kept per project; older ones are pruned as new ones are taken. */
@@ -43,28 +43,6 @@ const projectFiles = (ctx: MutationCtx, projectId: Id<"projects">) =>
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
     .collect();
 
-const isReferencedByCheckpoint = async (
-  ctx: MutationCtx,
-  storageId: Id<"_storage">,
-) =>
-  (await ctx.db
-    .query("checkpointFiles")
-    .withIndex("by_storageId", (q) => q.eq("storageId", storageId))
-    .first()) !== null;
-
-/**
- * Deletes a removed file's blob unless a checkpoint still needs it to restore
- * the file. Pruning the last such checkpoint deletes it then.
- */
-export async function releaseFileStorage(
-  ctx: MutationCtx,
-  storageId: Id<"_storage">,
-) {
-  if (!(await isReferencedByCheckpoint(ctx, storageId))) {
-    await deleteStorageIfPresent(ctx, storageId);
-  }
-}
-
 /** Deletes a checkpoint and any blob that only it was keeping alive. */
 async function deleteCheckpoint(
   ctx: MutationCtx,
@@ -79,16 +57,7 @@ async function deleteCheckpoint(
   }
   await ctx.db.delete("checkpoints", checkpoint._id);
 
-  const blobs = rows.flatMap((row) => (row.storageId ? [row.storageId] : []));
-  if (blobs.length === 0) return;
-  const live = new Set(
-    (await projectFiles(ctx, checkpoint.projectId)).map((file) => file.storageId),
-  );
-  for (const storageId of blobs) {
-    if (!live.has(storageId) && !(await isReferencedByCheckpoint(ctx, storageId))) {
-      await deleteStorageIfPresent(ctx, storageId);
-    }
-  }
+  await releaseBlobs(ctx, rows.map((row) => row.storageId));
 }
 
 /**
@@ -162,7 +131,7 @@ async function restoreCheckpoint(
       continue;
     }
     await ctx.db.delete("files", file._id);
-    if (file.storageId) await releaseFileStorage(ctx, file.storageId);
+    if (file.storageId) await releaseStorageIfUnreferenced(ctx, file.storageId);
   }
 
   // Parents before children, so every parent id is known when it is needed.
