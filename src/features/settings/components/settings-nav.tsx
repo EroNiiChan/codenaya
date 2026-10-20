@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { tabsListClassName, tabsTriggerClassName } from "@/components/ui/tabs";
@@ -19,6 +20,34 @@ const useActiveHref = () => {
 /** Sidebar on desktop, scrollable tab-style links below `lg`. */
 export const SettingsNav = () => {
   const activeHref = useActiveHref();
+  const tabsRef = useRef<HTMLElement>(null);
+  // Which edges have hidden tabs, so the row fades there (#218).
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+
+  const updateOverflow = () => {
+    const el = tabsRef.current;
+    if (!el) return;
+    setOverflow({
+      left: el.scrollLeft > 0,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+    });
+  };
+
+  // At 375px the five tabs overflow, so bring the current one into view (#218).
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    // Scroll the row only; scrollIntoView could also move the page.
+    const active = el.querySelector('[aria-current="page"]');
+    if (active) {
+      const tab = active.getBoundingClientRect();
+      const row = el.getBoundingClientRect();
+      el.scrollLeft += tab.left + tab.width / 2 - (row.left + row.width / 2);
+    }
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activeHref]);
 
   return (
     <>
@@ -46,8 +75,15 @@ export const SettingsNav = () => {
 
       {/* Page links styled as tabs; `data-state` reuses the tab active style. */}
       <nav
+        ref={tabsRef}
         aria-label="Settings"
-        className={cn(tabsListClassName, "w-full justify-start overflow-x-auto lg:hidden")}
+        onScroll={updateOverflow}
+        className={cn(
+          tabsListClassName,
+          "w-full scroll-px-12 justify-start overflow-x-auto lg:hidden",
+          overflow.left && "mask-l-from-85%",
+          overflow.right && "mask-r-from-85%",
+        )}
       >
         {SETTINGS_NAV.map(({ href, label, icon: Icon }) => (
           <Link

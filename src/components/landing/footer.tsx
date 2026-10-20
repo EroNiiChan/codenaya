@@ -96,7 +96,7 @@ export const LandingFooter = () => {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-10 pt-6 border-t border-border/40 flex items-center justify-between gap-4 text-sm text-muted-foreground/60">
+        <div className="mt-10 pt-6 border-t border-border/40 flex items-center justify-between gap-4 text-sm text-muted-foreground">
           <span>© {new Date().getFullYear()} Codenaya</span>
           <a
             href={GITHUB_REPO_URL}

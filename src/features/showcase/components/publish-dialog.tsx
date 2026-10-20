@@ -164,7 +164,7 @@ export const PublishDialog = ({
               rows={3}
               maxLength={280}
             />
-            <p className="text-[10px] text-muted-foreground/60 text-right">
+            <p className="text-[10px] text-muted-foreground text-right">
               {description.length}/280
             </p>
           </div>

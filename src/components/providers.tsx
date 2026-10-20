@@ -25,6 +25,14 @@ const clerkAppearance = {
     colorPrimaryForeground: "var(--brand-foreground)",
     fontFamily: "var(--font-inter)",
   },
+  // Clerk also draws links, text buttons and the active nav item in
+  // colorPrimary, which is too light for text on light surfaces (#216).
+  elements: {
+    footerActionLink: { color: "var(--brand-text)" },
+    navbarButton: { '&[data-active="true"]': { color: "var(--brand-text)" } },
+    profileSectionPrimaryButton: { color: "var(--brand-text)" },
+    menuButton__connectedAccounts: { color: "var(--brand-text)" },
+  },
 };
 
 const EnsureCurrentUser = () => {
