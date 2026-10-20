@@ -123,6 +123,20 @@ describe("POST /api/github/import without a linked GitHub account (#364)", () =>
     });
   });
 
+  it("imports a URL that points inside the repo as owner/repo (#231)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ private: false })));
+
+    const res = await importPOST(
+      post({ url: "https://github.com/octocat/Hello-World/tree/main/docs?x=1#top" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.inngestSend.mock.calls[0][0].data).toMatchObject({
+      owner: "octocat",
+      repo: "Hello-World",
+    });
+  });
+
   it.each([
     ["private", () => Response.json({ private: true })],
     ["missing", () => new Response("", { status: 404 })],

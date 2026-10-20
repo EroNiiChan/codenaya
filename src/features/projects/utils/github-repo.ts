@@ -4,14 +4,26 @@ const GITHUB_URL_PREFIX = "https://github.com/";
 const REPO_SLUG = /^[A-Za-z0-9-]{1,39}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
 
 /**
- * Normalises `owner/repo` or `https://github.com/owner/repo` (optionally with
- * a trailing `/` or `.git`) to `owner/repo`, or returns null. Strict on
- * purpose: the result is sent to the GitHub API and put into URLs.
+ * Normalises `owner/repo` or a github.com URL to `owner/repo`, or returns
+ * null. URLs may point inside the repo (`/tree/<ref>`, `/blob/...`) or carry
+ * a trailing `/`, `.git`, `?query` or `#hash`; only owner and repo are kept
+ * (the ref is ignored for now). Strict on the result: it is sent to the
+ * GitHub API and put into URLs.
  */
 export const parseGithubRepo = (input: string): string | null => {
-  let slug = input.trim();
-  if (slug.startsWith(GITHUB_URL_PREFIX)) slug = slug.slice(GITHUB_URL_PREFIX.length);
-  slug = slug.replace(/\/$/, "").replace(/\.git$/, "");
+  let path = input.trim();
+  if (/^https?:\/\//i.test(path)) {
+    let url: URL;
+    try {
+      url = new URL(path);
+    } catch {
+      return null;
+    }
+    if (url.hostname !== "github.com") return null;
+    path = url.pathname;
+  }
+  const [owner, repo = ""] = path.replace(/^\//, "").split("/");
+  const slug = `${owner}/${repo.replace(/\.git$/, "")}`;
   return REPO_SLUG.test(slug) ? slug : null;
 };
 
