@@ -58,7 +58,7 @@ const STATUS_STYLES: Record<
   active: {
     label: "Active",
     className:
-      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   },
   needs_reauth: {
     label: "Needs reauth",

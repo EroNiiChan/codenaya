@@ -70,7 +70,7 @@ export const LandingFeatures = () => {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           className="text-center mb-12 md:mb-16"
         >
-          <p className="text-xs uppercase tracking-[0.25em] text-brand font-mono mb-4">
+          <p className="text-xs uppercase tracking-[0.25em] text-brand-text font-mono mb-4">
             Features
           </p>
           <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground">

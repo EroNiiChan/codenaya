@@ -521,7 +521,7 @@ export const ConversationSidebar = ({
                 />
               </PromptInputTools>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="hidden items-center gap-1 text-[11px] text-muted-foreground/70 @[400px]:inline-flex">
+                <span className="hidden items-center gap-1 text-[11px] text-muted-foreground @[400px]:inline-flex">
                   <kbd className="inline-flex h-4 items-center rounded border px-1 font-sans">
                     <CornerDownLeftIcon className="size-2.5" />
                     <span className="sr-only">Enter</span>

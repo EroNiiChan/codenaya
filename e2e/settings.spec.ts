@@ -79,6 +79,8 @@ test.describe("settings", () => {
           const nav = page.getByRole("navigation", { name: "Settings" });
           await expect(nav).toBeVisible();
           await expect(nav.locator('[aria-current="page"]')).toHaveAttribute("href", path);
+          // The row scrolls at 375px; the current tab must not be clipped (#218).
+          await expect(nav.locator('[aria-current="page"]')).toBeInViewport({ ratio: 1 });
           await expect(nav.locator("[aria-controls], [role='tab']")).toHaveCount(0);
           expect(await page.evaluate(horizontalOverflow)).toBe(0);
         }

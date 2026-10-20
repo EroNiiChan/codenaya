@@ -101,7 +101,7 @@ const accessPill = (row: ProjectConnectionRow): AccessPill => {
     ? {
         label: "Read-only",
         className:
-          "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
       }
     : {
         label: "Read-only not enforced",
