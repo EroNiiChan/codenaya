@@ -139,7 +139,8 @@ export const PublishDialog = ({
         <DialogHeader>
           <DialogTitle>Publish to Showcase</DialogTitle>
           <DialogDescription>
-            Share your project with the community.
+            Share your project with the community. Anyone can import a copy
+            of its current files, including files you add after publishing.
           </DialogDescription>
         </DialogHeader>
 

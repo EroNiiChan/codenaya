@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { getOwnedProject } from "./projects";
 import { BUILTIN_SKILLS } from "../src/features/skills/builtin";
 import { BUILTIN_SKILL_NAMES } from "../src/features/skills/builtin/names";
 import {
@@ -41,21 +42,6 @@ export type ResolvedProjectSkill = ProjectSkillSummary & {
 // One setting per skill a project can see, so this never truncates.
 const MAX_PROJECT_SETTINGS =
   BUILTIN_SKILLS.length + MAX_LIBRARY_SKILLS + MAX_PROJECT_SKILLS;
-
-async function getOwnedProject(
-  ctx: Ctx,
-  projectId: Id<"projects">,
-  ownerId: string,
-) {
-  const project = await ctx.db.get("projects", projectId);
-  if (!project) {
-    throw new Error("Project not found");
-  }
-  if (project.ownerId !== ownerId) {
-    throw new Error("Unauthorized to access this project");
-  }
-  return project;
-}
 
 async function getOwnedSkill(ctx: Ctx, skillId: Id<"skills">, ownerId: string) {
   const skill = await ctx.db.get("skills", skillId);
