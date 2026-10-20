@@ -11,8 +11,20 @@ const QUOTES = "\"'`";
  * `fn(x)` inside `console.log(|)` keeps the outer `)`; a suggestion that
  * never closes the pair is inserted before it, as before.
  */
-export function autoClosedOverlap(suggestion: string, textAfterCursor: string): number {
-  const closers = /^[)\]}"'`]*/.exec(textAfterCursor)![0];
+export function autoClosedOverlap(
+  suggestion: string,
+  textBeforeCursor: string,
+  textAfterCursor: string
+): number {
+  const run = /^[)\]}"'`]*/.exec(textAfterCursor)![0];
+  // A quote after the cursor closes a string only when the line before the
+  // cursor left one open; otherwise it opens a string already in the file.
+  // ponytail: counts escaped quotes and apostrophes in comments too.
+  let end = 0;
+  while (end < run.length && (!QUOTES.includes(run[end]) || textBeforeCursor.split(run[end]).length % 2 === 0)) {
+    end++;
+  }
+  const closers = run.slice(0, end);
   // Brackets and strings the suggestion opened itself.
   const open: string[] = [];
   let matched = 0;

@@ -207,7 +207,12 @@ const acceptSuggestionKeymap = keymap.of([
 
       const cursor = view.state.selection.main.head;
       const line = view.state.doc.lineAt(cursor);
-      const overlap = autoClosedOverlap(suggestion, line.text.slice(cursor - line.from));
+      const offset = cursor - line.from;
+      const overlap = autoClosedOverlap(
+        suggestion,
+        line.text.slice(0, offset),
+        line.text.slice(offset)
+      );
 
       view.dispatch({
         // Replace auto-closed brackets/quotes the suggestion closes itself (#268)

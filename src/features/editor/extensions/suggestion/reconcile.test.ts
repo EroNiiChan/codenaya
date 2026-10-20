@@ -4,7 +4,7 @@ import { autoClosedOverlap } from "./reconcile";
 
 /** The line after accepting `suggestion` at the cursor between `before` and `after`. */
 const accept = (before: string, suggestion: string, after: string) =>
-  before + suggestion + after.slice(autoClosedOverlap(suggestion, after));
+  before + suggestion + after.slice(autoClosedOverlap(suggestion, before, after));
 
 describe("autoClosedOverlap (#268)", () => {
   it("replaces an auto-closed closer the suggestion spans", () => {
@@ -32,7 +32,11 @@ describe("autoClosedOverlap (#268)", () => {
   });
 
   it("replaces nothing when no closer follows the cursor", () => {
-    expect(autoClosedOverlap("a) {", "")).toBe(0);
-    expect(autoClosedOverlap("a) {", " x)")).toBe(0);
+    expect(autoClosedOverlap("a) {", "f(", "")).toBe(0);
+    expect(autoClosedOverlap("a) {", "f(", " x)")).toBe(0);
+  });
+
+  it("keeps a quote after the cursor that opens a string already in the file", () => {
+    expect(accept("const s = ", '"pre" + ', '"abc";')).toBe('const s = "pre" + "abc";');
   });
 });
