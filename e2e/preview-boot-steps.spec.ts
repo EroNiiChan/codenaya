@@ -24,7 +24,7 @@ test.describe("preview boot steps", () => {
     "Needs CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, NEXT_PUBLIC_CONVEX_URL and CODENAYA_CONVEX_INTERNAL_KEY",
   );
 
-  test("shows the boot as four steps with elapsed time and a Show logs link", async ({ page }) => {
+  test("shows the boot as four steps with elapsed time, with logs one click away", async ({ page }) => {
     test.setTimeout(120_000);
     const errors = collectConsoleErrors(page);
     await page.route("**/api/sandbox", (route) =>
@@ -59,15 +59,18 @@ test.describe("preview boot steps", () => {
     await expect(elapsed).not.toHaveText(first!, { timeout: 5_000 });
     await expect(boot).toContainText("$ npm install");
 
-    // Main keeps logs collapsed by default; opening them persists that choice.
+    // The log strip under the pane is the one way into the logs (#255); the
+    // boot screen doesn't repeat it.
     const terminal = page.locator(".xterm");
+    const showLogs = page.getByRole("button", { name: "Show logs" });
     await expect(terminal).toHaveCount(0);
-    await boot.getByRole("button", { name: "Show logs" }).click();
+    await expect(showLogs).toHaveCount(1);
+    await expect(boot.getByRole("button", { name: "Show logs" })).toHaveCount(0);
+    await showLogs.click();
     await expect(terminal).toBeVisible();
-    await expect(boot.getByRole("button", { name: "Show logs" })).toBeHidden();
     await page.getByRole("button", { name: "Hide logs" }).click();
     await expect(terminal).toHaveCount(0);
-    await expect(boot.getByRole("button", { name: "Show logs" })).toBeVisible();
+    await expect(showLogs).toHaveCount(1);
 
     expect(errors).toEqual([]);
   });
@@ -97,7 +100,7 @@ test.describe("preview boot steps", () => {
         const boot = page.getByRole("status", { name: "Starting preview" });
         await expect(boot.getByRole("listitem").nth(2)).toHaveAttribute("aria-current", "step");
         await expect.poll(() => boot.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-        await expect(boot.getByRole("button", { name: "Show logs" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Show logs" })).toHaveCount(1);
       }
     }
     ready = true;

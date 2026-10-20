@@ -110,7 +110,6 @@ export const PreviewBootSteps = ({
   history,
   log,
   firstStepLabel,
-  onShowLogs,
 }: {
   /** The phase in progress; `null` before the first one is reported. */
   phase: BootPhase | null;
@@ -119,8 +118,6 @@ export const PreviewBootSteps = ({
   log: string;
   /** WebContainer boots in the page, so its first step isn't a sandbox. */
   firstStepLabel?: string;
-  /** Reveals the terminal; omitted while it is already showing. */
-  onShowLogs?: () => void;
 }) => {
   const [startedAt] = useState(() => Date.now());
   const now = useNow(true);
@@ -279,16 +276,6 @@ export const PreviewBootSteps = ({
               ))}
             </AnimatePresence>
           </div>
-
-          {onShowLogs && (
-            <button
-              type="button"
-              onClick={onShowLogs}
-              className="self-start font-mono text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-            >
-              Show logs
-            </button>
-          )}
         </div>
       </div>
     </MotionConfig>

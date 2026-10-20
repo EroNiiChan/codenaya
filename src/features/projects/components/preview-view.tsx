@@ -170,7 +170,6 @@ export const PreviewView = ({
       bootPhase={bootPhase}
       bootHistory={sandbox.bootHistory}
       terminalOutput={terminalOutput}
-      onShowLogs={showTerminal ? undefined : toggleTerminal}
       activeEngine={activeEngine}
       previewUrl={previewUrl}
       refreshKey={refreshKey}
@@ -444,7 +443,6 @@ const PreviewContent = ({
   errorKind,
   onUseWebContainer,
   building,
-  onShowLogs,
 }: {
   error: string | null | undefined;
   isLoading: boolean;
@@ -460,8 +458,6 @@ const PreviewContent = ({
   onUseWebContainer: () => void;
   /** The first-build placeholder, shown over the engine until the run ends. */
   building: ReactNode;
-  /** Reveals the terminal; omitted while it is already showing. */
-  onShowLogs?: () => void;
 }) => (
   <div className="size-full rounded-xl overflow-hidden relative isolate">
     <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-border/50 pointer-events-none z-50" />
@@ -503,7 +499,6 @@ const PreviewContent = ({
         history={activeEngine === "sandbox" ? bootHistory : undefined}
         log={terminalOutput}
         firstStepLabel={activeEngine === "webcontainer" ? "Start WebContainer" : undefined}
-        onShowLogs={onShowLogs}
       />
     )}
 
