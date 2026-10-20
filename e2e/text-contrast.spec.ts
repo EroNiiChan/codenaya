@@ -51,7 +51,7 @@ for (const theme of ["dark", "light"] as const) {
       test.skip(!hasClerkCredentials(), "Needs CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
       await signIn(page);
       await page.goto("/settings/account");
-      await expect(page.locator(".cl-navbarButton[data-active=true]")).toBeVisible();
+      await expect(page.locator(".cl-profileSectionPrimaryButton").first()).toBeVisible();
 
       expect(await contrastViolations(page)).toEqual([]);
     });

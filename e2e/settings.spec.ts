@@ -45,6 +45,28 @@ test.describe("settings", () => {
       expect(errors).toEqual([]);
     });
 
+    for (const width of [375, 1440]) {
+      test(`account shows one nav level and no Billing at ${width}px (#144)`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await signIn(page);
+        await page.goto("/settings/account");
+        await expect(page.locator(".cl-userProfile-root")).toBeVisible();
+
+        // Clerk's own navbar (desktop sidebar and mobile menu row) is hidden.
+        await expect(page.locator(".cl-navbar")).toBeHidden();
+        await expect(page.locator(".cl-navbarMobileMenuRow")).toBeHidden();
+        await expect(page.getByRole("button", { name: "Billing" })).toHaveCount(0);
+
+        const tabs = page.getByRole("navigation", { name: "Account" });
+        await tabs.getByRole("link", { name: "Security" }).click();
+        await expect(page).toHaveURL(/\/settings\/account\/security$/);
+        await expect(tabs.locator('[aria-current="page"]')).toHaveText("Security");
+        await expect(page.locator(".cl-profileSection__activeDevices")).toBeVisible();
+      });
+    }
+
     for (const width of [375, 768, 1440]) {
       test(`every tab is deep-linkable and fits ${width}px`, async ({ page }) => {
         test.setTimeout(120_000);
