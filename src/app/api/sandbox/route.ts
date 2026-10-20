@@ -29,6 +29,11 @@ import {
 import { nodeIncompatibility } from "@/features/sandbox-preview/utils/node-compat";
 import type { SandboxErrorKind } from "@/features/sandbox-preview/utils/sandbox-error";
 import type { BootPhase } from "@/features/sandbox-preview/utils/boot-phase";
+import {
+  NOTHING_TO_PREVIEW,
+  STATIC_SERVE_COMMAND,
+  bootPlan,
+} from "@/features/sandbox-preview/utils/boot-plan";
 import { convex } from "@/lib/convex-client";
 
 import { api } from "../../../../convex/_generated/api";
@@ -272,6 +277,13 @@ export async function POST(request: Request) {
               "Ask the agent to add them to package.json.",
           );
         }
+        const plan = bootPlan(
+          files.map((file) => file.path),
+          settings?.devCommand,
+        );
+        if (plan === "none") {
+          throw new Error(NOTHING_TO_PREVIEW);
+        }
 
         // --- Boot sandbox ---
         send({ type: "status", status: "booting" });
@@ -339,7 +351,10 @@ export async function POST(request: Request) {
         // them. Both filenames are written: frameworks disagree about which they
         // load, and `.env.local` takes precedence in Next.js while Vite reads
         // `.env`. Writing both means the app works whichever it expects.
-        if (envEntries.length > 0) {
+        //
+        // Not for a static site: nothing there reads them, and the static
+        // server would hand the secrets to anyone requesting /.env (#262).
+        if (envEntries.length > 0 && plan !== "static") {
           const dotenv = serialiseDotenv(envEntries);
           await sandbox.files.write(`${WORK_DIR}/.env`, dotenv);
           await sandbox.files.write(`${WORK_DIR}/.env.local`, dotenv);
@@ -361,22 +376,32 @@ export async function POST(request: Request) {
         // --- Install dependencies ---
         send({ type: "status", status: "installing" });
         sendPhase("install");
-        send({ type: "output", data: `$ ${installCmd}\n` });
 
-        const installResult = await runInstall(sandbox);
+        if (plan === "static") {
+          send({
+            type: "output",
+            data: "No package.json found, serving index.html statically.\n\n",
+          });
+        } else {
+          send({ type: "output", data: `$ ${installCmd}\n` });
 
-        if (installResult.exitCode !== 0) {
-          throw new Error(
-            `${installCmd} failed with exit code ${installResult.exitCode}\n` +
-              installResult.stderr
-          );
+          const installResult = await runInstall(sandbox);
+
+          if (installResult.exitCode !== 0) {
+            throw new Error(
+              `${installCmd} failed with exit code ${installResult.exitCode}\n` +
+                installResult.stderr
+            );
+          }
+
+          send({ type: "output", data: "\nDependencies installed.\n\n" });
         }
 
-        send({ type: "output", data: "\nDependencies installed.\n\n" });
-
         // --- Start dev server directly without hacking configs ---
-        const devCmd = settings?.devCommand || "npm run dev";
-        const devCmdWithHost = appendHostFlag(devCmd);
+        const devCmdWithHost =
+          plan === "static"
+            ? STATIC_SERVE_COMMAND
+            : appendHostFlag(settings?.devCommand || "npm run dev");
         sendPhase("start");
         
         send({ type: "output", data: `$ ${devCmdWithHost}\n` });

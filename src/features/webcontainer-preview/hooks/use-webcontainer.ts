@@ -6,6 +6,12 @@ import {
   getFilePath
 } from "@/features/webcontainer-preview/utils/file-tree";
 import { serialiseDotenv } from "@/features/integrations/dotenv";
+import { buildFlatFileList } from "@/features/sandbox-preview/utils/file-tree";
+import {
+  NOTHING_TO_PREVIEW,
+  STATIC_SERVE_COMMAND,
+  bootPlan,
+} from "@/features/sandbox-preview/utils/boot-plan";
 
 import { Id, Doc } from "../../../../convex/_generated/dataModel";
 
@@ -102,6 +108,14 @@ export const useWebContainer = ({
           setTerminalOutput((prev) => prev + data);
         };
 
+        const plan = bootPlan(
+          buildFlatFileList(files).map((file) => file.path),
+          settings?.devCommand,
+        );
+        if (plan === "none") {
+          throw new Error(NOTHING_TO_PREVIEW);
+        }
+
         const container = await getWebContainer();
         containerRef.current = container;
 
@@ -129,29 +143,37 @@ export const useWebContainer = ({
 
         setStatus("installing");
 
-        // Parse install command (default: npm install)
-        const installCmd = settings?.installCommand || "npm install";
-        const [installBin, ...installArgs] = installCmd.split(" ");
-        appendOutput(`$ ${installCmd}\n`)
-        const installProcess = await container.spawn(installBin, installArgs);
-        installProcessRef.current = installProcess;
-        installProcess.output.pipeTo(
-          new WritableStream({
-            write(data) {
-              appendOutput(data);
-            },
-          })
-        );
-        const installExitCode = await installProcess.exit;
-
-        if (installExitCode !== 0) {
-          throw new Error(
-            `${installCmd} failed with code ${installExitCode}`
+        if (plan === "static") {
+          appendOutput("No package.json found, serving index.html statically.\n");
+        } else {
+          // Parse install command (default: npm install)
+          const installCmd = settings?.installCommand || "npm install";
+          const [installBin, ...installArgs] = installCmd.split(" ");
+          appendOutput(`$ ${installCmd}\n`)
+          const installProcess = await container.spawn(installBin, installArgs);
+          installProcessRef.current = installProcess;
+          installProcess.output.pipeTo(
+            new WritableStream({
+              write(data) {
+                appendOutput(data);
+              },
+            })
           );
+          const installExitCode = await installProcess.exit;
+
+          if (installExitCode !== 0) {
+            // The exit code arrives unsigned: -2 reads as 4294967294.
+            throw new Error(
+              `${installCmd} failed with code ${installExitCode | 0}`
+            );
+          }
         }
 
         // Parse dev command (default: npm run dev)
-        const devCmd = settings?.devCommand || "npm run dev";
+        const devCmd =
+          plan === "static"
+            ? STATIC_SERVE_COMMAND
+            : settings?.devCommand || "npm run dev";
         const [devBin, ...devArgs] = devCmd.split(" ");
         appendOutput(`\n$ ${devCmd}\n`);
         const devProcess = await container.spawn(devBin, devArgs);
