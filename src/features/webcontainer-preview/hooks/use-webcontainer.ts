@@ -13,7 +13,7 @@ import {
   bootPlan,
 } from "@/features/sandbox-preview/utils/boot-plan";
 
-import { Id, Doc } from "../../../../convex/_generated/dataModel";
+import { Doc } from "../../../../convex/_generated/dataModel";
 
 // Singleton WebContainer instance
 let webcontainerInstance: WebContainer | null = null;
@@ -31,14 +31,6 @@ const getWebContainer = async (): Promise<WebContainer> => {
 
   webcontainerInstance = await bootPromise;
   return webcontainerInstance;
-};
-
-const teardownWebContainer = () => {
-  if (webcontainerInstance) {
-    webcontainerInstance.teardown();
-    webcontainerInstance = null;
-  }
-  bootPromise = null;
 };
 
 interface UseWebContainerProps {
@@ -195,6 +187,7 @@ export const useWebContainer = ({
   }, [
     enabled,
     files,
+    publicEnv,
     restartKey,
     settings?.devCommand,
     settings?.installCommand,

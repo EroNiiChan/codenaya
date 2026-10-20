@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpIcon, ArrowDownIcon, DownloadIcon, EyeIcon } from "lucide-react";
+import { ArrowUpIcon, DownloadIcon, EyeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ProjectCover } from "@/components/project-cover";
 import type { ShowcaseProject } from "../types";
