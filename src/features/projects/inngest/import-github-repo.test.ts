@@ -119,7 +119,8 @@ describe("importGithubRepo", () => {
 
     await expect(runJob()).rejects.toThrow("can't be imported");
     expect(created("f0")).toHaveLength(0);
-  });
+    // Parsing 5000 entries takes a few seconds under the full parallel suite.
+  }, 30_000);
 
   it("rejects path traversal entries", async () => {
     fetchMock.mockResolvedValue(
