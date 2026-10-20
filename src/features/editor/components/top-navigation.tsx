@@ -31,51 +31,41 @@ const Tab = ({
 
   return (
     <div
-      role="tab"
-      tabIndex={0}
-      aria-selected={isActive}
-      onClick={() => setActiveTab(fileId)}
-      onDoubleClick={() => openFile(fileId, { pinned: true })}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setActiveTab(fileId);
-        }
-      }}
       className={cn(
-        "flex items-center justify-center gap-2 h-8 px-3 cursor-pointer text-muted-foreground group transition-all duration-200 select-none shrink-0",
+        "flex items-center gap-1.5 h-8 pl-3 pr-1.5 text-muted-foreground group transition-all duration-200 select-none shrink-0",
         "rounded-md text-sm font-medium",
         isActive
           ? "bg-muted text-foreground shadow-sm ring-1 ring-border/50 border border-transparent"
           : "hover:bg-muted/50 hover:text-foreground"
       )}
     >
-      {file === undefined ? (
-        <Spinner className="text-ring" />
-      ) : (
-        <FileIcon fileName={fileName} autoAssign className="size-4" />
-      )}
-      <span className={cn(
-        "text-sm whitespace-nowrap",
-        isPreview && "italic"
-      )}>
-        {fileName}
-      </span>
       <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          closeTab(fileId);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            e.stopPropagation();
-            closeTab(fileId);
-          }
-        }}
+        type="button"
+        aria-current={isActive ? "true" : undefined}
+        onClick={() => setActiveTab(fileId)}
+        onDoubleClick={() => openFile(fileId, { pinned: true })}
+        className="flex items-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+      >
+        {file === undefined ? (
+          <Spinner className="text-ring" />
+        ) : (
+          <FileIcon fileName={fileName} autoAssign className="size-4" />
+        )}
+        <span
+          className={cn(
+            "text-sm whitespace-nowrap",
+            isPreview && "italic"
+          )}
+        >
+          {fileName}
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${fileName}`}
+        onClick={() => closeTab(fileId)}
         className={cn(
-          "p-0.5 rounded-sm hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity",
+          "p-0.5 rounded-sm hover:bg-muted-foreground/20 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring transition-opacity cursor-pointer",
           isActive && "opacity-100"
         )}
       >
@@ -94,7 +84,9 @@ export const TopNavigation = ({
 
   return (
     <ScrollArea className="flex-1">
-      <nav role="tablist" className="bg-background flex items-center h-12 px-2 gap-2 border-b border-border/40">
+      {/* Not a tablist: each file pairs a select button with a close button,
+          and a tablist may only hold tabs (#265). */}
+      <nav aria-label="Open files" className="bg-background flex items-center h-12 px-2 gap-2 border-b border-border/40">
         {openTabs.map((fileId) => (
           <Tab
             key={fileId}
