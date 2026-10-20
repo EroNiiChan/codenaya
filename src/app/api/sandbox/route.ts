@@ -1,5 +1,7 @@
 import { AuthenticationError, RateLimitError, type Sandbox } from "e2b";
+import { z } from "zod";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
 
 import {
   serialiseDotenv,
@@ -14,6 +16,7 @@ import { requireOwnedProject } from "@/features/projects/server/require-owned-pr
 import {
   WORK_DIR,
   createProjectSandbox,
+  projectFilesSchema,
   writeProjectFiles,
 } from "@/features/sandbox-preview/server/project-sandbox";
 import {
@@ -53,6 +56,14 @@ import type { Id } from "../../../../convex/_generated/dataModel";
  *   { "type": "ready",  "sandboxId": "...", "previewUrl": "..." }
  *   { "type": "error",  "message": "...", "code": SandboxErrorKind }
  */
+
+const requestSchema = z.object({
+  files: projectFilesSchema,
+  settings: z
+    .object({ installCommand: z.string().optional(), devCommand: z.string().optional() })
+    .optional(),
+  projectId: z.string().optional(),
+});
 
 const SANDBOX_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour (E2B free plan max)
 /** A package.json sync waits this long for more edits before re-installing. */
@@ -105,20 +116,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json();
-  const {
-    files,
-    settings,
-    projectId,
-  } = body as {
-    files: { path: string; content: string }[];
-    settings?: { installCommand?: string; devCommand?: string };
-    projectId?: Id<"projects">;
-  };
+  const { data: body, invalid } = await parseJsonBody(request, requestSchema);
 
-  if (!files || files.length === 0) {
-    return Response.json({ error: "No files provided" }, { status: 400 });
+  if (invalid) {
+    return invalid;
   }
+
+  const { files, settings } = body;
+  const projectId = body.projectId as Id<"projects"> | undefined;
 
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
 

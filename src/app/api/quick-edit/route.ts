@@ -2,6 +2,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
 
 import { getFirecrawl } from "@/lib/firecrawl";
 import { withEditorModel } from "@/features/ai-providers/server/editor-model";
@@ -64,17 +65,13 @@ export async function POST(request: Request) {
       return rateLimitedResponse(rateLimit);
     }
 
-    const body = await request.json();
-    const parsed = quickEditRequestSchema.safeParse(body);
+    const { data, invalid } = await parseJsonBody(request, quickEditRequestSchema);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
-        { status: 400 }
-      );
+    if (invalid) {
+      return invalid;
     }
 
-    const { selectedCode, fullCode, instruction } = parsed.data;
+    const { selectedCode, fullCode, instruction } = data;
 
     const urls: string[] = instruction.match(URL_REGEX) || [];
     let documentationContext = "";

@@ -140,3 +140,16 @@ describe("POST /api/github/import without a linked GitHub account (#364)", () =>
     expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/github/import with a non-GitHub URL (#235)", () => {
+  it("answers 400 without creating a project", async () => {
+    vi.clearAllMocks();
+    mocks.auth.mockResolvedValue({ userId: "user_1", has: () => false });
+
+    const res = await importPOST(post({ url: "https://gitlab.com/acme/widgets" }));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid GitHub URL" });
+    expect(mocks.createProject).not.toHaveBeenCalled();
+  });
+});
