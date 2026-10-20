@@ -22,7 +22,6 @@ import {
 export interface ConvexMcpContext {
   internalKey: string;
   projectId: Id<"projects">;
-  ownerId: string;
   /** Links the approval prompt to the chat message that triggered it. */
   messageId?: Id<"messages">;
   /** Secrets to strip from the argument preview shown to the user. */
@@ -35,7 +34,6 @@ function createTransport(ctx: ConvexMcpContext): ApprovalTransport {
       const id = await convex.mutation(api.system.createMcpApproval, {
         internalKey: ctx.internalKey,
         projectId: ctx.projectId,
-        ownerId: ctx.ownerId,
         messageId: ctx.messageId,
         projectConnectionId:
           request.projectConnectionId as Id<"projectConnections">,
@@ -150,7 +148,6 @@ export function createConvexAuditSink(ctx: ConvexMcpContext): McpAuditSink {
     await convex.mutation(api.system.recordMcpToolCall, {
       internalKey: ctx.internalKey,
       projectId: ctx.projectId,
-      ownerId: ctx.ownerId,
       providerId: entry.providerId,
       toolName: entry.toolName,
       status: entry.status,

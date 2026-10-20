@@ -10,6 +10,7 @@ import {
 import { createCheckpoint } from "./checkpoints";
 import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
 import { assertOwnedImages, withImageUrls } from "./chatImages";
+import { assertProjectFolder, getProjectFile } from "./files";
 import { resolveProjectSkills } from "./skills";
 import { countProjectBuilt } from "./stats";
 
@@ -25,29 +26,6 @@ const validateInternalKey = (key: string) => {
 
   if (key !== internalKey) {
     throw new Error("Invalid internal key");
-  }
-};
-
-// Agent tools pass file ids straight from model output, so every file and
-// parent folder they touch must belong to the run's own project (#209).
-const getProjectFile = async (
-  ctx: QueryCtx,
-  projectId: Id<"projects">,
-  fileId: Id<"files">
-) => {
-  const file = await ctx.db.get("files", fileId);
-  return file && file.projectId === projectId ? file : null;
-};
-
-const assertProjectFolder = async (
-  ctx: QueryCtx,
-  projectId: Id<"projects">,
-  parentId: Id<"files"> | undefined
-) => {
-  if (!parentId) return;
-  const parent = await getProjectFile(ctx, projectId, parentId);
-  if (!parent || parent.type !== "folder") {
-    throw new Error("Parent folder not found");
   }
 };
 
@@ -85,6 +63,11 @@ export const createMessage = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (!conversation || conversation.projectId !== args.projectId) {
+      throw new Error("Conversation not found");
+    }
 
     if (args.images?.length) {
       await assertOwnedImages(ctx, args.images, {
@@ -876,51 +859,23 @@ export const createUserConnection = mutation({
 });
 
 /**
- * Replace a connection's sealed credential, used after an OAuth token refresh.
- *
- * `credentialRef` is intentionally *not* updatable: it anchors the AAD that binds
- * the ciphertext to this row, so changing it would make every existing
- * ciphertext undecryptable.
+ * The connection when it belongs to `projectId`'s owner, else `null`. Agent runs
+ * act for a project, so they may only touch that owner's credentials (#239).
  */
-export const updateUserConnectionCredential = mutation({
-  args: {
-    internalKey: v.string(),
-    connectionId: v.id("userConnections"),
-    maskedPreview: v.string(),
-    scopes: v.optional(v.array(v.string())),
-    tokenExpiresAt: v.optional(v.number()),
-    ...sealedFields,
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    const connection = await ctx.db.get("userConnections", args.connectionId);
-    if (!connection) {
-      throw new Error("Connection not found");
-    }
-
-    await ctx.db.patch("userConnections", args.connectionId, {
-      kekProvider: args.kekProvider,
-      kekKeyId: args.kekKeyId,
-      wrappedDek: args.wrappedDek,
-      ciphertext: args.ciphertext,
-      iv: args.iv,
-      authTag: args.authTag,
-      maskedPreview: args.maskedPreview,
-      ...(args.scopes !== undefined ? { scopes: args.scopes } : {}),
-      ...(args.tokenExpiresAt !== undefined
-        ? { tokenExpiresAt: args.tokenExpiresAt }
-        : {}),
-      status: "active" as const,
-      statusMessage: undefined,
-      updatedAt: Date.now(),
-    });
-  },
-});
+const projectOwnerConnectionOrNull = async (
+  ctx: QueryCtx,
+  projectId: Id<"projects">,
+  connectionId: Id<"userConnections">,
+) => {
+  const project = await ctx.db.get("projects", projectId);
+  const connection = await ctx.db.get("userConnections", connectionId);
+  return project && connection?.userId === project.ownerId ? connection : null;
+};
 
 export const updateUserConnectionStatus = mutation({
   args: {
     internalKey: v.string(),
+    projectId: v.id("projects"),
     connectionId: v.id("userConnections"),
     status: v.union(
       v.literal("active"),
@@ -932,6 +887,10 @@ export const updateUserConnectionStatus = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    if (!(await projectOwnerConnectionOrNull(ctx, args.projectId, args.connectionId))) {
+      throw new Error("Connection not found");
+    }
 
     await ctx.db.patch("userConnections", args.connectionId, {
       status: args.status,
@@ -952,6 +911,7 @@ export const updateUserConnectionStatus = mutation({
 export const claimUserConnectionRefresh = mutation({
   args: {
     internalKey: v.string(),
+    projectId: v.id("projects"),
     connectionId: v.id("userConnections"),
     leaseId: v.string(),
     refreshSkewMs: v.number(),
@@ -966,7 +926,11 @@ export const claimUserConnectionRefresh = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const connection = await ctx.db.get("userConnections", args.connectionId);
+    const connection = await projectOwnerConnectionOrNull(
+      ctx,
+      args.projectId,
+      args.connectionId,
+    );
     if (!connection) return "missing" as const;
 
     const now = Date.now();
@@ -998,6 +962,7 @@ export const claimUserConnectionRefresh = mutation({
 export const completeUserConnectionRefresh = mutation({
   args: {
     internalKey: v.string(),
+    projectId: v.id("projects"),
     connectionId: v.id("userConnections"),
     leaseId: v.string(),
     maskedPreview: v.string(),
@@ -1009,7 +974,11 @@ export const completeUserConnectionRefresh = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const connection = await ctx.db.get("userConnections", args.connectionId);
+    const connection = await projectOwnerConnectionOrNull(
+      ctx,
+      args.projectId,
+      args.connectionId,
+    );
     if (!connection || connection.refreshLeaseId !== args.leaseId) return false;
 
     await ctx.db.patch("userConnections", args.connectionId, {
@@ -1037,6 +1006,7 @@ export const completeUserConnectionRefresh = mutation({
 export const failUserConnectionRefresh = mutation({
   args: {
     internalKey: v.string(),
+    projectId: v.id("projects"),
     connectionId: v.id("userConnections"),
     leaseId: v.string(),
     reauthRequired: v.boolean(),
@@ -1045,7 +1015,11 @@ export const failUserConnectionRefresh = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const connection = await ctx.db.get("userConnections", args.connectionId);
+    const connection = await projectOwnerConnectionOrNull(
+      ctx,
+      args.projectId,
+      args.connectionId,
+    );
     if (!connection || connection.refreshLeaseId !== args.leaseId) return false;
 
     await ctx.db.patch("userConnections", args.connectionId, {
@@ -1059,31 +1033,6 @@ export const failUserConnectionRefresh = mutation({
     });
 
     return true;
-  },
-});
-
-export const markUserConnectionUsed = mutation({
-  args: {
-    internalKey: v.string(),
-    connectionId: v.id("userConnections"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    await ctx.db.patch("userConnections", args.connectionId, {
-      lastUsedAt: Date.now(),
-    });
-  },
-});
-
-export const getUserConnectionById = query({
-  args: {
-    internalKey: v.string(),
-    connectionId: v.id("userConnections"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return await ctx.db.get("userConnections", args.connectionId);
   },
 });
 
@@ -1203,6 +1152,13 @@ export const setSecretEnvVar = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    if (
+      args.sourceConnectionId &&
+      !(await projectOwnerConnectionOrNull(ctx, args.projectId, args.sourceConnectionId))
+    ) {
+      throw new Error("Connection not found");
+    }
 
     const existing = await ctx.db
       .query("projectEnvVars")
@@ -1334,7 +1290,6 @@ export const createMcpApproval = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
-    ownerId: v.string(),
     messageId: v.optional(v.id("messages")),
     projectConnectionId: v.id("projectConnections"),
     providerId: v.string(),
@@ -1345,6 +1300,14 @@ export const createMcpApproval = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    // The prompt goes to whoever owns the project, read here rather than taken
+    // from the caller, and only for a link of that project (#239).
+    const project = await ctx.db.get("projects", args.projectId);
+    const link = await ctx.db.get("projectConnections", args.projectConnectionId);
+    if (!project || link?.projectId !== args.projectId) {
+      throw new Error("Project connection not found");
+    }
 
     // Idempotent on the invocation id.
     //
@@ -1366,7 +1329,7 @@ export const createMcpApproval = mutation({
 
     return await ctx.db.insert("mcpApprovals", {
       projectId: args.projectId,
-      ownerId: args.ownerId,
+      ownerId: project.ownerId,
       messageId: args.messageId,
       projectConnectionId: args.projectConnectionId,
       providerId: args.providerId,
@@ -1447,7 +1410,6 @@ export const recordMcpToolCall = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
-    ownerId: v.string(),
     providerId: v.string(),
     toolName: v.string(),
     status: v.union(
@@ -1482,9 +1444,14 @@ export const recordMcpToolCall = mutation({
       if (existing.some((row) => row.status === args.status)) return;
     }
 
+    const project = await ctx.db.get("projects", args.projectId);
+    if (!project) {
+      throw new Error("Project not found");
+    }
+
     await ctx.db.insert("mcpToolAuditLog", {
       projectId: args.projectId,
-      ownerId: args.ownerId,
+      ownerId: project.ownerId,
       providerId: args.providerId,
       toolName: args.toolName,
       status: args.status,
