@@ -20,7 +20,8 @@ export const parseGithubRepo = (input: string): string | null => {
     } catch {
       return null;
     }
-    if (url.hostname !== "github.com") return null;
+    // Non-http schemes (ssh://) don't lowercase the host, so compare loosely.
+    if (!/^(www\.)?github\.com$/i.test(url.hostname)) return null;
     path = url.pathname;
   }
   const [owner, repo = ""] = path.replace(/^\//, "").split("/");
