@@ -54,7 +54,7 @@ export const PublishedMenu = ({
           <button aria-label="Published" title="Published" className={className}>
             <RocketIcon aria-hidden="true" className="size-3.5 text-brand" />
             <span className="hidden @3xl:inline">Published</span>
-            <ChevronDownIcon aria-hidden="true" className="size-3" />
+            <ChevronDownIcon aria-hidden="true" className="hidden @3xl:block size-3" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
