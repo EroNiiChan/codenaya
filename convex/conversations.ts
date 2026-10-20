@@ -7,6 +7,12 @@ import { withImageUrls } from "./chatImages";
 import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 
+/** Newest conversations listed per project (#53). */
+const MAX_CONVERSATIONS_LISTED = 200;
+
+/** Newest messages shown in one conversation (#53). */
+const MAX_MESSAGES_LISTED = 500;
+
 /** The conversation, when `ownerId` owns its project. */
 const getOwnedConversation = async (
   ctx: QueryCtx,
@@ -65,7 +71,7 @@ export const getByProject = query({
       .query("conversations")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .order("desc")
-      .collect();
+      .take(MAX_CONVERSATIONS_LISTED);
   },
 });
 
@@ -83,10 +89,10 @@ export const getMessages = query({
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId)
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .take(MAX_MESSAGES_LISTED);
 
-    return await withImageUrls(ctx, messages);
+    return await withImageUrls(ctx, messages.reverse());
   },
 });
 

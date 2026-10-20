@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
@@ -64,7 +64,7 @@ describe("files.createFile / createFolder", () => {
     const children = await t.run((ctx) =>
       ctx.db
         .query("files")
-        .withIndex("by_project_parent", (q) => q.eq("projectId", projectId).eq("parentId", folderId))
+        .withIndex("by_project_and_parent_and_name", (q) => q.eq("projectId", projectId).eq("parentId", folderId))
         .collect()
     );
     expect(children.map((f) => f.name).sort()).toEqual(["app.ts", "b.ts", "lib"]);
@@ -108,4 +108,45 @@ test("duplicate names throw a typed CONFLICT the explorer can show (#267)", asyn
   await expect(alice.mutation(api.files.renameFile, { id: b._id, newName: "a.ts" })).rejects.toEqual(
     conflict("A file with this name already exists in this location")
   );
+});
+
+describe("files.deleteFile", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Descendants go in scheduled batches, so no transaction holds them all (#212).
+  test("deletes a folder with more than 1,000 descendants", async () => {
+    vi.useFakeTimers();
+    const { t, alice, projectId, folderId } = await setup();
+    await t.run(async (ctx) => {
+      const lib = await ctx.db.insert("files", { projectId, parentId: folderId, name: "lib", type: "folder", updatedAt: 0 });
+      for (let i = 0; i < 1000; i++) {
+        const parentId = i % 2 ? lib : folderId;
+        await ctx.db.insert("files", { projectId, parentId, name: `f${i}.ts`, type: "file", content: "", updatedAt: 0 });
+      }
+    });
+
+    await alice.mutation(api.files.deleteFile, { id: folderId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const left = await t.run((ctx) =>
+      ctx.db.query("files").withIndex("by_project", (q) => q.eq("projectId", projectId)).collect()
+    );
+    expect(left).toEqual([]);
+  });
+});
+
+// getOwnedProject treats a project being deleted as gone (#212).
+test("file reads and writes on a project being deleted throw NOT_FOUND", async () => {
+  const { t, alice, projectId, fileId } = await setup();
+  await t.run((ctx) => ctx.db.patch("projects", projectId, { deletingAt: 1 }));
+  const notFound = expect.objectContaining({ data: expect.objectContaining({ code: "NOT_FOUND" }) });
+
+  await expect(alice.query(api.files.getFiles, { projectId })).rejects.toEqual(notFound);
+  await expect(alice.query(api.files.getFile, { id: fileId })).rejects.toEqual(notFound);
+  await expect(alice.mutation(api.files.updateFile, { id: fileId, content: "x" })).rejects.toEqual(notFound);
+  await expect(
+    alice.mutation(api.files.createFile, { projectId, name: "n.ts", content: "" })
+  ).rejects.toEqual(notFound);
 });

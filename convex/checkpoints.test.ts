@@ -96,9 +96,11 @@ describe("checkpoints", () => {
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   test("restores adds, edits, deletes and folders in one round-trip", async () => {
+    vi.useFakeTimers();
     const { t, alice } = setup();
     const { projectId, conversationId, index, src, main } = await seedProject(t);
     const before = await tree(t, projectId);
@@ -110,6 +112,7 @@ describe("checkpoints", () => {
     const lib = await t.mutation(api.system.createFolder, { internalKey: INTERNAL_KEY, projectId, name: "lib" });
     await t.mutation(api.system.createFile, { internalKey: INTERNAL_KEY, projectId, parentId: lib, name: "util.ts", content: "x" });
     await t.mutation(api.system.deleteFile, { internalKey: INTERNAL_KEY, projectId, fileId: src });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(await tree(t, projectId)).not.toEqual(before);
 
     const [checkpoint] = await alice.query(api.checkpoints.list, { projectId });

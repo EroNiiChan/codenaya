@@ -1,3 +1,6 @@
+import { v } from "convex/values";
+
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import {
   LOST_RUN_MESSAGE,
@@ -158,9 +161,13 @@ export const pruneMcpAuditLog = internalMutation({
  * confusing gaps in the project panel.
  */
 export const pruneOrphanedProjectConnections = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const links = await ctx.db.query("projectConnections").take(BATCH_SIZE);
+  // Each run walks the table from `cursor` and reschedules itself until the end,
+  // so links past the first batch are reached too (#212).
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const { page: links, isDone, continueCursor } = await ctx.db
+      .query("projectConnections")
+      .paginate({ numItems: BATCH_SIZE, cursor: args.cursor ?? null });
 
     let deleted = 0;
     for (const link of links) {
@@ -172,6 +179,14 @@ export const pruneOrphanedProjectConnections = internalMutation({
         await ctx.db.delete("projectConnections", link._id);
         deleted += 1;
       }
+    }
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.maintenance.pruneOrphanedProjectConnections,
+        { cursor: continueCursor },
+      );
     }
 
     return { scanned: links.length, deleted };

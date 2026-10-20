@@ -78,12 +78,16 @@ describe("integrations.resolveApproval", () => {
     ).rejects.toMatchObject({ data: { code: "CONFLICT", status: "approved" } });
   });
 
-  test("an approval past its deadline throws CONFLICT with status expired", async () => {
+  // Returned, not thrown: a throw rolled back the expiry write (#212).
+  test("an approval past its deadline returns expired and stays expired", async () => {
     const { alice, id } = await setup({ expiresAt: Date.now() - 1 });
 
     await expect(
       alice.mutation(api.integrations.resolveApproval, { id, decision: "approved" }),
-    ).rejects.toMatchObject({ data: { code: "CONFLICT", status: "expired" } });
+    ).resolves.toBe("expired");
+    expect(await alice.run((ctx) => ctx.db.get("mcpApprovals", id))).toMatchObject({
+      status: "expired",
+    });
   });
 
   test("another user's approval throws FORBIDDEN", async () => {
@@ -91,6 +95,36 @@ describe("integrations.resolveApproval", () => {
 
     await expect(
       bob.mutation(api.integrations.resolveApproval, { id, decision: "approved" }),
+    ).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
+  });
+});
+
+describe("integrations.listPendingApprovals", () => {
+  // Reads no clock (#53): a lapsed row stays listed until the cron marks it.
+  test("lists pending rows, oldest first, to the project owner only", async () => {
+    const { alice, bob, id } = await setup();
+    const approval = (await alice.run((ctx) => ctx.db.get("mcpApprovals", id)))!;
+    const row = {
+      projectId: approval.projectId,
+      ownerId: ALICE,
+      projectConnectionId: approval.projectConnectionId,
+      providerId: "github",
+      toolName: "delete_repo",
+      argsPreview: "{}",
+      createdAt: approval.createdAt - 1,
+      expiresAt: 0,
+    };
+    const lapsedId = await alice.run((ctx) =>
+      ctx.db.insert("mcpApprovals", { ...row, status: "pending" }),
+    );
+    await alice.run((ctx) => ctx.db.insert("mcpApprovals", { ...row, status: "denied" }));
+
+    const listed = await alice.query(api.integrations.listPendingApprovals, {
+      projectId: approval.projectId,
+    });
+    expect(listed.map((row) => row._id)).toEqual([lapsedId, id]);
+    await expect(
+      bob.query(api.integrations.listPendingApprovals, { projectId: approval.projectId }),
     ).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
   });
 });
