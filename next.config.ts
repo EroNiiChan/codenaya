@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   allowedDevOrigins: ['10.5.0.2', '192.168.1.34'],
   poweredByHeader: false,
+  // Stop `next dev` upserting its agent-rules block into AGENTS.md (#81).
+  agentRules: false,
   async headers() {
     return [
       {
