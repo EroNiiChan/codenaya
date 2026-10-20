@@ -9,7 +9,7 @@ test.describe("GitHub import", () => {
     "Needs CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
   );
 
-  test("asks to connect GitHub when the account is not linked", async ({ page }) => {
+  test("asks to connect GitHub for a private or missing repo when the account is not linked", async ({ page }) => {
     test.setTimeout(180_000);
     const errors = collectConsoleErrors(page);
 
@@ -19,10 +19,12 @@ test.describe("GitHub import", () => {
     await page.getByRole("button", { name: /Import from GitHub/ }).first().click();
 
     const dialog = page.getByRole("dialog", { name: "Import from GitHub" });
-    await dialog.getByLabel("Repository URL").fill("https://github.com/vercel/next.js");
+    await dialog.getByLabel("Repository URL").fill("https://github.com/itsmrad/codenaya-no-such-repo");
     await dialog.getByRole("button", { name: "Import" }).click();
 
+    // Public repos import without GitHub (#364), so use one that doesn't exist.
     await expect(dialog.getByText("GitHub account not connected")).toBeVisible();
+    await expect(dialog.getByText(/private or doesn't exist/)).toBeVisible();
     await dialog.getByRole("link", { name: "Connect GitHub" }).click();
     await expect(page).toHaveURL(/\/settings\/account$/);
 
