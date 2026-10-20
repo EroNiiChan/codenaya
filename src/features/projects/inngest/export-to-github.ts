@@ -60,6 +60,8 @@ export const exportToGithub = inngest.createFunction(
       throw new NonRetriableError("CODENAYA_CONVEX_INTERNAL_KEY is not configured");
     };
 
+    const githubToken = await requireJobGithubToken({ internalKey, userId, projectId });
+
     // Set status to exporting
     await step.run("set-exporting-status", async () => {
       await convex.mutation(api.system.updateExportStatus, {
@@ -69,7 +71,6 @@ export const exportToGithub = inngest.createFunction(
       });
     });
 
-    const githubToken = await requireJobGithubToken({ internalKey, userId, projectId });
     const octokit = new Octokit({ auth: githubToken });
 
     // Get authenticated user
