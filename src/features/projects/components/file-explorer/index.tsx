@@ -4,6 +4,8 @@ import { ChevronRightIcon, CopyMinusIcon, FilePlusCornerIcon, FolderPlusIcon } f
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { toast } from "sonner"
+import { convexErrorMessage } from "@/lib/convex-error"
 
 import { useProject } from "../../hooks/use-projects"
 import { Id } from "../../../../../convex/_generated/dataModel"
@@ -41,22 +43,36 @@ export const FileExplorer = ({
     const createType = creating;
     setCreating(null);
 
-    if (createType === "file") {
-      const fileId = await createFile({
-        projectId,
-        name,
-        content: "",
-        parentId: undefined,
-      });
-      if (fileId) {
-        openFile(fileId, { pinned: false });
+    // Validate against siblings in rootFiles
+    if (rootFiles) {
+      const exists = rootFiles.some(
+        (f) => f.name === name && f.type === createType
+      );
+      if (exists) {
+        toast.error(createType === "file" ? "File already exists" : "Folder already exists");
+        return;
       }
-    } else if (createType === "folder") {
-      await createFolder({
-        projectId,
-        name,
-        parentId: undefined,
-      });
+    }
+
+    try {
+      if (createType === "file") {
+        const fileId = await createFile({
+          projectId,
+          name,
+          content: "",
+          parentId: undefined,
+        });
+        // Open the confirmed id, never the optimistic one (#266).
+        if (fileId) openFile(fileId, { pinned: false });
+      } else if (createType === "folder") {
+        await createFolder({
+          projectId,
+          name,
+          parentId: undefined,
+        });
+      }
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't create the ${createType}`));
     }
   };
 
