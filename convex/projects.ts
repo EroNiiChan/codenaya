@@ -24,6 +24,12 @@ import { countProjectBuilt } from "./stats";
 /** Env vars and skill settings copied per duplicate; far above real usage. */
 const MAX_COPIED_ROWS = 500;
 
+/** Most projects listed for one owner (#53). */
+const MAX_PROJECTS_LISTED = 500;
+
+/** Most projects `getPartial` returns, whatever the client asks for (#212). */
+const MAX_PARTIAL_PROJECTS = 50;
+
 /**
  * The caller's project. Projects being deleted count as gone, so they can't
  * be opened, renamed or copied while their data is removed.
@@ -103,7 +109,7 @@ export const getPartial = query({
       .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
       .order("desc")
       .filter((q) => q.eq(q.field("deletingAt"), undefined))
-      .take(args.limit);
+      .take(Math.min(Math.max(Math.floor(args.limit), 1), MAX_PARTIAL_PROJECTS));
   },
 });
 
@@ -117,7 +123,7 @@ export const get = query({
       .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
       .order("desc")
       .filter((q) => q.eq(q.field("deletingAt"), undefined))
-      .collect();
+      .take(MAX_PROJECTS_LISTED);
   },
 });
 

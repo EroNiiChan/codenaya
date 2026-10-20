@@ -442,3 +442,17 @@ describe("typed project errors (#266)", () => {
     expect((await alice.query(api.files.getFile, { id: fileId })).name).toBe("quick.ts");
   });
 });
+
+// A client-supplied limit is clamped to 1-50 (#212).
+test("getPartial clamps its limit", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    for (let i = 0; i < 60; i++) {
+      await ctx.db.insert("projects", { name: `p${i}`, ownerId: ALICE, updatedAt: i });
+    }
+  });
+  const alice = t.withIdentity({ subject: ALICE });
+
+  expect(await alice.query(api.projects.getPartial, { limit: 1000 })).toHaveLength(50);
+  expect(await alice.query(api.projects.getPartial, { limit: -5 })).toHaveLength(1);
+});

@@ -1,10 +1,24 @@
 import { v } from "convex/values";
 
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { appError } from "./errors";
-import { releaseStorageIfUnreferenced } from "./projectCascade";
+import {
+  CASCADE_BATCH_SIZE,
+  releaseStorageIfUnreferenced,
+} from "./projectCascade";
+import { getOwnedProject } from "./projects";
 import { Doc, Id } from "./_generated/dataModel";
+
+/** Most files read from one project or folder at once (#53). */
+export const MAX_PROJECT_FILES = 5000;
 
 // File and parent ids come from the client or from model output, so every file
 // and parent folder a write touches must belong to that write's project (#209, #239).
@@ -29,25 +43,93 @@ export const assertProjectFolder = async (
   }
 };
 
+/** The caller's file and its project, which must not be mid-deletion (#212). */
+const getOwnedFile = async (
+  ctx: QueryCtx,
+  id: Id<"files">,
+  ownerId: string
+) => {
+  const file = await ctx.db.get("files", id);
+  if (!file) throw appError("NOT_FOUND", "File not found");
+  const project = await getOwnedProject(ctx, file.projectId, ownerId);
+  return { file, project };
+};
+
+/** Another file or folder with this name and type in the same folder, if any. */
+export const findSibling = async (
+  ctx: QueryCtx,
+  file: Pick<Doc<"files">, "projectId" | "parentId" | "name" | "type">,
+  exceptId?: Id<"files">
+) => {
+  const sameName = ctx.db
+    .query("files")
+    .withIndex("by_project_and_parent_and_name", (q) =>
+      q
+        .eq("projectId", file.projectId)
+        .eq("parentId", file.parentId)
+        .eq("name", file.name)
+    );
+  // Bounded: these writes keep one file and one folder per name in a folder.
+  for await (const sibling of sameName) {
+    if (sibling.type === file.type && sibling._id !== exceptId) return sibling;
+  }
+  return null;
+};
+
+/**
+ * Deletes a file, or a folder and everything under it. A folder's contents go
+ * in scheduled batches (`deleteFolderContents`), so a folder of any size stays
+ * inside one transaction's limits (#212).
+ */
+export const deleteFileTree = async (ctx: MutationCtx, file: Doc<"files">) => {
+  await ctx.db.delete("files", file._id);
+
+  // Then its blob, unless another file or checkpoint still uses it
+  if (file.storageId) {
+    await releaseStorageIfUnreferenced(ctx, file.storageId);
+  }
+
+  if (file.type === "folder") {
+    await ctx.scheduler.runAfter(0, internal.files.deleteFolderContents, {
+      projectId: file.projectId,
+      parentId: file._id,
+    });
+  }
+};
+
+/** One batch of a deleted folder's children; reschedules itself until done. */
+export const deleteFolderContents = internalMutation({
+  args: { projectId: v.id("projects"), parentId: v.id("files") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const children = await ctx.db
+      .query("files")
+      .withIndex("by_project_and_parent_and_name", (q) =>
+        q.eq("projectId", args.projectId).eq("parentId", args.parentId)
+      )
+      .take(CASCADE_BATCH_SIZE);
+
+    for (const child of children) {
+      await deleteFileTree(ctx, child);
+    }
+
+    if (children.length === CASCADE_BATCH_SIZE) {
+      await ctx.scheduler.runAfter(0, internal.files.deleteFolderContents, args);
+    }
+    return null;
+  },
+});
+
 export const getFiles = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     return await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_FILES);
   },
 });
 
@@ -59,21 +141,12 @@ export const getFilesWithUrls = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_PROJECT_FILES);
 
     return await Promise.all(
       files.map(async (file) => ({
@@ -90,22 +163,7 @@ export const getFile = query({
   args: { id: v.id("files") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const file = await ctx.db.get("files", args.id);
-
-     if (!file) {
-      throw new Error("File not found");
-    }
-
-    const project = await ctx.db.get("projects", file.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    const { file } = await getOwnedFile(ctx, args.id, identity.subject);
 
     return file;
   },
@@ -123,28 +181,13 @@ export const getFilePath = query({
   args: { id: v.id("files") },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const file = await ctx.db.get("files", args.id);
-
-    if (!file) {
-      throw new Error("File not found");
-    }
-
-    const project = await ctx.db.get("projects", file.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    const { project } = await getOwnedFile(ctx, args.id, identity.subject);
 
     const path: { _id: string; name: string }[] = [];
     let currentId: Id<"files"> | undefined = args.id;
 
     while (currentId) {
-      const file = (await ctx.db.get("files", currentId)) as 
+      const file = (await ctx.db.get("files", currentId)) as
         | Doc<"files">
         | undefined;
       // A parent from another project is never part of this file's path (#239).
@@ -159,31 +202,22 @@ export const getFilePath = query({
 });
 
 export const getFolderContents = query({
-  args: { 
+  args: {
     projectId: v.id("projects"),
     parentId: v.optional(v.id("files")),
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const files = await ctx.db
       .query("files")
-      .withIndex("by_project_parent", (q) =>
+      .withIndex("by_project_and_parent_and_name", (q) =>
         q
           .eq("projectId", args.projectId)
           .eq("parentId", args.parentId)
       )
-      .collect();
+      .take(MAX_PROJECT_FILES);
 
     // Sort: folders first, then files, alphabetically within each group
     return files.sort((a, b) => {
@@ -198,7 +232,7 @@ export const getFolderContents = query({
 });
 
 export const createFile = mutation({
-  args: { 
+  args: {
     projectId: v.id("projects"),
     parentId: v.optional(v.id("files")),
     name: v.string(),
@@ -208,34 +242,13 @@ export const createFile = mutation({
   returns: v.id("files"),
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
 
-    // Check if file with same name already exists in this parent folder
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q
-          .eq("projectId", args.projectId)
-          .eq("parentId", args.parentId)
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "file"
-    );
-
-    if (existing) throw appError("CONFLICT", "File already exists");
+    if (await findSibling(ctx, { ...args, type: "file" })) {
+      throw appError("CONFLICT", "File already exists");
+    }
 
     const now = Date.now();
 
@@ -257,41 +270,20 @@ export const createFile = mutation({
 });
 
 export const createFolder = mutation({
-  args: { 
+  args: {
     projectId: v.id("projects"),
     parentId: v.optional(v.id("files")),
     name: v.string(),
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const project = await ctx.db.get("projects", args.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     await assertProjectFolder(ctx, args.projectId, args.parentId);
 
-    // Check if folder with same name already exists in this parent folder
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q
-          .eq("projectId", args.projectId)
-          .eq("parentId", args.parentId)
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "folder"
-    );
-
-    if (existing) throw appError("CONFLICT", "Folder already exists");
+    if (await findSibling(ctx, { ...args, type: "folder" })) {
+      throw appError("CONFLICT", "Folder already exists");
+    }
 
     const now = Date.now();
 
@@ -316,39 +308,10 @@ export const renameFile = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const file = await ctx.db.get("files", args.id);
-
-    if (!file) throw new Error("File not found");
-
-    const project = await ctx.db.get("projects", file.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    const { file } = await getOwnedFile(ctx, args.id, identity.subject);
 
     // Check if a file with the new name already exists in the same parent folder
-    const siblings = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q
-          .eq("projectId", file.projectId)
-          .eq("parentId", file.parentId)
-      )
-      .collect();
-
-    const existing = siblings.find(
-      (sibling) =>
-        sibling.name === args.newName &&
-        sibling.type === file.type &&
-        sibling._id !== args.id
-    );
-
-    if (existing) {
+    if (await findSibling(ctx, { ...file, name: args.newName }, args.id)) {
       throw appError(
         "CONFLICT",
         `A ${file.type} with this name already exists in this location`
@@ -375,55 +338,9 @@ export const deleteFile = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
+    const { file } = await getOwnedFile(ctx, args.id, identity.subject);
 
-    const file = await ctx.db.get("files", args.id);
-
-    if (!file) throw new Error("File not found");
-
-    const project = await ctx.db.get("projects", file.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
-
-    // Recursively delete file/folder and all descendants
-    const deleteRecursive = async (fileId: Id<"files">) => {
-      const item = await ctx.db.get("files", fileId);
-
-      if (!item) {
-        return;
-      }
-
-      // If it's a folder, delete all children first
-       if (item.type === "folder") {
-         const children = await ctx.db
-          .query("files")
-          .withIndex("by_project_parent", (q) =>
-            q
-              .eq("projectId", item.projectId)
-              .eq("parentId", fileId)
-          )
-          .collect();
-
-          for (const child of children) {
-            await deleteRecursive(child._id);
-          }
-       }
-
-      // Delete the file/folder itself
-      await ctx.db.delete("files", fileId);
-
-      // Then its blob, unless another file or checkpoint still uses it
-      if (item.storageId) {
-        await releaseStorageIfUnreferenced(ctx, item.storageId);
-      }
-    };
-
-    await deleteRecursive(args.id);
+    await deleteFileTree(ctx, file);
 
     await ctx.db.patch("projects", file.projectId, {
       updatedAt: Date.now(),
@@ -438,20 +355,7 @@ export const updateFile = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-
-    const file = await ctx.db.get("files", args.id);
-
-    if (!file) throw new Error("File not found");
-
-    const project = await ctx.db.get("projects", file.projectId);
-
-    if (!project) {
-      throw appError("NOT_FOUND", "Project not found");
-    }
-
-    if (project.ownerId !== identity.subject) {
-      throw appError("FORBIDDEN", "Unauthorized to access this project");
-    }
+    const { file } = await getOwnedFile(ctx, args.id, identity.subject);
 
     const now = Date.now();
 

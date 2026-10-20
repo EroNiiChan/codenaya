@@ -492,3 +492,12 @@ describe("showcase.importToWorkspace", () => {
     expect(await importCountOf(t, id)).toBe(0);
   });
 });
+
+// A client-supplied limit is clamped to 1-50 (#212).
+test("getTrending clamps its limit", async () => {
+  const t = convexTest(schema, modules);
+  await seed(t, Array.from({ length: 55 }, (_, i) => ({ title: `e${i}`, publishedAt: i })));
+
+  expect(await t.query(api.showcase.getTrending, { limit: 1000 })).toHaveLength(50);
+  expect(await t.query(api.showcase.getTrending, { limit: 0 })).toHaveLength(1);
+});

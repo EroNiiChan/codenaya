@@ -8,7 +8,7 @@ import {
   LOST_RUN_MS,
 } from "../src/features/conversations/agent-steps";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -106,5 +106,63 @@ describe("failLostMessageRuns", () => {
     const result = await t.mutation(internal.maintenance.failLostMessageRuns, {});
 
     expect(result).toEqual({ scanned: 0, failed: 0 });
+  });
+});
+
+describe("pruneOrphanedProjectConnections", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Walks the whole table with a cursor, not just the first batch (#212).
+  test("reaches an orphaned link past the first batch", async () => {
+    vi.useFakeTimers();
+    const t = convexTest(schema, modules);
+    const orphanId = await t.run(async (ctx) => {
+      const projectId = await ctx.db.insert("projects", { name: "A", ownerId: "user_alice", updatedAt: START });
+      const connection = {
+        userId: "user_alice",
+        providerId: "github",
+        label: "GitHub",
+        authMode: "api_key" as const,
+        serverUrl: "https://example.com/mcp",
+        status: "active" as const,
+        credentialRef: "ref",
+        kekProvider: "local",
+        kekKeyId: "k",
+        wrappedDek: "d",
+        ciphertext: "c",
+        iv: "i",
+        authTag: "a",
+        maskedPreview: "****",
+        scopes: [],
+        createdAt: START,
+        updatedAt: START,
+      };
+      const link = (userConnectionId: Id<"userConnections">) =>
+        ctx.db.insert("projectConnections", {
+          projectId,
+          userConnectionId,
+          ownerId: "user_alice",
+          enabled: true,
+          readOnly: true,
+          providerScope: {},
+          writeApproved: false,
+          createdAt: START,
+          updatedAt: START,
+        });
+      const live = await ctx.db.insert("userConnections", connection);
+      for (let i = 0; i < 250; i++) await link(live);
+      const gone = await ctx.db.insert("userConnections", connection);
+      const orphanId = await link(gone);
+      await ctx.db.delete("userConnections", gone);
+      return orphanId;
+    });
+
+    await t.mutation(internal.maintenance.pruneOrphanedProjectConnections, {});
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    expect(await t.run((ctx) => ctx.db.get("projectConnections", orphanId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.query("projectConnections").collect())).toHaveLength(250);
   });
 });

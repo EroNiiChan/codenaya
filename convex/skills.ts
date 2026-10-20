@@ -40,6 +40,9 @@ export type ResolvedProjectSkill = ProjectSkillSummary & {
   updatedAt?: number;
 };
 
+/** Most projects counted per library skill in `listLibrary` (#212). */
+const MAX_PROJECTS_COUNTED = 100;
+
 // One setting per skill a project can see, so this never truncates.
 const MAX_PROJECT_SETTINGS =
   BUILTIN_SKILLS.length + MAX_LIBRARY_SKILLS + MAX_PROJECT_SKILLS;
@@ -200,16 +203,16 @@ export const listLibrary = query({
 
     return await Promise.all(
       skills.map(async (skill) => {
-        const settings = ctx.db
+        const enabledIn = await ctx.db
           .query("projectSkillSettings")
-          .withIndex("by_owner_and_skillKey", (q) =>
-            q.eq("ownerId", skill.ownerId).eq("skillKey", userSkillKey(skill._id)),
-          );
-        let projectCount = 0;
-        for await (const setting of settings) {
-          if (setting.enabled) projectCount++;
-        }
-        return { ...skill, projectCount };
+          .withIndex("by_owner_and_skillKey_and_enabled", (q) =>
+            q
+              .eq("ownerId", skill.ownerId)
+              .eq("skillKey", userSkillKey(skill._id))
+              .eq("enabled", true),
+          )
+          .take(MAX_PROJECTS_COUNTED);
+        return { ...skill, projectCount: enabledIn.length };
       }),
     );
   },
@@ -353,7 +356,7 @@ export const remove = mutation({
 
     const settings = ctx.db
       .query("projectSkillSettings")
-      .withIndex("by_owner_and_skillKey", (q) =>
+      .withIndex("by_owner_and_skillKey_and_enabled", (q) =>
         q.eq("ownerId", skill.ownerId).eq("skillKey", userSkillKey(skill._id)),
       );
     for await (const setting of settings) {

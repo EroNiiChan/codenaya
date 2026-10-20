@@ -40,6 +40,7 @@ describe("system file functions are scoped to the run's project", () => {
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   test("getFileById returns the file only for its own project", async () => {
@@ -83,6 +84,7 @@ describe("system file functions are scoped to the run's project", () => {
   });
 
   test("own files can still be updated, renamed and deleted", async () => {
+    vi.useFakeTimers();
     const t = convexTest(schema, modules);
     const { a } = await seedProjects(t);
     const scope = { internalKey: INTERNAL_KEY, projectId: a.projectId };
@@ -95,6 +97,7 @@ describe("system file functions are scoped to the run's project", () => {
     });
 
     await t.mutation(api.system.deleteFile, { ...scope, fileId: a.folderId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(await t.run((ctx) => ctx.db.get("files", a.fileId))).toBeNull();
   });
 
@@ -169,5 +172,51 @@ describe("system file functions are scoped to the run's project", () => {
       projectId: a.projectId,
       parentId: a.folderId,
     });
+  });
+});
+
+describe("system bounded reads and deletes", () => {
+  beforeEach(() => {
+    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", INTERNAL_KEY);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // Reads only the newest `limit` messages, capped at 50 (#53).
+  test("getRecentMessages returns the newest messages, oldest first", async () => {
+    const t = convexTest(schema, modules);
+    const conversationId = await t.run(async (ctx) => {
+      const projectId = await ctx.db.insert("projects", { name: "A", ownerId: "user_alice", updatedAt: 0 });
+      const conversationId = await ctx.db.insert("conversations", { projectId, title: "c", updatedAt: 0 });
+      for (let i = 0; i < 60; i++) {
+        await ctx.db.insert("messages", { conversationId, projectId, role: "user", content: `m${i}` });
+      }
+      return conversationId;
+    });
+    const recent = (limit: number) =>
+      t.query(api.system.getRecentMessages, { internalKey: INTERNAL_KEY, conversationId, limit });
+
+    expect((await recent(3)).map((m) => m.content)).toEqual(["m57", "m58", "m59"]);
+    const capped = await recent(1000);
+    expect(capped).toHaveLength(50);
+    expect(capped.at(-1)!.content).toBe("m59");
+  });
+
+  // One bounded batch per call; the caller repeats until done (#212).
+  test("cleanup deletes the project's files in batches", async () => {
+    const t = convexTest(schema, modules);
+    const projectId = await t.run(async (ctx) => {
+      const projectId = await ctx.db.insert("projects", { name: "A", ownerId: "user_alice", updatedAt: 0 });
+      for (let i = 0; i < 150; i++) {
+        await ctx.db.insert("files", { projectId, name: `f${i}`, type: "file", content: "", updatedAt: 0 });
+      }
+      return projectId;
+    });
+    const cleanup = () => t.mutation(api.system.cleanup, { internalKey: INTERNAL_KEY, projectId });
+
+    expect(await cleanup()).toEqual({ deleted: 100, done: false });
+    expect(await cleanup()).toEqual({ deleted: 50, done: true });
+    expect(await t.run((ctx) => ctx.db.query("files").collect())).toEqual([]);
   });
 });
