@@ -25,10 +25,15 @@ import { ProjectsGrid } from "./projects-grid";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export const ProjectsView = () => {
+interface ProjectsViewProps {
+  /** A validated `owner/repo` from an "Open in Codenaya" link (`/?import=`). */
+  linkedRepo?: string | null;
+}
+
+export const ProjectsView = ({ linkedRepo = null }: ProjectsViewProps) => {
   const [commandDialogOpen, setCommandDialogOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [importRepo, setImportRepo] = useState<string | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(linkedRepo !== null);
+  const [importRepo, setImportRepo] = useState(linkedRepo);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const isMac = useIsMac();
   const { user } = useUser();
@@ -47,17 +52,14 @@ export const ProjectsView = () => {
     else if (pendingPrompt) void createProject(pendingPrompt);
   }, [createProject]);
 
-  // A repo from an "Open in Codenaya" link (/import?repo=), passed as
-  // `?import=` or kept across sign-up: open the import dialog prefilled. The
-  // user still confirms; nothing is imported here.
+  // A repo from an "Open in Codenaya" link kept across sign-up, when the
+  // visitor didn't come back through /import. The user still confirms;
+  // nothing is imported here.
   useEffect(() => {
-    const pendingImport = takePendingImport();
-    const param = new URLSearchParams(window.location.search).get("import");
-    const repo = parseGithubRepo(param ?? pendingImport ?? "");
-    if (param !== null) window.history.replaceState(null, "", "/");
+    const repo = parseGithubRepo(takePendingImport() ?? "");
     if (!repo) return;
-    // Browser-only, take-once state (URL + localStorage) can only be read
-    // after mount; a lazy initialiser would run twice in Strict Mode.
+    // Take-once localStorage state can only be read after mount; a lazy
+    // initialiser would run twice in Strict Mode.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImportRepo(repo);
     setImportDialogOpen(true);

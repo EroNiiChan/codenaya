@@ -18,12 +18,15 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 
 import { GITHUB_NOT_LINKED } from "../constants";
+import { parseGithubRepo } from "../utils/github-repo";
 import { GithubNotLinkedAlert } from "./github-not-linked-alert";
 
 import { Id } from "../../../../convex/_generated/dataModel";
 
 const formSchema = z.object({
-  url: z.url("Please enter a valid URL"),
+  url: z
+    .url({ message: "Please enter a valid URL", abort: true })
+    .refine((url) => parseGithubRepo(url) !== null, "Enter a GitHub repository URL like https://github.com/owner/repo"),
 });
 
 interface ImportGithubDialogProps {
