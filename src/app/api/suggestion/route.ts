@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { requireUserId } from "@/features/auth/server/require-user-id";
-import { parseJsonBody } from "@/lib/parse-json-body";
+import { codeText, parseJsonBody } from "@/lib/parse-json-body";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -21,12 +21,12 @@ const suggestionSchema = z.object({
 
 const suggestionRequestSchema = z.object({
   fileName: z.string(),
-  code: z.string().min(1, "code is required"),
-  currentLine: z.string(),
-  previousLines: z.string().optional(),
-  textBeforeCursor: z.string(),
-  textAfterCursor: z.string(),
-  nextLines: z.string().optional(),
+  code: codeText.min(1, "code is required"),
+  currentLine: codeText,
+  previousLines: codeText.optional(),
+  textBeforeCursor: codeText,
+  textAfterCursor: codeText,
+  nextLines: codeText.optional(),
   lineNumber: z.coerce.number(),
 });
 

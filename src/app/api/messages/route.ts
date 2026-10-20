@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
-import { parseJsonBody } from "@/lib/parse-json-body";
+import { parseJsonBody, promptText } from "@/lib/parse-json-body";
+import {
+  AGENT_MESSAGE_RATE_LIMIT,
+  checkRateLimit,
+  rateLimitedResponse,
+} from "@/lib/rate-limit";
 
 import { convex } from "@/lib/convex-client";
 import { detectCredential } from "@/features/integrations/credential-guard";
@@ -23,7 +28,7 @@ import { Id } from "../../../../convex/_generated/dataModel";
 
 const requestSchema = z.object({
   conversationId: z.string(),
-  message: z.string(),
+  message: promptText,
   model: modelChoiceSchema,
   // Storage ids of images registered through api.chatImages.register.
   images: z.array(z.string()).max(MAX_CHAT_IMAGES).optional(),
@@ -36,6 +41,11 @@ export async function POST(request: Request) {
 
   if (unauthorized) {
     return unauthorized;
+  }
+
+  const rateLimit = checkRateLimit(userId, AGENT_MESSAGE_RATE_LIMIT);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit);
   }
 
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -141,6 +151,7 @@ export async function POST(request: Request) {
     messageId: assistantMessageId,
     conversationId: conversation._id,
     projectId,
+    ownerId: userId,
     message,
     model: runModel,
     mode,

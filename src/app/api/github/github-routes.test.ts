@@ -24,6 +24,15 @@ vi.mock("@/inngest/client", () => ({
 import { POST as importPOST } from "./import/route";
 import { POST as exportPOST } from "./export/route";
 import { GITHUB_NOT_LINKED } from "@/features/projects/constants";
+import {
+  GITHUB_IMPORT_RATE_LIMIT,
+  checkRateLimit,
+  resetRateLimits,
+} from "@/lib/rate-limit";
+
+beforeEach(() => {
+  resetRateLimits();
+});
 
 const post = (body: unknown) =>
   new Request("http://localhost/api/github", {
@@ -138,6 +147,18 @@ describe("POST /api/github/import without a linked GitHub account (#364)", () =>
     });
     expect(mocks.createProject).not.toHaveBeenCalled();
     expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("answers 429 past the per-user rate limit without creating a project (#242)", async () => {
+    for (let i = 0; i < GITHUB_IMPORT_RATE_LIMIT.limit; i++) {
+      checkRateLimit("user_1", GITHUB_IMPORT_RATE_LIMIT);
+    }
+
+    const res = await importRepo();
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(mocks.createProject).not.toHaveBeenCalled();
   });
 });
 

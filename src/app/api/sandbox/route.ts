@@ -2,6 +2,11 @@ import { AuthenticationError, RateLimitError, type Sandbox } from "e2b";
 import { z } from "zod";
 import { requireUserId } from "@/features/auth/server/require-user-id";
 import { parseJsonBody } from "@/lib/parse-json-body";
+import {
+  SANDBOX_CREATE_RATE_LIMIT,
+  checkRateLimit,
+  rateLimitedResponse,
+} from "@/lib/rate-limit";
 
 import {
   serialiseDotenv,
@@ -14,7 +19,9 @@ import {
 import { createStreamRedactor } from "@/features/integrations/server/env/stream-redactor";
 import { requireOwnedProject } from "@/features/projects/server/require-owned-project";
 import {
+  MAX_LIVE_SANDBOXES,
   WORK_DIR,
+  atLiveSandboxCap,
   createProjectSandbox,
   projectFilesSchema,
   writeProjectFiles,
@@ -102,6 +109,11 @@ export async function POST(request: Request) {
     return unauthorized;
   }
 
+  const rateLimit = checkRateLimit(userId, SANDBOX_CREATE_RATE_LIMIT);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit);
+  }
+
   const e2bApiKey = process.env.E2B_API_KEY?.trim();
 
   if (!e2bApiKey) {
@@ -146,6 +158,18 @@ export async function POST(request: Request) {
     if (notFound) {
       return notFound;
     }
+  }
+
+  if (await atLiveSandboxCap(e2bApiKey, userId)) {
+    return Response.json(
+      {
+        error:
+          `You already have ${MAX_LIVE_SANDBOXES} cloud previews running. ` +
+          "Close one, or wait for it to expire, then try again.",
+        code: "rate_limit" satisfies SandboxErrorKind,
+      },
+      { status: 429 },
+    );
   }
 
   const encoder = new TextEncoder();

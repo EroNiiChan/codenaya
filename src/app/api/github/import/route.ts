@@ -2,6 +2,11 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireUserId } from "@/features/auth/server/require-user-id";
 import { parseJsonBody } from "@/lib/parse-json-body";
+import {
+  GITHUB_IMPORT_RATE_LIMIT,
+  checkRateLimit,
+  rateLimitedResponse,
+} from "@/lib/rate-limit";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
@@ -31,6 +36,11 @@ export async function POST(request: Request) {
 
   if (unauthorized) {
     return unauthorized;
+  }
+
+  const rateLimit = checkRateLimit(userId, GITHUB_IMPORT_RATE_LIMIT);
+  if (!rateLimit.allowed) {
+    return rateLimitedResponse(rateLimit);
   }
 
   const { data, invalid } = await parseJsonBody(request, requestSchema);
