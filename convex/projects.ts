@@ -35,6 +35,7 @@ export async function getOwnedProject(
 ) {
   const project = await ctx.db.get("projects", id);
 
+  // Typed, so the project page can tell "gone" from other errors (#266).
   if (!project || project.deletingAt !== undefined) {
     throw appError("NOT_FOUND", "Project not found");
   }

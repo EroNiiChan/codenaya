@@ -323,9 +323,9 @@ export const unpublish = mutation({
     const identity = await verifyAuth(ctx);
 
     const item = await ctx.db.get(args.id);
-    if (!item) throw new Error("Not found");
+    if (!item) throw appError("NOT_FOUND", "Not found");
     if (item.ownerId !== identity.subject) {
-      throw new Error("Unauthorized");
+      throw appError("FORBIDDEN", "Unauthorized");
     }
 
     await ctx.db.patch(args.id, {

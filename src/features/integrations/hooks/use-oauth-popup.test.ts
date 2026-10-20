@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import ky, { HTTPError } from "ky";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { shouldAcceptCallbackMessage } from "./use-oauth-popup";
+import {
+  requestAuthorizationUrl,
+  shouldAcceptCallbackMessage,
+} from "./use-oauth-popup";
+
+vi.mock("ky", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ky")>()),
+  default: { post: vi.fn() },
+}));
 
 /**
  * The popup flow's security boundary.
@@ -137,5 +146,64 @@ describe("shouldAcceptCallbackMessage", () => {
         data: { nonsense: true },
       }),
     ).toBe(false);
+  });
+});
+
+describe("requestAuthorizationUrl", () => {
+  const body = { providerId: "linear" };
+  const respond = (json: () => Promise<unknown>) =>
+    vi.mocked(ky.post).mockReturnValue({ json } as never);
+
+  beforeEach(() => {
+    vi.mocked(ky.post).mockReset();
+  });
+
+  it("closes the popup and surfaces the route's error when the start fails", async () => {
+    // #82: the blank placeholder window must not outlive a failed start.
+    const response = new Response(
+      JSON.stringify({
+        ok: false,
+        error: "OAuth isn't set up for this server yet.",
+      }),
+      { status: 500 },
+    );
+    respond(() =>
+      Promise.reject(
+        new HTTPError(response, new Request("http://localhost/"), {} as never),
+      ),
+    );
+    const popup = { close: vi.fn() };
+
+    await expect(requestAuthorizationUrl(popup, body)).resolves.toEqual({
+      ok: false,
+      error: "OAuth isn't set up for this server yet.",
+    });
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("closes the popup when a 200 carries no usable authorization URL", async () => {
+    respond(() => Promise.resolve({ ok: true }));
+    const popup = { close: vi.fn() };
+
+    const result = await requestAuthorizationUrl(popup, body);
+
+    expect(result.ok).toBe(false);
+    expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the popup open on success", async () => {
+    respond(() =>
+      Promise.resolve({
+        ok: true,
+        authorizationUrl: "https://auth.example.com/authorize?x=1",
+      }),
+    );
+    const popup = { close: vi.fn() };
+
+    await expect(requestAuthorizationUrl(popup, body)).resolves.toEqual({
+      ok: true,
+      authorizationUrl: "https://auth.example.com/authorize?x=1",
+    });
+    expect(popup.close).not.toHaveBeenCalled();
   });
 });
