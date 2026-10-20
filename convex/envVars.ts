@@ -8,7 +8,7 @@ import {
 import { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import { assertProjectOwner } from "./integrations";
+import { getOwnedProject } from "./projects";
 
 /**
  * Project environment variables.
@@ -93,7 +93,7 @@ export const listEnvVars = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args): Promise<EnvVarSummary[]> => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const vars = await ctx.db
       .query("projectEnvVars")
@@ -116,7 +116,7 @@ export const listPublicEnvVars = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args): Promise<Array<{ key: string; value: string }>> => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const vars = await ctx.db
       .query("projectEnvVars")
@@ -141,7 +141,7 @@ export const countWithheldSecrets = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args): Promise<number> => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const vars = await ctx.db
       .query("projectEnvVars")
@@ -174,7 +174,7 @@ export const setPublicEnvVar = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-    await assertProjectOwner(ctx, args.projectId, identity.subject);
+    await getOwnedProject(ctx, args.projectId, identity.subject);
 
     const key = args.key.trim();
     assertValidEnvKey(key);

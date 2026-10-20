@@ -58,6 +58,24 @@ describe("setEnvVar tool", () => {
     expect(step.run).toHaveBeenCalledTimes(1);
   });
 
+  it("tells the model to read env vars per framework and never from browser code (#330)", async () => {
+    vi.stubEnv("CODENAYA_LOCAL_KEK", randomBytes(32).toString("base64"));
+    mocks.mutation.mockResolvedValue(null);
+
+    const publicResult = await setEnvVar(
+      "VITE_API_URL",
+      "https://api.example.com",
+    );
+    expect(publicResult).toContain(
+      "import.meta.env.VITE_API_URL in a Vite app",
+    );
+
+    const secretResult = await setEnvVar("STRIPE_SECRET_KEY");
+    expect(secretResult).toMatch(/^Stored secret STRIPE_SECRET_KEY/);
+    expect(secretResult).toContain("Never read it in browser code");
+    expect(secretResult).not.toContain("import.meta.env");
+  });
+
   it("keeps transient failures inside the step so Inngest can retry them", async () => {
     vi.stubEnv("CODENAYA_LOCAL_KEK", randomBytes(32).toString("base64"));
     mocks.mutation.mockRejectedValue(new Error("fetch failed"));

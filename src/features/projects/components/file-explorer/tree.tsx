@@ -4,6 +4,8 @@ import { ChevronRightIcon } from "lucide-react";
 import { FileIcon, FolderIcon } from "@react-symbols/icons/utils";
 
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { convexErrorMessage } from "@/lib/convex-error";
 
 import {
   useCreateFile,
@@ -53,32 +55,52 @@ export const Tree = ({
     enabled: item.type === "folder" && isOpen,
   });
 
-  const handleRename = (newName: string) => {
+  const handleRename = async (newName: string) => {
     setIsRenaming(false);
 
     if (newName === item.name) {
       return;
     }
 
-    renameFile({ id: item._id, newName });
+    try {
+      await renameFile({ id: item._id, newName });
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't rename ${item.name}`));
+    }
   };
 
-  const handleCreate = (name: string) => {
+  const handleCreate = async (name: string) => {
+    const createType = creating;
     setCreating(null);
 
-    if (creating === "file") {
-      createFile({
-        projectId,
-        name,
-        content: "",
-        parentId: item._id,
-      });
-    } else {
-      createFolder({
-        projectId,
-        name,
-        parentId: item._id,
-      });
+    // Validate against siblings in folderContents
+    if (folderContents) {
+      const exists = folderContents.some(
+        (f) => f.name === name && f.type === createType
+      );
+      if (exists) {
+        toast.error(createType === "file" ? "File already exists" : "Folder already exists");
+        return;
+      }
+    }
+
+    try {
+      if (createType === "file") {
+        await createFile({
+          projectId,
+          name,
+          content: "",
+          parentId: item._id,
+        });
+      } else if (createType === "folder") {
+        await createFolder({
+          projectId,
+          name,
+          parentId: item._id,
+        });
+      }
+    } catch (error) {
+      toast.error(convexErrorMessage(error, `Couldn't create the ${createType}`));
     }
   };
 

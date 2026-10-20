@@ -3,6 +3,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { getOwnedProject } from "./projects";
+import { getUnclaimedStorage } from "./projectCascade";
 import {
   MAX_CHAT_IMAGES,
   MAX_CHAT_IMAGE_BYTES,
@@ -20,17 +22,7 @@ const requireOwnedProject = async (
   projectId: Id<"projects">,
 ) => {
   const identity = await verifyAuth(ctx);
-  const project = await ctx.db.get("projects", projectId);
-
-  if (!project) {
-    throw new Error("Project not found");
-  }
-
-  if (project.ownerId !== identity.subject) {
-    throw new Error("Unauthorized to access this project");
-  }
-
-  return project;
+  return await getOwnedProject(ctx, projectId, identity.subject);
 };
 
 export const generateUploadUrl = mutation({
@@ -52,19 +44,9 @@ export const register = mutation({
   },
   handler: async (ctx, args) => {
     const project = await requireOwnedProject(ctx, args.projectId);
-
-    const claimed = await ctx.db
-      .query("chatImages")
-      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
-      .unique();
-    if (claimed) {
-      throw new Error("Image already registered");
-    }
-
-    const file = await ctx.db.system.get("_storage", args.storageId);
-    if (!file) {
-      throw new Error("Upload not found");
-    }
+    // Refuses a blob any row holds, so the delete below never destroys
+    // another project's file or preview (#211).
+    const file = await getUnclaimedStorage(ctx, args.storageId);
 
     if (!isChatImageType(file.contentType) || file.size > MAX_CHAT_IMAGE_BYTES) {
       await ctx.storage.delete(args.storageId);

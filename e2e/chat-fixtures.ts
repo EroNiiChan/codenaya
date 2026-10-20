@@ -34,6 +34,11 @@ const READ_FILES = [
 
 const ASSISTANT_MARKDOWN = `Fixed the import. The landing page lives at \`src/pages/index.tsx\`, see https://vitejs.dev/guide/features.html#${"anchor-".repeat(20)}end for details.
 
+1. Install the dependencies
+2. Add the pricing section
+   - Keep the bullet marker
+3. Run the dev server
+
 \`\`\`ts
 export default defineConfig({ plugins: [react()], resolve: { alias: { "@": path.resolve(__dirname, "./src"), "~components": path.resolve(__dirname, "./src/components") } } });
 \`\`\``;

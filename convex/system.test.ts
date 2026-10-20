@@ -111,6 +111,35 @@ describe("system file functions are scoped to the run's project", () => {
     expect(files).toHaveLength(4);
   });
 
+  test("createBinaryFile refuses an unknown blob or one another project holds (#211)", async () => {
+    const t = convexTest(schema, modules);
+    const { a, b } = await seedProjects(t);
+    const scope = { internalKey: INTERNAL_KEY, projectId: a.projectId, name: "logo.png" };
+    const { foreign, missing } = await t.run(async (ctx) => {
+      const foreign = await ctx.storage.store(new Blob(["png"]));
+      await ctx.db.insert("files", {
+        projectId: b.projectId,
+        name: "logo.png",
+        type: "file",
+        storageId: foreign,
+        updatedAt: 0,
+      });
+      const missing = await ctx.storage.store(new Blob(["png"]));
+      await ctx.storage.delete(missing);
+      return { foreign, missing };
+    });
+
+    for (const storageId of [foreign, missing]) {
+      await expect(t.mutation(api.system.createBinaryFile, { ...scope, storageId })).rejects.toThrow(
+        "Upload not found"
+      );
+    }
+
+    const fresh = await t.run((ctx) => ctx.storage.store(new Blob(["png"])));
+    const id = await t.mutation(api.system.createBinaryFile, { ...scope, storageId: fresh });
+    expect(await t.run((ctx) => ctx.db.get("files", id))).toMatchObject({ storageId: fresh });
+  });
+
   test("create functions reject a file as the parent and accept an own folder", async () => {
     const t = convexTest(schema, modules);
     const { a } = await seedProjects(t);

@@ -212,6 +212,12 @@ async function purgeUserDataBatch(
     .take(CASCADE_BATCH_SIZE);
   if (await deleteRows(ctx, "showcaseViews", views)) return false;
 
+  const imports = await ctx.db
+    .query("showcaseImports")
+    .withIndex("by_userId_and_showcaseProjectId", (q) => q.eq("userId", userId))
+    .take(CASCADE_BATCH_SIZE);
+  if (await deleteRows(ctx, "showcaseImports", imports)) return false;
+
   const connection = await ctx.db
     .query("userConnections")
     .withIndex("by_user", (q) => q.eq("userId", userId))
