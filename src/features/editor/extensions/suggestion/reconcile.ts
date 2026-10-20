@@ -73,8 +73,10 @@ export function reconcileSuggestion(
   const replace = autoClosedOverlap(suggestion, textBeforeCursor, textAfterCursor);
   const signature = /^(.*[\w)\]"'`])\s*\{$/.exec(suggestion)?.[1];
   const isHeader = BLOCK_HEADER.test(textBeforeCursor);
+  // A callback opened inside the header (`items.some(function (x) {`) owns the `{`.
+  const opensCall = suggestion.split("(").length > suggestion.split(")").length;
 
-  if (replace === 0 && isHeader && textAfterCursor.startsWith(")") && signature && !suggestion.includes("=>")) {
+  if (replace === 0 && isHeader && !opensCall && textAfterCursor.startsWith(")") && signature && !suggestion.includes("=>")) {
     return { insert: `${signature})${suggestion.slice(signature.length)}`, replace: 1 };
   }
   return { insert: suggestion, replace };
