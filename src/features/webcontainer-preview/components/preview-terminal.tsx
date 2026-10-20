@@ -57,8 +57,7 @@ export const PreviewTerminal = ({ output }: PreviewTerminalProps) => {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-    // "output" and "resolvedTheme" do not need to be dependencies since they
-    // are only used on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- output and resolvedTheme are only read on mount; the effects below follow later changes
   }, []);
 
   // Follow theme changes on the open terminal
