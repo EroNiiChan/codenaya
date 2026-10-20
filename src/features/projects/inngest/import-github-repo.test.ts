@@ -97,6 +97,52 @@ describe("importGithubRepo", () => {
     expect(created("index.ts")[0][1]).toMatchObject({ content: "export {};", parentId: "id:src" });
   });
 
+  it("creates a parent folder before a child listed ahead of it", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        tarball([
+          { path: "src/ui/", type: "Directory" },
+          { path: "src/", type: "Directory" },
+          { path: "src/ui/button.ts", body: "export {};" },
+        ])
+      )
+    );
+
+    await runJob();
+
+    expect(created("src")[0][1]).toMatchObject({ parentId: undefined });
+    expect(created("ui")[0][1]).toMatchObject({ parentId: "id:src" });
+    expect(created("button.ts")[0][1]).toMatchObject({ parentId: "id:ui" });
+  });
+
+  it("uploads a binary file to storage instead of writing it as text", async () => {
+    // ky posts a Request object; the archive download passes a URL string.
+    fetchMock.mockImplementation(async (input: string | Request) =>
+      input instanceof Request
+        ? Response.json({ storageId: "storage_1" })
+        : new Response(tarball([{ path: "logo.png", body: "\x89PNG\x00\x00\x01" }]))
+    );
+    mocks.mutation.mockImplementation(async (_fn, args) =>
+      args.name ? `id:${args.name}` : args.projectId ? { deleted: 0, done: true } : "https://upload.example/"
+    );
+
+    await runJob();
+
+    expect(created("logo.png")[0][1]).toMatchObject({ storageId: "storage_1" });
+    expect(created("logo.png")[0][1]).not.toHaveProperty("content");
+  });
+
+  it("clears the previous import in batches before writing", async () => {
+    mocks.mutation
+      .mockResolvedValueOnce({ deleted: 100, done: false })
+      .mockResolvedValueOnce({ deleted: 3, done: true });
+
+    await runJob();
+
+    const firstWrite = mocks.mutation.mock.calls.findIndex(([, args]) => args.name);
+    expect(firstWrite).toBe(2);
+  });
+
   it("uses the linked account's token", async () => {
     mocks.getUserOauthAccessToken.mockResolvedValue({ data: [{ token: "gho_test" }] });
 
