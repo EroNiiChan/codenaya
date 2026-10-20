@@ -56,7 +56,8 @@ describe("scrapeUrls tool without FIRECRAWL_API_KEY", () => {
     expect(step.run).not.toHaveBeenCalled();
   });
 
-  it("rejects more than 3 URLs before scraping (#242)", async () => {
+  it("rejects more than MAX_SCRAPE_URLS URLs before scraping (#242)", async () => {
+    const { MAX_SCRAPE_URLS } = await import("./scrape-limits");
     const { createScrapeUrlsTool } = await import(
       "@/features/conversations/inngest/tools/scrape-urls"
     );
@@ -64,11 +65,11 @@ describe("scrapeUrls tool without FIRECRAWL_API_KEY", () => {
 
     const tool = createScrapeUrlsTool();
     const result = await tool.handler(
-      { urls: ["a", "b", "c", "d"].map((p) => `https://example.com/${p}`) },
+      { urls: Array.from({ length: MAX_SCRAPE_URLS + 1 }, (_, i) => `https://example.com/${i}`) },
       { step } as unknown as Parameters<typeof tool.handler>[1]
     );
 
-    expect(result).toMatch(/^Error: Scrape at most 3 URLs/);
+    expect(result).toBe(`Error: Scrape at most ${MAX_SCRAPE_URLS} URLs at a time`);
     expect(step.run).not.toHaveBeenCalled();
   });
 });

@@ -166,10 +166,10 @@ describe("editor AI input caps (#242)", () => {
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 
-  it("quick-edit scrapes at most 3 URLs and truncates each page", async () => {
-    const scrape = vi.fn(async () => ({ markdown: "y".repeat(MAX_SCRAPED_CHARS + 1) }));
+  it("quick-edit scrapes at most MAX_SCRAPE_URLS URLs and truncates each page", async () => {
+    const scrape = vi.fn(async () => ({ markdown: "~".repeat(MAX_SCRAPED_CHARS) + "TAIL" }));
     mocks.getFirecrawl.mockReturnValue({ scrape });
-    const urls = ["a", "b", "c", "d"].map((p) => `https://example.com/${p}`);
+    const urls = Array.from({ length: MAX_SCRAPE_URLS + 1 }, (_, i) => `https://example.com/${i}`);
 
     const res = await quickEditPOST(
       post({ selectedCode: "let a = 1", instruction: `follow ${urls.join(" ")}` }),
@@ -178,7 +178,8 @@ describe("editor AI input caps (#242)", () => {
     expect(res.status).toBe(200);
     expect(scrape).toHaveBeenCalledTimes(MAX_SCRAPE_URLS);
     const [{ prompt }] = mocks.generateObject.mock.calls[0];
-    expect(prompt).toContain("y".repeat(MAX_SCRAPED_CHARS));
-    expect(prompt).not.toContain("y".repeat(MAX_SCRAPED_CHARS + 1));
+    // Counted, not matched: `toContain` on long runs of one char is very slow.
+    expect(prompt.split("~").length - 1).toBe(MAX_SCRAPE_URLS * MAX_SCRAPED_CHARS);
+    expect(prompt).not.toContain("TAIL");
   });
 });
