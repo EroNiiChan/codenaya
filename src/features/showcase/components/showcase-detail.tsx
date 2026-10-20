@@ -163,7 +163,7 @@ export const ShowcaseDetail = ({ project, TitleAs = "h1" }: ShowcaseDetailProps)
             <Button
               onClick={remix}
               disabled={isRemixing || isAuthLoading}
-              className="gap-2 bg-brand text-white hover:bg-brand/90"
+              className="gap-2 bg-brand text-brand-foreground hover:bg-brand/90"
             >
               <GitForkIcon className="size-4" />
               {isRemixing ? "Remixing..." : "Remix"}
@@ -180,7 +180,7 @@ export const ShowcaseDetail = ({ project, TitleAs = "h1" }: ShowcaseDetailProps)
         <div className="space-y-3">
           {displayProject.techStack.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 Tech Stack
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -194,7 +194,7 @@ export const ShowcaseDetail = ({ project, TitleAs = "h1" }: ShowcaseDetailProps)
           )}
           {displayProject.designStyle.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 Design Style
               </p>
               <div className="flex flex-wrap gap-1.5">

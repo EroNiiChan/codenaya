@@ -50,7 +50,7 @@ const CommunityStrip = () => {
     <section aria-labelledby="community-heading" className="relative py-14 md:py-20">
       <div className="max-w-6xl mx-auto px-6 md:px-8">
         <div className="text-center mb-12 md:mb-16">
-          <p className="text-xs uppercase tracking-[0.25em] text-brand font-mono mb-4">
+          <p className="text-xs uppercase tracking-[0.25em] text-brand-text font-mono mb-4">
             Community
           </p>
           <h2

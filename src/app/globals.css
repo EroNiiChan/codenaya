@@ -49,6 +49,7 @@
   --radius-xl: calc(var(--radius) + 4px);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-brand-text: var(--brand-text);
 }
 
 /* Chat motion: the live-run pixel loader and the entry of newly arrived rows.
@@ -109,6 +110,8 @@
   --ring: #e8824f;
   --brand: #e8824f;
   --brand-foreground: #1a1a1a;
+  /* Brand-coloured text: --brand is 2.56:1 on --background, this is 5.87:1 (#216). */
+  --brand-text: #a24415;
   --sidebar: #ffffff;
   --sidebar-foreground: #1a1a1a;
   --sidebar-border: rgba(26, 26, 26, 0.08);
@@ -145,6 +148,7 @@
   --ring: #e8824f;
   --brand: #e8824f;
   --brand-foreground: #09090b;
+  --brand-text: var(--brand);
   --sidebar: #131316;
   --sidebar-foreground: #f0ece6;
   --sidebar-border: rgba(255, 255, 255, 0.08);

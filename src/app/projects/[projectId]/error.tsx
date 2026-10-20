@@ -1,23 +1,23 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { ConvexError } from "convex/values";
 import { useEffect } from "react";
 
 import { NotFoundView } from "@/components/not-found-view";
 import { Button } from "@/components/ui/button";
+import { getAppError } from "@/lib/convex-error";
 
 /**
- * Missing, foreign or malformed project ids. `getOwnedProject` throws typed
- * codes, which survive production's error redaction; the message fallback
- * covers untyped throws and malformed URL ids (`v.id("projects")`) in dev.
+ * Missing, foreign or malformed project ids. Project and conversation queries
+ * throw typed codes, which survive production's error redaction; the message
+ * fallback covers malformed URL ids (`v.id("projects")`) in dev.
  */
-const isProjectGone = (error: Error) =>
-  error instanceof ConvexError
-    ? ["NOT_FOUND", "FORBIDDEN"].includes(error.data?.code)
-    : /Project not found|Unauthorized (access|to access) this project|v\.id\("projects"\)/.test(
-        error.message,
-      );
+const isProjectGone = (error: Error) => {
+  const code = getAppError(error)?.code;
+  return code
+    ? code === "NOT_FOUND" || code === "FORBIDDEN"
+    : /v\.id\("projects"\)/.test(error.message);
+};
 
 // Only a missing or foreign project is "not found"; anything else gets a
 // retry, so one failing query doesn't look like a deleted project (#266).

@@ -10,7 +10,7 @@ vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
 import {
   SKILL_IMPORT_RATE_LIMIT,
   resetRateLimits,
-} from "@/features/integrations/server/rate-limit";
+} from "@/lib/rate-limit";
 
 import { POST } from "./route";
 

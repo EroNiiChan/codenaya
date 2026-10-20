@@ -82,14 +82,39 @@ describe("conversations.getActiveRun", () => {
       steps: [step],
     });
   });
+});
 
-  test("rejects another user's project", async () => {
+describe("ownership (#354)", () => {
+  test("every function refuses another user with FORBIDDEN", async () => {
     const { t, bob } = setup();
-    const { projectId } = await seedProject(t);
+    const { projectId, conversationId } = await seedProject(t);
+    const forbidden = { data: { code: "FORBIDDEN" } };
 
     await expect(
+      bob.mutation(api.conversations.create, { projectId, title: "Mine now" }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
+      bob.query(api.conversations.getById, { id: conversationId }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
+      bob.query(api.conversations.getByProject, { projectId }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
+      bob.query(api.conversations.getMessages, { conversationId }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
       bob.query(api.conversations.getActiveRun, { projectId }),
-    ).rejects.toThrow("Unauthorized");
+    ).rejects.toMatchObject(forbidden);
+  });
+
+  test("a deleted conversation is NOT_FOUND", async () => {
+    const { t, alice } = setup();
+    const { conversationId } = await seedProject(t);
+    await t.run((ctx) => ctx.db.delete("conversations", conversationId));
+
+    await expect(
+      alice.query(api.conversations.getMessages, { conversationId }),
+    ).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
   });
 });
 

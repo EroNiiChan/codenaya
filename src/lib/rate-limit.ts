@@ -1,5 +1,5 @@
 /**
- * In-memory rate limiting for integration routes.
+ * In-memory rate limiting for API routes.
  *
  * ## Why these routes need it
  *
