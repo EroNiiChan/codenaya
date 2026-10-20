@@ -97,9 +97,9 @@ test.describe("IDE polish", () => {
     for (const width of [768, 1024, 1440]) {
       await openProject(page, projectId, width);
       await page.getByRole("tab", { name: "Code" }).click();
-      const header = page
-        .getByRole("button", { name: PROJECT_NAME })
-        .filter({ has: page.getByRole("button", { name: "Create file" }) });
+      // The collapse toggle (the navbar's rename button has the same name); its
+      // actions are siblings, not children (#265).
+      const header = page.getByRole("button", { name: PROJECT_NAME, exact: true, expanded: true });
       const name = header.getByText(PROJECT_NAME, { exact: true });
       await expect(name).toHaveAttribute("title", PROJECT_NAME);
       // Hidden actions take no width, so a short name is not cut off.
@@ -108,7 +108,9 @@ test.describe("IDE polish", () => {
       const chevron = header.locator("svg").first();
       const before = (await chevron.boundingBox())!;
       await header.hover();
-      await expect(header.getByRole("button", { name: "Create file" })).toHaveCSS("opacity", "1");
+      // The actions' wrapper carries the hover opacity, not the buttons.
+      const actions = page.getByRole("button", { name: "Create file", exact: true }).locator("..");
+      await expect(actions).toHaveCSS("opacity", "1");
       expect((await chevron.boundingBox())!.x).toBe(before.x);
     }
 

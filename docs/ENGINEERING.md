@@ -131,9 +131,8 @@ rules:
   - `internalMutation`/`internalQuery`/`internalAction`: crons, scheduled batches and
     cascades nobody calls directly. `convex/maintenance.ts` has the rationale.
 - **One ownership helper per resource.** Use `getOwnedProject(ctx, id, ownerId)` from
-  `convex/projects.ts:30`. It also treats `deletingAt` projects as gone. Debt to clear:
-  `convex/files.ts` repeats the check inline ten times (e.g. `files.ts:12-21`). Import
-  the shared helper; don't write another copy.
+  `convex/projects.ts:30`. It also treats `deletingAt` projects as gone. Import the
+  shared helper; don't write another copy.
 - **Ids from outside are strings.** When an id comes from model output or a URL, take
   `v.string()` and `ctx.db.normalizeId(...)`, then return `null` for a malformed id, as
   `getOwnedProject` does at `convex/system.ts:1537`. Otherwise Convex throws an
@@ -149,9 +148,8 @@ rules:
   `.take(MAX_*)`, `.first()`, `.unique()` or `.paginate()`. Name limits as constants
   next to their use (`MAX_KEYS_LISTED`, `MAX_PROJECT_SETTINGS`, `BATCH_SIZE`). Allow
   `.collect()` only when the index range has a hard bound you can name in a comment.
-  Counter-example: `api.system.getRecentMessages` (`system.ts:236-256`) collects a
-  whole conversation to keep the last ten messages. It should be
-  `.order("desc").take(limit)`.
+  To keep the last N rows, read `.order("desc").take(n)` and reverse in memory, as
+  `api.system.getRecentMessages` does. Clamp any client-supplied limit.
 - **Large deletes and backfills run in batches** that reschedule themselves
   (`convex/projectCascade.ts`, `projects.deleteBatch`, `maintenance.ts`
   `BATCH_SIZE = 200`).

@@ -50,7 +50,9 @@ test.describe("chat run block", () => {
 
       // A changed-file chip opens the file in the editor.
       await changed.getByRole("button", { name: "index.html" }).click();
-      await expect(page.getByRole("tab", { name: /index\.html/ })).toBeVisible();
+      await expect(
+        page.getByRole("navigation", { name: "Open files" }).getByRole("button", { name: "index.html", exact: true }),
+      ).toBeVisible();
       // The editor textbox is named after the open file (#327).
       await expect(page.getByRole("textbox", { name: "Editor: index.html" })).toBeVisible();
     } finally {

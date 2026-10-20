@@ -96,9 +96,11 @@ describe("checkpoints", () => {
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   test("restores adds, edits, deletes and folders in one round-trip", async () => {
+    vi.useFakeTimers();
     const { t, alice } = setup();
     const { projectId, conversationId, index, src, main } = await seedProject(t);
     const before = await tree(t, projectId);
@@ -110,6 +112,7 @@ describe("checkpoints", () => {
     const lib = await t.mutation(api.system.createFolder, { internalKey: INTERNAL_KEY, projectId, name: "lib" });
     await t.mutation(api.system.createFile, { internalKey: INTERNAL_KEY, projectId, parentId: lib, name: "util.ts", content: "x" });
     await t.mutation(api.system.deleteFile, { internalKey: INTERNAL_KEY, projectId, fileId: src });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(await tree(t, projectId)).not.toEqual(before);
 
     const [checkpoint] = await alice.query(api.checkpoints.list, { projectId });
@@ -186,6 +189,24 @@ describe("checkpoints", () => {
     );
 
     await expect(alice.mutation(api.checkpoints.restore, { checkpointId })).rejects.toThrow(/running agent/);
+  });
+
+  // A snapshot from before the 2000-file cap is refused whole, never half-restored (#212).
+  test("refuses to restore a checkpoint over the file cap and leaves the files alone", async () => {
+    const { t, alice } = setup();
+    const { projectId, conversationId } = await seedProject(t);
+    const checkpointId = await snapshot(t, projectId, await addRun(t, projectId, conversationId));
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 2000; i++) {
+        await ctx.db.insert("checkpointFiles", { checkpointId, projectId, path: `extra/${i}.ts`, type: "file", content: "" });
+      }
+    });
+    const before = await tree(t, projectId);
+
+    await expect(alice.mutation(api.checkpoints.restore, { checkpointId })).rejects.toMatchObject({
+      data: { code: "LIMIT_EXCEEDED" },
+    });
+    expect(await tree(t, projectId)).toEqual(before);
   });
 
   test("keeps a deleted binary file's blob while a checkpoint needs it", async () => {

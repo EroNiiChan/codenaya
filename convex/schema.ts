@@ -106,7 +106,7 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_parent", ["parentId"])
-    .index("by_project_parent", ["projectId", "parentId"])
+    .index("by_project_and_parent_and_name", ["projectId", "parentId", "name"])
     .index("by_storageId", ["storageId"]),
 
   /**
@@ -218,7 +218,7 @@ export default defineSchema({
     .index("by_status_and_upvotes", ["status", "upvotes"])
     .index("by_status_and_importCount", ["status", "importCount"])
     .index("by_owner", ["ownerId"])
-    .index("by_projectId", ["projectId"])
+    .index("by_projectId_and_status", ["projectId", "status"])
     .index("by_previewImageId", ["previewImageId"])
     .index("by_status_and_category_and_publishedAt", ["status", "category", "publishedAt"])
     .index("by_status_and_category_and_upvotes", ["status", "category", "upvotes"])
@@ -288,7 +288,7 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_project_and_skillKey", ["projectId", "skillKey"])
-    .index("by_owner_and_skillKey", ["ownerId", "skillKey"]),
+    .index("by_owner_and_skillKey_and_enabled", ["ownerId", "skillKey", "enabled"]),
 
   // ─── Integrations (MCP servers + runtime env vars) ───
   //

@@ -11,6 +11,9 @@ import { verifyAuth } from "./auth";
 import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 
+/** Most variables read for one project; far above real usage (#53). */
+export const MAX_ENV_VARS = 500;
+
 /**
  * Project environment variables.
  *
@@ -99,7 +102,7 @@ export const listEnvVars = query({
     const vars = await ctx.db
       .query("projectEnvVars")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_ENV_VARS);
 
     return vars
       .sort((a, b) => a.key.localeCompare(b.key))
@@ -122,7 +125,7 @@ export const listPublicEnvVars = query({
     const vars = await ctx.db
       .query("projectEnvVars")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_ENV_VARS);
 
     return vars
       .filter((row) => row.visibility === "public" && row.plainValue !== undefined)
@@ -147,8 +150,10 @@ export const countWithheldSecrets = query({
     const vars = await ctx.db
       .query("projectEnvVars")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(MAX_ENV_VARS);
 
+    // ponytail: counts a read capped at MAX_ENV_VARS; keep a counter on the
+    // project if that cap ever has to grow.
     return vars.filter((row) => row.visibility === "secret").length;
   },
 });

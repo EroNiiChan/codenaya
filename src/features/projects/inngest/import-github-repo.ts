@@ -54,10 +54,14 @@ export const importGithubRepo = inngest.createFunction(
     // One step: the archive can't be passed between steps (step output is
     // persisted), and a retry starts again from a clean project.
     await step.run("import-files", async () => {
-      await convex.mutation(api.system.cleanup, {
-        internalKey,
-        projectId
-      });
+      // Cleanup deletes one bounded batch per call (#212).
+      let cleaned = false;
+      while (!cleaned) {
+        ({ done: cleaned } = await convex.mutation(api.system.cleanup, {
+          internalKey,
+          projectId
+        }));
+      }
 
       const { folders, files } = await readRepoArchive(owner, repo, githubToken);
 
