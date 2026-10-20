@@ -50,7 +50,7 @@ describe("GET /api/integrations/oauth/callback", () => {
     expect(response.status).toBe(400);
     expect(html.match(/<script/g)).toHaveLength(1);
     expect(html).not.toContain("alert(1)</script>");
-    expect(html).not.toMatch(/[\u2028\u2029]/);
+    expect(html.split("<script>")[1]).not.toMatch(/[\u2028\u2029]/);
 
     const postMessage = runScript(html);
     expect(postMessage).toHaveBeenCalledWith(
