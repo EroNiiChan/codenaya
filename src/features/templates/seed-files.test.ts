@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { getTemplateSeedFiles, planSeedTree } from "./seed-files";
+import { VITE_REACT_STARTER } from "@/features/conversations/inngest/vite-starter";
+
+import { getTemplateSeedFiles, planSeedTree, type SeedFile } from "./seed-files";
 import { STARTER_TEMPLATES, STARTER_TEMPLATE_IDS, getStarterTemplate } from "./templates";
 
 describe("starter templates", () => {
@@ -22,6 +24,25 @@ describe("starter templates", () => {
     expect(pkg.name).toBe(template.id);
     expect(pkg.scripts.dev).toBe("vite");
     expect(files.find((f) => f.path === "src/App.tsx")!.content).toContain(template.title);
+  });
+
+  it.each(STARTER_TEMPLATES)("$id seeds the starter scaffoldViteApp writes (#328)", (template) => {
+    const files = getTemplateSeedFiles(template);
+    const read = (list: readonly SeedFile[], path: string) =>
+      list.find((f) => f.path === path)!.content;
+
+    expect(files.map((f) => f.path)).toEqual(VITE_REACT_STARTER.map((f) => f.path));
+    const shared = ["tailwind.config.ts", "vite.config.ts", "components.json", "src/index.css"];
+    for (const path of shared) {
+      expect(read(files, path)).toBe(read(VITE_REACT_STARTER, path));
+    }
+    const pkg = JSON.parse(read(files, "package.json"));
+    const starterPkg = JSON.parse(read(VITE_REACT_STARTER, "package.json"));
+    expect({ ...pkg, name: starterPkg.name }).toEqual(starterPkg);
+    expect(pkg.dependencies).toHaveProperty("tailwind-merge");
+    expect(read(files, "vite.config.ts")).toContain('"@": fileURLToPath');
+    expect(read(files, "tailwind.config.ts")).toContain('border: "hsl(var(--border))"');
+    expect(read(files, "index.html")).toContain(`<title>${template.title}</title>`);
   });
 });
 
