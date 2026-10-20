@@ -36,6 +36,7 @@ import {
 import type { SandboxErrorKind } from "@/features/sandbox-preview/utils/sandbox-error";
 import { hasRootPackageJson } from "@/features/sandbox-preview/utils/file-tree";
 import type { BootHistory, BootPhase } from "@/features/sandbox-preview/utils/boot-phase";
+import { NOTHING_TO_PREVIEW } from "@/features/sandbox-preview/utils/boot-plan";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -481,7 +482,8 @@ const PreviewContent = ({
               <RefreshCwIcon className="size-4" />
               Retry
             </Button>
-            {activeEngine === "sandbox" && (
+            {/* The in-browser engine would fail the same way. */}
+            {activeEngine === "sandbox" && error !== NOTHING_TO_PREVIEW && (
               <Button size="sm" onClick={onUseWebContainer}>
                 <BoxIcon className="size-4" />
                 Use in-browser preview
