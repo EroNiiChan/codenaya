@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -72,14 +73,10 @@ export async function POST(request: Request) {
       return rateLimitedResponse(rateLimit);
     }
 
-    const body = await request.json();
-    const parsed = suggestionRequestSchema.safeParse(body);
+    const { data, invalid } = await parseJsonBody(request, suggestionRequestSchema);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid request", details: parsed.error.flatten().fieldErrors },
-        { status: 400 }
-      );
+    if (invalid) {
+      return invalid;
     }
 
     const {
@@ -91,7 +88,7 @@ export async function POST(request: Request) {
       textAfterCursor,
       nextLines,
       lineNumber,
-    } = parsed.data;
+    } = data;
 
     const prompt = SUGGESTION_PROMPT
       .replace("{fileName}", fileName)

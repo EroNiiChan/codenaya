@@ -1,10 +1,18 @@
+import { z } from "zod";
 import { requireUserId } from "@/features/auth/server/require-user-id";
+import { parseJsonBody } from "@/lib/parse-json-body";
+import { projectFilesSchema } from "@/features/sandbox-preview/server/project-sandbox";
 import {
   forgetSandbox,
   getOwnedSandbox,
   requestReinstall,
 } from "@/features/sandbox-preview/server/sandbox-registry";
 import { RESTART_VITE_COMMAND } from "@/features/sandbox-preview/server/restart-vite";
+
+const patchSchema = z.object({
+  files: projectFilesSchema,
+  installCommand: z.string().optional(),
+});
 
 interface RouteParams {
   params: Promise<{ sandboxId: string }>;
@@ -80,15 +88,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const { sandboxId } = await params;
 
-  const body = await request.json();
-  const { files, installCommand } = body as {
-    files: { path: string; content: string }[];
-    installCommand?: string;
-  };
+  const { data, invalid } = await parseJsonBody(request, patchSchema);
 
-  if (!files || files.length === 0) {
-    return Response.json({ error: "No files provided" }, { status: 400 });
+  if (invalid) {
+    return invalid;
   }
+
+  const { files, installCommand } = data;
 
   const WORK_DIR = "/home/user/app";
 

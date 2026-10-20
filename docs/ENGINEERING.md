@@ -174,11 +174,11 @@ if (unauthorized) return unauthorized;
 const rateLimit = checkRateLimit(userId, FOO_RATE_LIMIT);         // 429
 if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
 
-const parsed = requestSchema.safeParse(await request.json());     // 400
-if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+const { data, invalid } = await parseJsonBody(request, requestSchema); // 400
+if (invalid) return invalid;
 
 const { found: project, notFound } = await requireOwnedProject({  // 404
-  internalKey, userId, projectId: parsed.data.projectId,
+  internalKey, userId, projectId: data.projectId,
 });
 if (notFound) return notFound;
 ```
@@ -187,9 +187,9 @@ if (notFound) return notFound;
   `requireOwnedProject` and `requireOwnedConversation` live in
   `features/projects/server/require-owned-project.ts`. Missing, malformed and foreign
   ids all return the same 404, so a caller can't probe which projects exist (#208).
-- **Validate with zod `safeParse`.** `requestSchema.parse(body)` in
-  `api/messages/route.ts:50` turns bad input into a 500. Follow `api/env-vars/route.ts:72`
-  instead.
+- **Parse the body with `parseJsonBody`** (`lib/parse-json-body.ts`). Malformed JSON and
+  schema failures both answer 400; a bare `request.json()` or `requestSchema.parse(body)`
+  turns bad input into a 500 (#235).
 - **Rate-limit every route that calls an LLM, an external network, or writes per
   request.** Add a named `RateLimitConfig` next to the existing ones. The limiter is
   per-instance by design (header of `rate-limit.ts`).
