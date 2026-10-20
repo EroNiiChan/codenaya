@@ -128,8 +128,8 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `preview-device-toggle.tsx`, `utils/boot-plan.ts`) → `POST /api/sandbox` (NDJSON stream;
   secrets are injected server-side and redacted from output; at most 3 live sandboxes per
   user), `/api/sandbox/[sandboxId]` (file sync, kill); `features/webcontainer-preview/*`
-  (public env vars only); `projects.updateSettings`; COOP/COEP headers in `next.config.ts` (only with
-  `?engine=webcontainer`).
+  (public env vars only); `projects.updateSettings`; COOP/COEP headers in `next.config.ts`
+  (only with `?engine=webcontainer`).
 - Env: `E2B_API_KEY`; `E2B_TEMPLATE=codenaya-node22` (built by `npm run e2b:template`).
 - E2E: `preview-lazy.spec.ts`, `preview-boot-steps.spec.ts`, `preview-terminal.spec.ts`,
   `preview-open-tab.spec.ts`, `preview-device.spec.ts`, `preview-auto-open.spec.ts`,
@@ -282,9 +282,9 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 - E2E: `chat-images.spec.ts`.
 
 **F22. Checkpoints and restore**: Works
-- Steps: every non-plan agent run snapshots the project first (last 20 kept; projects over 2000 files are
-  skipped) → chat Version
-  history, or "Restore to before this run" on an assistant message → confirm → files restored.
+- Steps: every non-plan agent run snapshots the project first (last 20 kept; projects over
+  2000 files are skipped) → chat Version history, or "Restore to before this run" on an
+  assistant message → confirm → files restored.
   Restore is refused while an agent is running.
 - Code: `checkpoint-dialogs.tsx`; `system.createProjectCheckpoint`, `convex/checkpoints.ts`
   (`restore`).
