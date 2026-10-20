@@ -31,4 +31,21 @@ test.describe("GitHub import", () => {
     // The route answers 400 GITHUB_NOT_LINKED, which the browser logs as a failed load.
     expect(errors.filter((error) => !error.includes("status of 400"))).toEqual([]);
   });
+
+  test("an Open in Codenaya link opens the import dialog prefilled (#231)", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/import?repo=octocat/Hello-World");
+
+    const dialog = page.getByRole("dialog", { name: "Import from GitHub" });
+    await expect(dialog.getByLabel("Repository URL")).toHaveValue(
+      "https://github.com/octocat/Hello-World",
+    );
+    // Nothing is imported until the user confirms.
+    await expect(page).toHaveURL(/\/\?import=octocat(\/|%2F)Hello-World$/);
+  });
+
+  test("a malformed Open in Codenaya link explains itself (#231)", async ({ page }) => {
+    await page.goto("/import?repo=../etc/passwd");
+    await expect(page.getByRole("heading", { name: "Can't open that repository" })).toBeVisible();
+  });
 });

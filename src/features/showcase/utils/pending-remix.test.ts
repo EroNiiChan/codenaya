@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  PENDING_REMIX_KEY,
-  savePendingRemix,
-  takePendingRemix,
-} from "./pending-remix";
+import { PENDING_INTENT_KEY } from "@/lib/pending-intent";
+
+import { savePendingRemix, takePendingRemix } from "./pending-remix";
 
 const memoryStorage = () => {
   const store = new Map<string, string>();
@@ -26,7 +24,7 @@ describe("pending remix", () => {
 
     savePendingRemix("abc123");
 
-    expect(JSON.parse(storage.getItem(PENDING_REMIX_KEY)!)).toEqual({
+    expect(JSON.parse(storage.getItem(PENDING_INTENT_KEY)!)).toEqual({
       kind: "remix",
       showcaseId: "abc123",
     });
@@ -38,10 +36,10 @@ describe("pending remix", () => {
     const storage = memoryStorage();
     vi.stubGlobal("localStorage", storage);
 
-    storage.setItem(PENDING_REMIX_KEY, "not json");
+    storage.setItem(PENDING_INTENT_KEY, "not json");
     expect(takePendingRemix()).toBeNull();
 
-    storage.setItem(PENDING_REMIX_KEY, JSON.stringify({ kind: "other" }));
+    storage.setItem(PENDING_INTENT_KEY, JSON.stringify({ kind: "other" }));
     expect(takePendingRemix()).toBeNull();
   });
 
