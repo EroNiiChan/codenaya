@@ -156,7 +156,8 @@ test.describe.serial("agent checkBuild", () => {
     };
 
     await runAgent("Start a Vite app");
-    await expect(page.getByText("Checking build")).toBeVisible({ timeout: 120_000 });
+    // The first-build panel repeats the live label as "Checking build…".
+    await expect(page.getByText("Checking build", { exact: true })).toBeVisible({ timeout: 120_000 });
     const started = Date.now();
     await expect(page.getByText(STUB_REPLY)).toBeVisible({ timeout: 300_000 });
     test.info().annotations.push({
