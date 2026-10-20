@@ -60,7 +60,11 @@ async function setup(overrides: Partial<Doc<"mcpApprovals">> = {}) {
       ...overrides,
     });
   });
-  return { alice: t.withIdentity({ subject: ALICE }), id };
+  return {
+    alice: t.withIdentity({ subject: ALICE }),
+    bob: t.withIdentity({ subject: "user_bob" }),
+    id,
+  };
 }
 
 // The client picks its toast from `data`, which production keeps when it
@@ -80,5 +84,13 @@ describe("integrations.resolveApproval", () => {
     await expect(
       alice.mutation(api.integrations.resolveApproval, { id, decision: "approved" }),
     ).rejects.toMatchObject({ data: { code: "CONFLICT", status: "expired" } });
+  });
+
+  test("another user's approval throws FORBIDDEN", async () => {
+    const { bob, id } = await setup();
+
+    await expect(
+      bob.mutation(api.integrations.resolveApproval, { id, decision: "approved" }),
+    ).rejects.toMatchObject({ data: { code: "FORBIDDEN" } });
   });
 });
