@@ -35,21 +35,24 @@ import { api } from "../../../../../../convex/_generated/api";
 /**
  * Minimal self-closing page that reports the outcome to the opener.
  *
- * The `postMessage` target origin is this deployment's own origin, never `*`, so
- * the result cannot be read by another window.
+ * The `postMessage` target origin is the popup's own `location.origin`, never
+ * `*`, so the result cannot be read by another window. It is read in the browser
+ * rather than from `request.url`, which under `next dev` is `0.0.0.0` and never
+ * matches the opener.
+ *
+ * `message` can carry provider-supplied text, so it is HTML-escaped for the page
+ * and, in the script, JSON-encoded with `<`, `>`, `&`, U+2028 and U+2029 escaped:
+ * plain `JSON.stringify` would let `</script>` close the block (#222).
  */
-function resultPage(
-  status: "success" | "error",
-  message: string,
-  origin: string,
-): Response {
-  // Values are JSON-encoded before interpolation so a provider-supplied error
-  // string cannot break out of the script context.
+function resultPage(status: "success" | "error", message: string): Response {
   const payload = JSON.stringify({
     source: "codenaya-oauth",
     status,
     message,
-  });
+  }).replace(
+    /[<>&\u2028\u2029]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -72,7 +75,7 @@ function resultPage(
 <script>
   try {
     if (window.opener) {
-      window.opener.postMessage(${payload}, ${JSON.stringify(origin)});
+      window.opener.postMessage(${payload}, window.location.origin);
     }
   } catch (e) {}
   setTimeout(function () { window.close(); }, ${status === "success" ? 600 : 4000});
@@ -92,9 +95,8 @@ function resultPage(
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const origin = url.origin;
 
-  const fail = (message: string) => resultPage("error", message, origin);
+  const fail = (message: string) => resultPage("error", message);
 
   const { userId } = await auth();
   if (!userId) {
@@ -110,8 +112,11 @@ export async function GET(request: Request) {
   // The provider reports user-facing denials here rather than as an HTTP error.
   const providerError = url.searchParams.get("error");
   if (providerError) {
-    const description =
-      url.searchParams.get("error_description") ?? providerError;
+    // Attacker-controllable via a crafted link, so it is only ever shown as
+    // escaped text, and capped so it cannot flood the page.
+    const description = (
+      url.searchParams.get("error_description") ?? providerError
+    ).slice(0, 300);
     return fail(`The provider declined the request: ${description}`);
   }
 
@@ -256,7 +261,6 @@ export async function GET(request: Request) {
       created.projectConnectionId
         ? `${provider.displayName} is connected to this project with read-only access. You can close this window.`
         : `${provider.displayName} is connected. You can close this window.`,
-      origin,
     );
   } catch (error) {
     console.error("[oauth/callback] failed to persist connection", error);

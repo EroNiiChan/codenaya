@@ -10,6 +10,7 @@ import {
   forgetSandbox,
   getOwnedSandbox,
   rememberSandbox,
+  requestReinstall,
 } from "./sandbox-registry";
 
 const fakeSandbox = (sandboxId: string, ownerId?: string) =>
@@ -65,5 +66,21 @@ describe("sandbox registry", () => {
     await getOwnedSandbox("sbx_1", "user_a");
 
     expect(mocks.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a reinstall to the instance that booted the sandbox", () => {
+    const reinstall = vi.fn();
+    rememberSandbox(fakeSandbox("sbx_1"), "user_a", reinstall);
+
+    expect(requestReinstall("sbx_1")).toBe(true);
+    expect(reinstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a reinstall it cannot hand off", async () => {
+    mocks.connect.mockResolvedValue(fakeSandbox("sbx_1", "user_a"));
+    await getOwnedSandbox("sbx_1", "user_a");
+
+    expect(requestReinstall("sbx_1")).toBe(false);
+    expect(requestReinstall("sbx_unknown")).toBe(false);
   });
 });

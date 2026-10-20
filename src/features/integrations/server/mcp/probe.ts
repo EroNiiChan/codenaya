@@ -123,10 +123,14 @@ function classifyError(error: unknown): {
   }
 
   // A plain web page or REST endpoint typically fails here: it answers, but not
-  // with JSON-RPC.
+  // with JSON-RPC. The raw message can quote the response body, so it is logged
+  // here rather than shown: echoing it would turn the probe into a reader for
+  // whatever the URL serves.
+  console.warn("[mcp/probe] handshake failed", raw);
   return {
     kind: "protocol",
-    error: `The endpoint did not complete an MCP handshake: ${raw}`,
+    error:
+      "The endpoint did not complete an MCP handshake. Check the URL points to an MCP server.",
   };
 }
 
