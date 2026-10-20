@@ -282,7 +282,6 @@ export const publish = mutation({
     const authorName =
       identity.name ||
       identity.nickname ||
-      ((identity as Record<string, unknown>).username as string | undefined) ||
       emailLocalPart ||
       "Anonymous";
 
@@ -390,6 +389,8 @@ export const vote = mutation({
   },
 });
 
+const ANONYMOUS_ID = /^anon_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export const incrementView = mutation({
   args: {
     id: v.id("showcaseProjects"),
@@ -405,7 +406,12 @@ export const incrementView = mutation({
       return;
     }
 
-    const viewerId = identity ? identity.subject : args.anonymousId;
+    // Anonymous ids must look like the client's own (`anon_<uuid>`), so they
+    // can't collide with a Clerk subject and pre-claim a user's view (#269).
+    // ponytail: fresh UUIDs still inflate the count; add a rate limit if
+    // rankings (#233) start to depend on it.
+    const anonymousId = args.anonymousId?.match(ANONYMOUS_ID) ? args.anonymousId : undefined;
+    const viewerId = identity ? identity.subject : anonymousId;
     if (!viewerId) return;
 
     const existingView = await ctx.db

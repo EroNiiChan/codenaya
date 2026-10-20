@@ -27,6 +27,9 @@ import {
 } from "../hooks/use-showcase";
 import { authRedirectUrl, showcasePath, useRemix } from "../hooks/use-remix";
 
+/** One id per browser, so a signed-out visitor's views count once (#269). */
+const ANONYMOUS_ID_KEY = "codenaya_anonymous_id";
+
 interface ShowcaseDetailProps {
   project: ShowcaseProject;
   /** Element for the title, e.g. `DialogTitle` inside a dialog. */
@@ -58,13 +61,12 @@ export const ShowcaseDetail = ({ project, TitleAs = "h1" }: ShowcaseDetailProps)
     let anonymousId: string | undefined;
     if (!isAuthenticated) {
       try {
-        const key = "codenaya_anonymous_id";
-        const stored = localStorage.getItem(key);
+        const stored = localStorage.getItem(ANONYMOUS_ID_KEY);
         if (stored) {
           anonymousId = stored;
         } else {
           anonymousId = `anon_${crypto.randomUUID()}`;
-          localStorage.setItem(key, anonymousId);
+          localStorage.setItem(ANONYMOUS_ID_KEY, anonymousId);
         }
       } catch {
         // localStorage unavailable
