@@ -240,7 +240,7 @@ export async function deleteProjectBatch(
 
   const showcase = await ctx.db
     .query("showcaseProjects")
-    .withIndex("by_projectId", (q) => q.eq("projectId", projectId))
+    .withIndex("by_projectId_and_status", (q) => q.eq("projectId", projectId))
     .first();
   if (showcase) {
     await deleteShowcaseBatch(ctx, showcase);

@@ -2,13 +2,13 @@ import { v } from "convex/values";
 import { paginationOptsValidator, type PaginationResult } from "convex/server";
 
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { appError } from "./errors";
 import { getOwnedProject } from "./projects";
 import { copyProjectFiles } from "./projectCopy";
-import { getUnclaimedStorage } from "./projectCascade";
+import { getUnclaimedStorage, releaseBlobs } from "./projectCascade";
 import { countProjectBuilt } from "./stats";
 
 // ─── Queries ───
@@ -67,6 +67,24 @@ const toPublicEntry = async (
     : null;
   return { ...entry, previewUrl };
 };
+
+/** A project's showcase entry with this status, if it has one. */
+const entryWithStatus = (
+  ctx: QueryCtx,
+  projectId: Id<"projects">,
+  status: Doc<"showcaseProjects">["status"]
+) =>
+  ctx.db
+    .query("showcaseProjects")
+    .withIndex("by_projectId_and_status", (q) =>
+      q.eq("projectId", projectId).eq("status", status)
+    )
+    .first();
+
+/** A project's live entry: an unlisted one is still published as far as its owner is concerned. */
+const liveEntry = async (ctx: QueryCtx, projectId: Id<"projects">) =>
+  (await entryWithStatus(ctx, projectId, "published")) ??
+  (await entryWithStatus(ctx, projectId, "unlisted"));
 
 /** A page of public showcase entries, tag-filtered. */
 const toFeedPage = async (
@@ -165,25 +183,23 @@ export const getMyPublished = query({
       .query("showcaseProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
       .order("desc")
+      .filter((q) => q.neq(q.field("status"), "removed"))
       .take(50);
   },
 });
 
-/** Whether the caller's project has a showcase entry; a yes/no, so no ids leak (#239). */
+/**
+ * The caller's project's live showcase entry id, or null. Owner-only, and
+ * only the entry id: it is public anyway, unlike the owner id (#239).
+ */
 export const isProjectPublished = query({
   args: { projectId: v.id("projects") },
-  returns: v.boolean(),
+  returns: v.union(v.id("showcaseProjects"), v.null()),
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
     await getOwnedProject(ctx, args.projectId, identity.subject);
 
-    const existing = await ctx.db
-      .query("showcaseProjects")
-      .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
-      .take(1);
-
-    // An unlisted entry is still published as far as its owner is concerned.
-    return existing.some((e) => e.status !== "removed");
+    return (await liveEntry(ctx, args.projectId))?._id ?? null;
   },
 });
 
@@ -273,13 +289,7 @@ export const publish = mutation({
       await getUnclaimedStorage(ctx, args.previewImageId);
     }
 
-    const existing = await ctx.db
-      .query("showcaseProjects")
-      .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
-      .take(1);
-
-    const alreadyPublished = existing.find((e) => e.status !== "removed");
-    if (alreadyPublished) {
+    if (await liveEntry(ctx, args.projectId)) {
       throw appError("CONFLICT", "Project is already published to showcase");
     }
 
@@ -293,9 +303,7 @@ export const publish = mutation({
       emailLocalPart ||
       "Anonymous";
 
-    const showcaseId = await ctx.db.insert("showcaseProjects", {
-      projectId: args.projectId,
-      ownerId: identity.subject,
+    const listing = {
       ownerName: authorName,
       ownerAvatarUrl: identity.pictureUrl,
       title: args.title,
@@ -304,16 +312,31 @@ export const publish = mutation({
       techStack: args.techStack,
       designStyle: args.designStyle,
       category: args.category,
+      status: unlistedOwnerIds().includes(identity.subject)
+        ? ("unlisted" as const)
+        : ("published" as const),
+      publishedAt: now,
+      updatedAt: now,
+    };
+
+    // Republishing brings the unpublished entry back with the new listing,
+    // so its votes, views and imports survive.
+    const removed = await entryWithStatus(ctx, args.projectId, "removed");
+    if (removed) {
+      await ctx.db.patch(removed._id, listing);
+      await releaseBlobs(ctx, [removed.previewImageId]);
+      return removed._id;
+    }
+
+    return await ctx.db.insert("showcaseProjects", {
+      ...listing,
+      projectId: args.projectId,
+      ownerId: identity.subject,
       upvotes: 0,
       downvotes: 0,
       viewCount: 0,
       importCount: 0,
-      status: unlistedOwnerIds().includes(identity.subject) ? "unlisted" : "published",
-      publishedAt: now,
-      updatedAt: now,
     });
-
-    return showcaseId;
   },
 });
 
