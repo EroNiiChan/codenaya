@@ -12,6 +12,10 @@ export type PlatformProviderId = Infer<typeof platformProviderValidator>;
 /** Bounds the config doc (about 15 KB) and the users' picker. */
 export const MAX_PLATFORM_MODELS = 50;
 
+/** Bounds on a model's display strings, from the provider or the admin. */
+export const MAX_MODEL_NAME_LENGTH = 120;
+export const MAX_MODEL_VENDOR_LENGTH = 60;
+
 /** USD per 1M tokens. Far above any real price; catches a per-token value pasted ×1e6. */
 export const MAX_USD_PER_MTOK = 1000;
 

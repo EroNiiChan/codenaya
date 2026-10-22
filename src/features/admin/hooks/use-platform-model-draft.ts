@@ -56,7 +56,7 @@ export function draftProblems(draft: Draft): string[] {
   const unpriced = draft.models.filter((m) => !isPriced(m)).length;
   const unconfirmed = draft.models.filter((m) => m.tools === null).length;
   return [
-    unpriced && `Set both prices for ${plural(unpriced, "model")}`,
+    unpriced && `Set valid prices ($0–$${MAX_USD_PER_MTOK}) for ${plural(unpriced, "model")}`,
     unconfirmed && `Confirm tool calling for ${plural(unconfirmed, "model")}`,
   ].filter((problem): problem is string => !!problem);
 }

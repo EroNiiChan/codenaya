@@ -24,6 +24,7 @@ describe("normalizeProviderModels", () => {
           name: "Auto Router",
           architecture: { input_modalities: ["text"] },
           pricing: { prompt: "-1", completion: "nope" },
+
           supported_parameters: ["temperature"],
         },
       ],
@@ -51,6 +52,13 @@ describe("normalizeProviderModels", () => {
         outputUsdPerMTok: undefined,
       },
     ]);
+  });
+
+  it("keeps a blank OpenRouter price unpriced, never $0", () => {
+    const [model] = normalizeProviderModels("openrouter", {
+      data: [{ id: "acme/blank", pricing: { prompt: "", completion: "  " } }],
+    });
+    expect(model).toMatchObject({ inputUsdPerMTok: undefined, outputUsdPerMTok: undefined });
   });
 
   it("drops OpenAI non-chat models and leaves tools/vision unknown", () => {

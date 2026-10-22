@@ -31,7 +31,7 @@ describe("platform model draft", () => {
         models: [row({ id: "a", output: "" }), row({ id: "b", tools: null }), row({ id: "c", tools: null })],
         defaultModelId: "a",
       }),
-    ).toEqual(["Set both prices for 1 model", "Confirm tool calling for 2 models"]);
+    ).toEqual(["Set valid prices ($0–$1000) for 1 model", "Confirm tool calling for 2 models"]);
     expect(draftProblems({ models: [row()], defaultModelId: "m" })).toEqual([]);
   });
 

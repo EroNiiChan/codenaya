@@ -1,5 +1,10 @@
 import { MAX_MODEL_ID_LENGTH } from "../../ai-providers/registry";
-import type { FetchedModel, PlatformProviderId } from "../platform-models";
+import {
+  type FetchedModel,
+  MAX_MODEL_NAME_LENGTH,
+  MAX_MODEL_VENDOR_LENGTH,
+  type PlatformProviderId,
+} from "../platform-models";
 
 /**
  * Lists the models the platform key can use, live from the provider, for the
@@ -13,8 +18,6 @@ import type { FetchedModel, PlatformProviderId } from "../platform-models";
 /** Bounds the response; OpenRouter lists ~350 today. */
 export const MAX_FETCHED_MODELS = 1000;
 const FETCH_TIMEOUT_MS = 10_000;
-const MAX_NAME_LENGTH = 120;
-const MAX_VENDOR_LENGTH = 60;
 
 /** The provider answered with an error, timed out or sent something unreadable. */
 export class ProviderModelsError extends Error {
@@ -33,7 +36,9 @@ const strings = (value: unknown) =>
 
 /** OpenRouter prices are USD-per-token strings; "-1" marks variable pricing. */
 const perMTok = (value: unknown) => {
-  const perToken = typeof value === "string" || typeof value === "number" ? Number(value) : NaN;
+  // Number("") is 0: a blank price must stay unpriced, never become free.
+  const perToken =
+    (typeof value === "string" && value.trim()) || typeof value === "number" ? Number(value) : NaN;
   if (!Number.isFinite(perToken) || perToken < 0) return undefined;
   // Round off float noise from ×1e6 (0.000003 × 1e6 = 2.9999999999999996).
   return Number((perToken * 1e6).toFixed(6));
@@ -100,8 +105,8 @@ export function normalizeProviderModels(provider: PlatformProviderId, body: unkn
     models.push({
       ...model,
       id,
-      name: model.name.slice(0, MAX_NAME_LENGTH),
-      vendor: model.vendor.slice(0, MAX_VENDOR_LENGTH),
+      name: model.name.slice(0, MAX_MODEL_NAME_LENGTH),
+      vendor: model.vendor.slice(0, MAX_MODEL_VENDOR_LENGTH),
     });
   }
   return models;

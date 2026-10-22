@@ -1,7 +1,12 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 
-import { MAX_PLATFORM_MODELS, MAX_USD_PER_MTOK } from "../src/features/admin/platform-models";
+import {
+  MAX_MODEL_NAME_LENGTH,
+  MAX_MODEL_VENDOR_LENGTH,
+  MAX_PLATFORM_MODELS,
+  MAX_USD_PER_MTOK,
+} from "../src/features/admin/platform-models";
 import { MAX_MODEL_ID_LENGTH } from "../src/features/ai-providers/registry";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
@@ -16,8 +21,6 @@ import { platformModelValidator, platformProviderValidator } from "./schema";
  * ids, names and flags; prices stay with the admin and the server.
  */
 
-const MAX_NAME_LENGTH = 120;
-const MAX_VENDOR_LENGTH = 60;
 /** A long diff is cut; the full state is in the config doc itself. */
 const MAX_SUMMARY_LENGTH = 1000;
 
@@ -43,10 +46,10 @@ function assertValidSelection(models: PlatformModel[], defaultModelId: string) {
     if (!model.id || model.id.length > MAX_MODEL_ID_LENGTH) throw invalid("Invalid model id");
     if (ids.has(model.id)) throw invalid(`Duplicate model ${model.id}`);
     ids.add(model.id);
-    if (!model.name.trim() || model.name.length > MAX_NAME_LENGTH) {
+    if (!model.name.trim() || model.name.length > MAX_MODEL_NAME_LENGTH) {
       throw invalid(`Invalid name for ${model.id}`);
     }
-    if (model.vendor.length > MAX_VENDOR_LENGTH) throw invalid(`Invalid vendor for ${model.id}`);
+    if (model.vendor.length > MAX_MODEL_VENDOR_LENGTH) throw invalid(`Invalid vendor for ${model.id}`);
     if (
       model.contextLength !== undefined &&
       !(Number.isInteger(model.contextLength) && model.contextLength > 0)
