@@ -10,12 +10,10 @@
  *
  * ## Why REST instead of `@google-cloud/kms`
  *
- * `google-auth-library` is already a dependency (see
- * `src/features/conversations/workflow/lib/vertex-model.ts`) and the KMS
- * encrypt/decrypt surface is two endpoints. Using it directly avoids adding the
- * full Cloud client library — and its gRPC dependency tree — for two calls.
- * Credentials are the same service-account pair already used for Vertex AI, so
- * enabling this requires one extra IAM role and no new secret.
+ * The KMS encrypt/decrypt surface is two endpoints, so `google-auth-library`
+ * plus `fetch` covers it. That avoids the full Cloud client library — and its
+ * gRPC dependency tree — for two calls. Credentials are a service-account pair
+ * (`GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY`) needing one KMS IAM role.
  *
  * ## Cost
  *
@@ -78,8 +76,7 @@ export function readGcpKmsConfigFromEnv(): GcpKmsConfig {
   return {
     keyName,
     clientEmail,
-    // Env-provided keys usually carry literal "\n" rather than real newlines,
-    // the same normalisation vertex-model.ts performs.
+    // Env-provided keys usually carry literal "\n" rather than real newlines.
     privateKey: privateKeyRaw.replace(/\\n/g, "\n"),
   };
 }

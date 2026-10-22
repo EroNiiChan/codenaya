@@ -1,10 +1,7 @@
 import { v } from "convex/values";
 
-import {
-  isAgentModelId,
-  DEFAULT_AGENT_MODEL_ID,
-} from "../src/features/conversations/agent-models";
-import { modelIdsFor } from "../src/features/ai-providers/registry";
+import { DEFAULT_AGENT_MODEL_ID } from "../src/features/conversations/agent-models";
+import { MAX_MODEL_ID_LENGTH, modelIdsFor } from "../src/features/ai-providers/registry";
 import { Doc, Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
@@ -132,7 +129,8 @@ export const setPreferences = mutation({
       ? modelIdsFor(await assertKeyOwner(ctx, defaultKeyId, identity.subject)).includes(
           defaultModelId,
         )
-      : isAgentModelId(defaultModelId);
+      : // The platform's models depend on the Next env; a stale id falls back there.
+        defaultModelId.length > 0 && defaultModelId.length <= MAX_MODEL_ID_LENGTH;
     if (!allowed) {
       throw appError("INVALID_ARGUMENT", "Model is not available for this provider");
     }

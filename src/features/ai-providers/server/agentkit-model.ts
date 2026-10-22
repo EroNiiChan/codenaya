@@ -5,7 +5,7 @@ import { baseUrlFor, type AiProviderId } from "../registry";
 /**
  * AgentKit model for any supported provider.
  *
- * OpenRouter, OpenAI and custom endpoints all speak OpenAI Chat Completions,
+ * OpenRouter, OpenAI, Groq and custom endpoints all speak OpenAI Chat Completions,
  * so they share AgentKit's `openai()` adapter and differ only in `baseUrl`.
  * Anthropic gets its native adapter, which requires `max_tokens` on every
  * request.

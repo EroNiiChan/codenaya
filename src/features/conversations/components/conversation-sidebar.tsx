@@ -38,6 +38,7 @@ import { ApprovalPrompt } from "@/features/integrations/components/approval-prom
 import { useProjectIntegrations } from "@/features/integrations/components/project-integrations-context";
 import { useAiProviderKeys } from "@/features/ai-providers/hooks/use-ai-providers";
 import { modelAcceptsImages } from "@/features/ai-providers/registry";
+import { platformProviderId, resolvePlatformModel } from "@/features/ai-providers/platform";
 import { detectCredential } from "@/features/integrations/credential-guard";
 import { useEditor } from "@/features/editor/hooks/use-editor";
 import { useFiles } from "@/features/projects/hooks/use-files";
@@ -102,10 +103,9 @@ export const ConversationSidebar = ({
   // A key still loading (or gone) is left to the server to check.
   const modelKeys = useAiProviderKeys();
   const modelKey = modelKeys?.find((key) => key._id === agentModel.keyId);
-  const acceptsImages =
-    agentModel.keyId && !modelKey
-      ? true
-      : modelAcceptsImages(agentModel.modelId, modelKey);
+  const acceptsImages = !agentModel.keyId
+    ? resolvePlatformModel(platformProviderId(), null, agentModel.modelId).vision === true
+    : !modelKey || modelAcceptsImages(agentModel.modelId, modelKey);
   const [
     selectedConversationId,
     setSelectedConversationId,
@@ -274,6 +274,11 @@ export const ConversationSidebar = ({
             "Credentials cannot be sent in chat. Add this MCP connection through Integrations instead.",
           );
           openIntegrations();
+          return "blocked";
+        }
+        // Platform AI has no key: nothing was saved, so keep the draft.
+        if (body.code === "ai_not_configured" && body.error) {
+          toast.error(body.error);
           return "blocked";
         }
         // The reply is already marked failed in the chat, with a retry action.

@@ -119,8 +119,14 @@ describe("aiProviders", () => {
         defaultModelId: "claude-opus-5-5",
       }),
     ).rejects.toThrow(/not available/);
+    // Platform ids depend on the Next env provider, so any bounded id is kept;
+    // the route and the run fall back to the default for an unlisted one.
+    await alice.mutation(api.aiProviders.setPreferences, { defaultModelId: "claude-opus-5-5" });
     await expect(
-      alice.mutation(api.aiProviders.setPreferences, { defaultModelId: "gpt-5.6-luna" }),
+      alice.mutation(api.aiProviders.setPreferences, { defaultModelId: "" }),
+    ).rejects.toThrow(/not available/);
+    await expect(
+      alice.mutation(api.aiProviders.setPreferences, { defaultModelId: "x".repeat(201) }),
     ).rejects.toThrow(/not available/);
 
     await alice.mutation(api.aiProviders.setPreferences, {

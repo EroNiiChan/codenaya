@@ -9,7 +9,10 @@ import {
   checkRateLimit,
   rateLimitedResponse,
 } from "@/lib/rate-limit";
-import { editorModel, isOpenRouterConfigured } from "@/lib/openrouter";
+import {
+  isPlatformConfigured,
+  platformEditorModel,
+} from "@/features/ai-providers/server/platform-model";
 
 /**
  * POST /api/enhance-prompt
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
     return rateLimitedResponse(rateLimit);
   }
 
-  if (!isOpenRouterConfigured()) {
+  if (!isPlatformConfigured()) {
     return NextResponse.json({ error: "AI is not configured" }, { status: 503 });
   }
 
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
 
   try {
     const { object } = await generateObject({
-      model: editorModel("enhancePrompt"),
+      model: platformEditorModel(),
       output: "object",
       schema: specSchema,
       prompt: ENHANCE_PROMPT.replace("{prompt}", prompt),

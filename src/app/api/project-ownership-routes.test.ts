@@ -29,11 +29,6 @@ vi.mock("@/lib/convex-client", () => ({
 vi.mock("@/inngest/client", () => ({
   inngest: { send: mocks.inngestSend },
 }));
-// Instantiates the Workflow SDK at import time; only the Inngest path is used.
-vi.mock("@/features/conversations/workflow/client", () => ({
-  startProcessMessageWorkflow: vi.fn(),
-  cancelProcessMessageWorkflowByMessageId: vi.fn(),
-}));
 vi.mock("e2b", () => ({
   Sandbox: { create: mocks.sandboxCreate, connect: mocks.sandboxConnect },
   AuthenticationError: class extends Error {},
@@ -117,7 +112,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
   vi.stubEnv("E2B_API_KEY", "e2b-test");
-  vi.stubEnv("MESSAGE_PROCESSOR", "inngest");
+  vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.auth.mockResolvedValue({ userId: ATTACKER, has: () => false });

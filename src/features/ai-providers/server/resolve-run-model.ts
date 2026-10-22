@@ -2,15 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { convex } from "@/lib/convex-client";
-import {
-  type AgentModelChoice,
-  resolveAgentModelId,
-} from "@/features/conversations/agent-models";
-import {
-  OPENROUTER_MODELS,
-  openRouterModel,
-} from "@/features/conversations/inngest/lib/openrouter-model";
+import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
+import { platformProviderId, resolvePlatformModel } from "../platform";
 import {
   modelAcceptsImages,
   modelIdsFor,
@@ -19,6 +13,12 @@ import {
 } from "../registry";
 import { buildAgentKitModel } from "./agentkit-model";
 import { assertSafeProviderBaseUrl } from "./base-url";
+import {
+  AI_NOT_CONFIGURED_MESSAGE,
+  isPlatformConfigured,
+  platformAgentModel,
+  platformTitleModel,
+} from "./platform-model";
 import { openProviderKey } from "./sealed-key";
 import { OUT_OF_CREDIT_PATTERN, isOutOfCredit, testConnection } from "./test-connection";
 import { api } from "../../../../convex/_generated/api";
@@ -70,11 +70,15 @@ export interface RunModelChoice {
   label: string;
 }
 
-/** A choice the route refuses: someone else's key (403) or a model it lacks (400). */
+/**
+ * A choice the route refuses: someone else's key (403), a model it lacks
+ * (400), or platform AI without a key (503, `code: "ai_not_configured"`).
+ */
 export class ModelChoiceError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 403,
+    readonly status: 400 | 403 | 503,
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -83,10 +87,9 @@ export class ModelChoiceError extends Error {
 const toChoice = (input: ModelChoiceInput): AgentModelChoice =>
   typeof input === "object" ? input : { modelId: input ?? "" };
 
-const platformChoice = (modelId: string): RunModelChoice => {
-  const id = resolveAgentModelId(modelId);
-  return { modelId: id, label: runModelLabel(id) };
-};
+/** Platform runs: an unlisted id falls back to the provider's default. */
+const platformModel = (modelId: string) =>
+  resolvePlatformModel(platformProviderId(), null, modelId);
 
 /** The message has images and the model cannot read them. */
 const visionRequired = (label: string) =>
@@ -96,8 +99,8 @@ const visionRequired = (label: string) =>
   );
 
 /**
- * Route-side check. Platform ids outside the allowlist fall back to the
- * default, as before; a BYOK choice must name a key the caller owns and a model
+ * Route-side check. Platform ids outside the active provider's list fall back
+ * to its default, and a platform without a key is refused; a BYOK choice must name a key the caller owns and a model
  * that key's provider offers. With `withImages`, the model must accept images.
  */
 export async function validateModelChoice({
@@ -113,11 +116,15 @@ export async function validateModelChoice({
 }): Promise<RunModelChoice> {
   const { keyId, modelId } = toChoice(model);
   if (!keyId) {
-    const choice = platformChoice(modelId);
-    if (withImages && !modelAcceptsImages(choice.modelId)) {
-      throw visionRequired(choice.label);
+    if (!isPlatformConfigured()) {
+      throw new ModelChoiceError(AI_NOT_CONFIGURED_MESSAGE, 503, "ai_not_configured");
     }
-    return choice;
+    const model = platformModel(modelId);
+    const label = runModelLabel(model);
+    if (withImages && !model.vision) {
+      throw visionRequired(label);
+    }
+    return { modelId: model.id, label };
   }
 
   // A malformed id fails Convex argument validation: same answer as a foreign one.
@@ -162,7 +169,10 @@ export async function requireModelChoice(
   } catch (error) {
     if (error instanceof ModelChoiceError) {
       return {
-        rejected: NextResponse.json({ error: error.message }, { status: error.status }),
+        rejected: NextResponse.json(
+          { error: error.message, ...(error.code ? { code: error.code } : {}) },
+          { status: error.status },
+        ),
       };
     }
     throw error;
@@ -197,9 +207,10 @@ export interface RunModel {
 }
 
 /**
- * Run-side resolution. Throws `ProviderKeyError` when the key is gone, not
- * owned by the project's owner, marked invalid, no longer offers the model, or
- * its custom endpoint no longer passes the SSRF guard.
+ * Run-side resolution. Throws `ProviderKeyError` when the platform has no key,
+ * or when the user's key is gone, not owned by the project's owner, marked
+ * invalid, no longer offers the model, or its custom endpoint no longer passes
+ * the SSRF guard.
  * Call it in the function body, never inside `step.run`.
  */
 export async function resolveRunModel({
@@ -212,10 +223,14 @@ export async function resolveRunModel({
   choice: AgentModelChoice;
 }): Promise<RunModel> {
   if (!choice.keyId) {
-    const modelId = resolveAgentModelId(choice.modelId);
+    // The key can go missing between the route's check and the run (a redeploy).
+    if (!isPlatformConfigured()) {
+      throw new ProviderKeyError(AI_NOT_CONFIGURED_MESSAGE);
+    }
+    const modelId = platformModel(choice.modelId).id;
     return {
-      coding: (temperature) => openRouterModel(modelId, temperature),
-      title: (temperature) => openRouterModel(OPENROUTER_MODELS.title, temperature),
+      coding: (temperature) => platformAgentModel(modelId, temperature),
+      title: (temperature) => platformAgentModel(platformTitleModel(), temperature),
     };
   }
 

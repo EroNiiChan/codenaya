@@ -14,11 +14,6 @@ vi.mock("@/lib/convex-client", () => ({
 vi.mock("@/inngest/client", () => ({
   inngest: { send: mocks.inngestSend },
 }));
-// Instantiates the Workflow SDK at import time; only the Inngest path is used.
-vi.mock("@/features/conversations/workflow/client", () => ({
-  startProcessMessageWorkflow: vi.fn(),
-  cancelProcessMessageWorkflowByMessageId: vi.fn(),
-}));
 
 import { POST as messagesPOST } from "./messages/route";
 import { POST as cancelPOST } from "./messages/cancel/route";
@@ -63,7 +58,7 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
     vi.resetAllMocks();
     resetRateLimits();
     vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
-    vi.stubEnv("MESSAGE_PROCESSOR", "inngest");
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.auth.mockResolvedValue({ userId: "user_1" });
     // getOwnedConversation, then getProcessingMessages (messages route only).
@@ -95,6 +90,17 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
     );
     // The key of process-message's per-user concurrency (#242).
     expect(mocks.inngestSend.mock.calls[0][0].data).toMatchObject({ ownerId: "user_1" });
+  });
+
+  it("answers 503 ai_not_configured without the platform key, creating nothing", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+
+    const res = await call();
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "ai_not_configured" });
+    expect(mocks.mutation).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
   });
 
   it("answers 429 past the per-user limit without starting a run (#242)", async () => {
@@ -153,7 +159,7 @@ describe("cancelling processing messages while the backend is down", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "test-key");
-    vi.stubEnv("MESSAGE_PROCESSOR", "inngest");
+    vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.auth.mockResolvedValue({ userId: "user_1" });
     mocks.inngestSend.mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:8288"));
