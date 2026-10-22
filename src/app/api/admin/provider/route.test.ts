@@ -60,6 +60,11 @@ describe("POST /api/admin/provider", () => {
     expect((await post({ provider: "vertex" })).status).toBe(400);
   });
 
+  it("answers 404 when Convex no longer sees an admin", async () => {
+    mocks.fetchMutation.mockRejectedValue(new ConvexError({ code: "NOT_FOUND", message: "Not found" }));
+    expect((await post({ provider: "groq" })).status).toBe(404);
+  });
+
   it("passes on Convex's refusal of a provider without models", async () => {
     mocks.fetchMutation.mockRejectedValue(
       new ConvexError({ code: "CONFLICT", message: "Save models for groq before making it active" }),

@@ -58,6 +58,10 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const appError = getAppError(error);
+    // Admin rights lost between the check above and the mutation: same 404.
+    if (appError?.code === "NOT_FOUND") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     if (appError?.code !== "CONFLICT") throw error;
     return NextResponse.json({ error: appError.message, code: "no_models" }, { status: 409 });
   }

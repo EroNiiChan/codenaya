@@ -23,6 +23,12 @@ export interface PlatformModelConfig {
   defaultModelId: string;
 }
 
+/** The provider platform requests run on, and its selection (null: catalog). */
+export interface ActivePlatform {
+  provider: PlatformProviderId;
+  config: PlatformModelConfig | null;
+}
+
 /** A selection as Convex stores it, in the resolver's shape. */
 export const platformConfigFrom = (
   saved: {

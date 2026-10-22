@@ -81,11 +81,9 @@ export const ProviderCard = ({
     }
   };
 
-  const blockedReason = !current.keyConfigured
-    ? `${current.keyEnvVar} is not set`
-    : !hasSavedModels
-      ? `Save models for ${current.label} first`
-      : null;
+  let blockedReason: string | null = null;
+  if (!current.keyConfigured) blockedReason = `${current.keyEnvVar} is not set`;
+  else if (!hasSavedModels) blockedReason = `Save models for ${current.label} first`;
 
   return (
     <Card>

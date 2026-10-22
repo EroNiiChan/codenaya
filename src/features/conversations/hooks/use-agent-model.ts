@@ -2,12 +2,12 @@ import { useSyncExternalStore } from "react";
 
 import { modelIdsFor } from "@/features/ai-providers/registry";
 import {
+  type ActivePlatform,
   platformModels,
   platformProviderId,
   resolvePlatformModel,
 } from "@/features/ai-providers/platform";
 import {
-  type PlatformChoice,
   useAiPreferences,
   useAiProviderKeys,
   usePlatformModels,
@@ -93,7 +93,7 @@ function setModel(model: AgentModelChoice) {
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
-  platform: PlatformChoice | undefined,
+  platform: ActivePlatform | undefined,
 ) {
   if (!choice.keyId) {
     if (!platform) return true;
@@ -119,6 +119,7 @@ export function useAgentModel() {
   const keys = useAiProviderKeys();
   const preferences = useAiPreferences();
   const platform = usePlatformModels();
+  const fallback = platform ?? { provider: platformProviderId(), config: null };
 
   const preferred: AgentModelChoice | null = preferences
     ? {
@@ -131,13 +132,7 @@ export function useAgentModel() {
     [stored, preferred].find(
       (choice): choice is AgentModelChoice =>
         choice !== null && isAvailable(choice, keys, platform),
-    ) ?? {
-      modelId: resolvePlatformModel(
-        platform?.provider ?? platformProviderId(),
-        platform?.config ?? null,
-        undefined,
-      ).id,
-    };
+    ) ?? { modelId: resolvePlatformModel(fallback.provider, fallback.config, undefined).id };
 
   return [model, setModel] as const;
 }

@@ -2,7 +2,7 @@ import { convex } from "@/lib/convex-client";
 
 import { AI_PROVIDERS } from "../registry";
 import {
-  type PlatformModelConfig,
+  type ActivePlatform,
   type PlatformProviderId,
   platformConfigFrom,
   platformProviderId,
@@ -37,11 +37,6 @@ export const AI_NOT_CONFIGURED_MESSAGE =
 /** The provider's platform key, or null when its variable isn't set. Quiet. */
 export const platformKeyOrNull = (provider: PlatformProviderId) =>
   process.env[PLATFORM_KEY_ENV[provider]]?.trim() || null;
-
-export interface ActivePlatform {
-  provider: PlatformProviderId;
-  config: PlatformModelConfig | null;
-}
 
 /**
  * The provider and model selection platform requests run on: the admin's in
