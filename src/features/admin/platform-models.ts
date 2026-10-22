@@ -1,13 +1,11 @@
-import type { Infer } from "convex/values";
-
-import type { platformProviderValidator } from "../../../convex/schema";
+import type { PlatformProviderId } from "../ai-providers/platform";
 
 /**
  * Limits and shapes of the admin's platform model selection. Pure, so /admin
  * validates with the same numbers `convex/platformModels.ts` enforces.
  */
 
-export type PlatformProviderId = Infer<typeof platformProviderValidator>;
+export type { PlatformProviderId };
 
 /** Bounds the config doc (about 15 KB) and the users' picker. */
 export const MAX_PLATFORM_MODELS = 50;

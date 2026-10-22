@@ -1,6 +1,12 @@
 import ky, { HTTPError } from "ky";
 import { useMutation, useQuery } from "convex/react";
 
+import {
+  type PlatformModelConfig,
+  type PlatformProviderId,
+  platformConfigFrom,
+  platformProviderId,
+} from "../platform";
 import type { AiProviderId } from "../registry";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -13,6 +19,25 @@ import { Id } from "../../../../convex/_generated/dataModel";
 
 /** The signed-in user's keys, newest first, as browser-safe summaries. */
 export const useAiProviderKeys = () => useQuery(api.aiProviders.list);
+
+export interface PlatformChoice {
+  provider: PlatformProviderId;
+  config: PlatformModelConfig | null;
+}
+
+/**
+ * The platform provider and the models users may pick on it: the admin's
+ * selection in /admin, live (a removed model leaves open pickers at once),
+ * else the env provider's catalog. Undefined while loading.
+ */
+export const usePlatformModels = (): PlatformChoice | undefined => {
+  const active = useQuery(api.platformModels.getActive, { fallbackProvider: platformProviderId() });
+  return active && { provider: active.provider, config: platformConfigFrom(active.config) };
+};
+
+/** `usePlatformModels`, showing the env provider's catalog until it loads. */
+export const usePlatformModelsOrCatalog = (): PlatformChoice =>
+  usePlatformModels() ?? { provider: platformProviderId(), config: null };
 
 export const useRemoveAiProviderKey = () => useMutation(api.aiProviders.remove);
 

@@ -36,9 +36,12 @@ import {
 } from "@/components/ui/tooltip";
 import { ApprovalPrompt } from "@/features/integrations/components/approval-prompt";
 import { useProjectIntegrations } from "@/features/integrations/components/project-integrations-context";
-import { useAiProviderKeys } from "@/features/ai-providers/hooks/use-ai-providers";
+import {
+  useAiProviderKeys,
+  usePlatformModelsOrCatalog,
+} from "@/features/ai-providers/hooks/use-ai-providers";
 import { modelAcceptsImages } from "@/features/ai-providers/registry";
-import { platformProviderId, resolvePlatformModel } from "@/features/ai-providers/platform";
+import { resolvePlatformModel } from "@/features/ai-providers/platform";
 import { detectCredential } from "@/features/integrations/credential-guard";
 import { useEditor } from "@/features/editor/hooks/use-editor";
 import { useFiles } from "@/features/projects/hooks/use-files";
@@ -102,9 +105,10 @@ export const ConversationSidebar = ({
   const [planMode, setPlanMode] = useState(false);
   // A key still loading (or gone) is left to the server to check.
   const modelKeys = useAiProviderKeys();
+  const platform = usePlatformModelsOrCatalog();
   const modelKey = modelKeys?.find((key) => key._id === agentModel.keyId);
   const acceptsImages = !agentModel.keyId
-    ? resolvePlatformModel(platformProviderId(), null, agentModel.modelId).vision === true
+    ? resolvePlatformModel(platform.provider, platform.config, agentModel.modelId).vision === true
     : !modelKey || modelAcceptsImages(agentModel.modelId, modelKey);
   const [
     selectedConversationId,

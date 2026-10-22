@@ -345,3 +345,4 @@ if (notFound) return notFound;
 | [0003](adr/0003-e2b-node22-preview-template.md) | Cloud previews boot from a custom E2B Node 22 template |
 | [0004](adr/0004-e2e-clerk-user-pool.md) | e2e tests sign in from a pool of Clerk test users |
 | [0005](adr/0005-platform-ai-provider-by-env.md) | Platform AI provider chosen by env; Workflow backend retired |
+| [0006](adr/0006-platform-provider-and-models-in-admin.md) | Platform provider and models set at runtime in /admin; env is the fallback |

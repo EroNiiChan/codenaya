@@ -38,12 +38,12 @@ describe("platform models", () => {
     useProvider(provider);
     vi.stubEnv(PLATFORM_KEY_ENV[provider], `key-${provider}`);
 
-    expect(isPlatformConfigured()).toBe(true);
-    const agent = target(platformAgentModel("some-model", 0.3));
+    expect(isPlatformConfigured(provider)).toBe(true);
+    const agent = target(platformAgentModel(provider, "some-model", 0.3));
     expect(agent).toMatchObject({ id: "some-model", authKey: `key-${provider}` });
     expect(agent.url).toContain(url);
 
-    const editor = platformEditorModel();
+    const editor = platformEditorModel(provider);
     expect(editor.provider).toBe(editorApi);
   });
 
@@ -56,9 +56,9 @@ describe("platform models", () => {
     vi.stubEnv("OPENROUTER_API_KEY", "sk-or-other"); // another provider's key doesn't count
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(isPlatformConfigured()).toBe(false);
+    expect(isPlatformConfigured("groq")).toBe(false);
     expect(error.mock.calls[0][0]).toMatch(/GROQ_API_KEY is not set/);
-    expect(() => platformAgentModel("openai/gpt-oss-120b")).toThrow(/GROQ_API_KEY/);
-    expect(() => platformEditorModel()).toThrow(/GROQ_API_KEY/);
+    expect(() => platformAgentModel("groq", "openai/gpt-oss-120b")).toThrow(/GROQ_API_KEY/);
+    expect(() => platformEditorModel("groq")).toThrow(/GROQ_API_KEY/);
   });
 });

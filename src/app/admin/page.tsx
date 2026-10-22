@@ -4,11 +4,9 @@ import { connection } from "next/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditLogCard } from "@/features/admin/components/audit-log-card";
 import { ModelsTab } from "@/features/admin/components/models-tab";
-import {
-  ENV_PLATFORM_PROVIDER,
-  PLATFORM_PROVIDERS,
-  platformKeyOrNull,
-} from "@/features/admin/server/platform-keys";
+import { PLATFORM_PROVIDER_IDS, platformProviderId } from "@/features/ai-providers/platform";
+import { AI_PROVIDERS } from "@/features/ai-providers/registry";
+import { PLATFORM_KEY_ENV, platformKeyOrNull } from "@/features/ai-providers/server/platform-model";
 
 export const metadata: Metadata = { title: "Admin", robots: { index: false } };
 
@@ -19,9 +17,11 @@ const AdminPage = async () => {
   // Read the env per request, not baked in at build.
   await connection();
   // Only whether each key is set reaches the browser, never the key.
-  const providers = PLATFORM_PROVIDERS.map((p) => ({
-    ...p,
-    keyConfigured: platformKeyOrNull(p.id) !== null,
+  const providers = PLATFORM_PROVIDER_IDS.map((id) => ({
+    id,
+    label: AI_PROVIDERS[id].label,
+    keyEnvVar: PLATFORM_KEY_ENV[id],
+    keyConfigured: platformKeyOrNull(id) !== null,
   }));
 
   return (
@@ -39,7 +39,7 @@ const AdminPage = async () => {
           <TabsTrigger value="audit">Audit log</TabsTrigger>
         </TabsList>
         <TabsContent value="models" className="space-y-6">
-          <ModelsTab providers={providers} fallbackProvider={ENV_PLATFORM_PROVIDER} />
+          <ModelsTab providers={providers} fallbackProvider={platformProviderId()} />
         </TabsContent>
         <TabsContent value="audit">
           <AuditLogCard />

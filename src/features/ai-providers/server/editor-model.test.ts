@@ -7,9 +7,10 @@ const mocks = vi.hoisted(() => ({
   buildAiSdkModel: vi.fn(),
 }));
 
-vi.mock("@/lib/convex-client", () => ({
-  convex: { query: mocks.query, mutation: mocks.mutation },
-}));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query), mutation: mocks.mutation } };
+});
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
 vi.mock("./ai-sdk-model", () => ({ buildAiSdkModel: mocks.buildAiSdkModel }));
 

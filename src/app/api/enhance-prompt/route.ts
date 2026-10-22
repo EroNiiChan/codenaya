@@ -9,16 +9,14 @@ import {
   checkRateLimit,
   rateLimitedResponse,
 } from "@/lib/rate-limit";
-import {
-  isPlatformConfigured,
-  platformEditorModel,
-} from "@/features/ai-providers/server/platform-model";
+import { withEditorModel } from "@/features/ai-providers/server/editor-model";
 
 /**
  * POST /api/enhance-prompt
  *
  * Rewrites a short build idea ("todo app") into a clearer, more specific spec
- * the user can edit before sending. Returns `{ prompt }` as plain text.
+ * the user can edit before sending. Returns `{ prompt }` as plain text. Runs on
+ * the user's default key when they set one, like the other editor AI routes.
  */
 
 const requestSchema = z.object({
@@ -69,10 +67,6 @@ export async function POST(request: Request) {
     return rateLimitedResponse(rateLimit);
   }
 
-  if (!isPlatformConfigured()) {
-    return NextResponse.json({ error: "AI is not configured" }, { status: 503 });
-  }
-
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
 
   if (!parsed.success) {
@@ -96,14 +90,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { object } = await generateObject({
-      model: platformEditorModel(),
-      output: "object",
-      schema: specSchema,
-      prompt: ENHANCE_PROMPT.replace("{prompt}", prompt),
-    });
+    return await withEditorModel({ userId }, async (model) => {
+      const { object } = await generateObject({
+        model,
+        output: "object",
+        schema: specSchema,
+        prompt: ENHANCE_PROMPT.replace("{prompt}", prompt),
+      });
 
-    return NextResponse.json({ prompt: formatSpec(object) });
+      return NextResponse.json({ prompt: formatSpec(object) });
+    });
   } catch (error) {
     console.error("Enhance prompt error:", error);
     return NextResponse.json(

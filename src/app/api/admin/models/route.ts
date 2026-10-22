@@ -4,11 +4,9 @@ import {
   ProviderModelsError,
   fetchProviderModels,
 } from "@/features/admin/server/fetch-provider-models";
-import {
-  PLATFORM_PROVIDERS,
-  platformKeyOrNull,
-} from "@/features/admin/server/platform-keys";
 import { adminOrNull } from "@/features/admin/server/require-admin";
+import { PLATFORM_PROVIDER_IDS, type PlatformProviderId } from "@/features/ai-providers/platform";
+import { PLATFORM_KEY_ENV, platformKeyOrNull } from "@/features/ai-providers/server/platform-model";
 import {
   ADMIN_MODELS_FETCH_RATE_LIMIT,
   checkRateLimit,
@@ -31,23 +29,22 @@ export async function GET(request: Request) {
   const rateLimit = checkRateLimit(admin.userId, ADMIN_MODELS_FETCH_RATE_LIMIT);
   if (!rateLimit.allowed) return rateLimitedResponse(rateLimit);
 
-  const id = new URL(request.url).searchParams.get("provider");
-  const provider = PLATFORM_PROVIDERS.find((p) => p.id === id);
-  if (!provider) {
+  const provider = new URL(request.url).searchParams.get("provider") as PlatformProviderId;
+  if (!PLATFORM_PROVIDER_IDS.includes(provider)) {
     return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
   }
 
-  const apiKey = platformKeyOrNull(provider.id);
+  const apiKey = platformKeyOrNull(provider);
   if (!apiKey) {
     return NextResponse.json(
-      { error: `${provider.keyEnvVar} is not configured`, code: "ai_not_configured" },
+      { error: `${PLATFORM_KEY_ENV[provider]} is not configured`, code: "ai_not_configured" },
       { status: 503 },
     );
   }
 
   try {
-    const models = await fetchProviderModels(provider.id, apiKey);
-    return NextResponse.json({ provider: provider.id, models });
+    const models = await fetchProviderModels(provider, apiKey);
+    return NextResponse.json({ provider, models });
   } catch (error) {
     if (!(error instanceof ProviderModelsError)) throw error;
     return NextResponse.json(

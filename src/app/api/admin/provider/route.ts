@@ -2,12 +2,9 @@ import { fetchMutation } from "convex/nextjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  PLATFORM_PROVIDERS,
-  PLATFORM_PROVIDER_IDS,
-  platformKeyOrNull,
-} from "@/features/admin/server/platform-keys";
 import { adminOrNull } from "@/features/admin/server/require-admin";
+import { PLATFORM_PROVIDER_IDS } from "@/features/ai-providers/platform";
+import { PLATFORM_KEY_ENV, platformKeyOrNull } from "@/features/ai-providers/server/platform-model";
 import { getAppError } from "@/lib/convex-error";
 import { parseJsonBody } from "@/lib/parse-json-body";
 import {
@@ -44,9 +41,11 @@ export async function POST(request: Request) {
   if (invalid) return invalid;
 
   if (!platformKeyOrNull(data.provider)) {
-    const { keyEnvVar } = PLATFORM_PROVIDERS.find((p) => p.id === data.provider)!;
     return NextResponse.json(
-      { error: `${keyEnvVar} is not set, so ${data.provider} can't run requests`, code: "ai_not_configured" },
+      {
+        error: `${PLATFORM_KEY_ENV[data.provider]} is not set, so ${data.provider} can't run requests`,
+        code: "ai_not_configured",
+      },
       { status: 409 },
     );
   }
