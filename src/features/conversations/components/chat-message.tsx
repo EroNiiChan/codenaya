@@ -46,6 +46,8 @@ export const UserMessage = ({
   const textRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [clamped, setClamped] = useState(false);
+  // Read once: a message must not fade up again when `animate` turns true later.
+  const [fadeUp] = useState(animate);
   const { skills, text } = useMemo(() => {
     const { names, rest } = splitSlashSkills(content);
     const skills = names.filter((name) => skillNames?.has(name));
@@ -67,7 +69,7 @@ export const UserMessage = ({
     <div
       className={cn(
         "ml-auto flex min-w-0 max-w-[90%] flex-col items-end @sm:max-w-[85%]",
-        animate && "animate-fade-up motion-reduce:animate-none",
+        fadeUp && "animate-fade-up motion-reduce:animate-none",
       )}
     >
       {imageUrls.length > 0 && (

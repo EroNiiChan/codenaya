@@ -132,6 +132,12 @@ export const ConversationSidebar = ({
   const activeConversation = useConversation(activeConversationId);
   const conversationMessages = useMessages(activeConversationId);
 
+  // The message being sent shows at once, until its saved copy arrives; the
+  // request saves it only after a few server round-trips.
+  const [pending, setPending] = useState<{ text: string; userCount: number } | null>(null);
+  const userCount =
+    conversationMessages?.filter((message) => message.role === "user").length ?? 0;
+
   // Messages already there when a conversation opens are history; only those
   // that arrive while it is open animate in.
   const [history, setHistory] = useState<{
@@ -216,8 +222,9 @@ export const ConversationSidebar = ({
 
   /**
    * Sends a message to the active conversation (creating one if needed).
-   * Resolves to "sent", "failed" (the request errored), or "blocked" (never
-   * sent: it contained a credential or no conversation could be created).
+   * Resolves to "sent", "failed" (saved, but the reply is marked failed with a
+   * retry action), or "blocked" (not saved: it contained a credential, no
+   * conversation could be created, or the request errored).
    */
   const sendMessage = async (
     text: string,
@@ -272,7 +279,7 @@ export const ConversationSidebar = ({
         }
       }
       toast.error("Message failed to send");
-      return "failed";
+      return "blocked";
     }
   };
 
@@ -288,6 +295,8 @@ export const ConversationSidebar = ({
       setInput("");
       return;
     }
+    // One send at a time (the empty state's prompts bypass the disabled Send).
+    if (pending) return;
 
     let finalMessage = message.text;
     if (contexts.length > 0) {
@@ -300,23 +309,31 @@ export const ConversationSidebar = ({
       finalMessage = `${skills}${contextStrs.join("\n\n")}\n\n${rest}`;
     }
 
-    let images: Id<"_storage">[] | undefined;
-    if (message.files.length > 0) {
-      images = await uploadMessageImages(message.files);
-    }
+    setPending({ text: finalMessage, userCount });
+    setInput("");
+    let result: Awaited<ReturnType<typeof sendMessage>> = "blocked";
+    try {
+      let images: Id<"_storage">[] | undefined;
+      if (message.files.length > 0) {
+        images = await uploadMessageImages(message.files);
+      }
 
-    const result = await sendMessage(
-      finalMessage,
-      images,
-      planMode ? PLAN_MODE : undefined,
-    );
-    if (result !== "blocked") {
+      result = await sendMessage(
+        finalMessage,
+        images,
+        planMode ? PLAN_MODE : undefined,
+      );
       // Only clear contexts after a successful send so they aren't lost on failure
       if (result === "sent") clearContexts();
-      setInput("");
+      // PromptInput keeps its attachments when submit throws, to send again.
+      if (result !== "sent" && images) throw new Error("Message not sent");
+    } finally {
+      setPending(null);
+      // An unsaved message goes back to the composer, unless a new one was started.
+      if (result === "blocked" && !useChatStore.getState().input) {
+        setInput(message.text);
+      }
     }
-    // PromptInput keeps its attachments when submit throws, to send again.
-    if (result !== "sent" && images) throw new Error("Message not sent");
   }
 
   /** Throws (keeping the attachments) when the images can't be sent. */
@@ -390,7 +407,7 @@ export const ConversationSidebar = ({
             </Button>
           </div>
         </div>
-        {conversationMessages?.length === 0 ? (
+        {conversationMessages?.length === 0 && !pending ? (
           <ChatEmptyState
             onSelect={(prompt) => void handleSubmit({ text: prompt, files: [] })}
           />
@@ -404,7 +421,8 @@ export const ConversationSidebar = ({
                   content={message.content}
                   imageUrls={message.imageUrls}
                   skillNames={slashMenu.skillNames}
-                  animate={Boolean(history && !history.messageIds.has(message._id))}
+                  // The saved copy of the pending message replaces it in place.
+                  animate={Boolean(history && !history.messageIds.has(message._id)) && !pending}
                 />
               ) : (
                 <AssistantMessage
@@ -432,6 +450,13 @@ export const ConversationSidebar = ({
                   }
                 />
               ),
+            )}
+            {pending && userCount <= pending.userCount && (
+              <UserMessage
+                content={pending.text}
+                skillNames={slashMenu.skillNames}
+                animate
+              />
             )}
           </ConversationContent>
           <ConversationScrollButton
@@ -543,7 +568,8 @@ export const ConversationSidebar = ({
                         disabled={
                           isProcessing
                             ? false
-                            : enhancer.isEnhancing ||
+                            : Boolean(pending) ||
+                              enhancer.isEnhancing ||
                               (!input && contexts.length === 0 && images === 0) ||
                               (images > 0 && !acceptsImages)
                         }

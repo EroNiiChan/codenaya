@@ -76,22 +76,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const { runModel, rejected } = await requireModelChoice({
-    internalKey,
-    userId,
-    model,
-    withImages: Boolean(images?.length),
-  });
+  // Independent reads, in parallel: each Convex round-trip delays the send.
+  const [{ runModel, rejected }, { found: conversation, notFound }] =
+    await Promise.all([
+      requireModelChoice({
+        internalKey,
+        userId,
+        model,
+        withImages: Boolean(images?.length),
+      }),
+      requireOwnedConversation({
+        internalKey,
+        userId,
+        conversationId,
+      }),
+    ]);
 
   if (rejected) {
     return rejected;
   }
-
-  const { found: conversation, notFound } = await requireOwnedConversation({
-    internalKey,
-    userId,
-    conversationId,
-  });
 
   if (notFound) {
     return notFound;
@@ -99,36 +102,30 @@ export async function POST(request: Request) {
 
   const projectId = conversation.projectId;
 
-  // Find all processing messages in this project
-  const processingMessages = await convex.query(
-    api.system.getProcessingMessages,
-    {
+  // Cancel this project's running replies while saving the user message; the
+  // placeholder below must come after, or it would be cancelled too.
+  await Promise.all([
+    convex
+      .query(api.system.getProcessingMessages, { internalKey, projectId })
+      .then((processingMessages) =>
+        Promise.all(
+          processingMessages.map((msg) =>
+            cancelProcessingMessage({ internalKey, messageId: msg._id })
+          )
+        )
+      ),
+    convex.mutation(api.system.createMessage, {
       internalKey,
+      conversationId: conversation._id,
       projectId,
-    }
-  );
-
-  if (processingMessages.length > 0) {
-    // Cancel all processing messages
-    await Promise.all(
-      processingMessages.map((msg) =>
-        cancelProcessingMessage({ internalKey, messageId: msg._id })
-      )
-    );
-  }
-
-  // Create user message
-  await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversation._id,
-    projectId,
-    role: "user",
-    content: message,
-    // Only sent with images: only the sender's own uploads can be attached.
-    ...(images?.length
-      ? { images: images as Id<"_storage">[], ownerId: userId }
-      : {}),
-  });
+      role: "user",
+      content: message,
+      // Only sent with images: only the sender's own uploads can be attached.
+      ...(images?.length
+        ? { images: images as Id<"_storage">[], ownerId: userId }
+        : {}),
+    }),
+  ]);
 
   // Create assistant message placeholder with processing status
   const assistantMessageId = await convex.mutation(
