@@ -35,7 +35,7 @@ flowchart LR
   API -- "ConvexHttpClient" --> SYS
   API -- "inngest.send" --> ING
   ING --> SYS
-  ING -- "AgentKit" --> OR["OpenRouter / BYOK provider"]
+  ING -- "AgentKit" --> OR["Platform provider (env) / BYOK provider"]
   ING -- "MCP tools" --> MCP["User MCP servers"]
   API -- "Sandbox.create" --> E2B["E2B sandbox<br/>codenaya-node22"]
   CLERK["Clerk webhook"] --> HTTP["convex/http.ts"]
@@ -64,7 +64,7 @@ src/app/            routes, layouts, API route handlers. Thin: parse, auth, dele
 src/features/<f>/   one product area. Owns its UI, hooks, server helpers, agent code.
 src/components/ui/  shadcn primitives (generated; edit only to fix the primitive).
 src/components/     app-wide composites (navbar, providers, legal page, landing).
-src/lib/            feature-agnostic infrastructure (Convex client, OpenRouter, Sentry).
+src/lib/            feature-agnostic infrastructure (Convex client, Sentry, rate limits).
 convex/             one file per domain (projects.ts, files.ts, skills.ts, ...).
 e2e/                Playwright specs and fixtures.
 ```
@@ -77,10 +77,9 @@ Dependencies point **down**: `app → features → components, lib`. `lib` and
   features' top-level components. Other features shouldn't reach sideways for UI. If two
   features need the same component, move it to `src/components/`.
 - **Don't import another feature's internals:** its `store/`, `inngest/lib/`, private
-  `utils/`. The rule exists because of
-  `features/ai-providers/server/resolve-run-model.ts:9-12`, which imports
-  `conversations/inngest/lib/openrouter-model`: model construction lives in the
-  conversations agent's private folder while two features depend on it.
+  `utils/`. Platform model construction used to live in the conversations agent's
+  private `inngest/lib/` while `ai-providers` depended on it; it now lives in
+  `features/ai-providers/server/platform-model.ts`, next to the BYOK builders.
 - **Shared infrastructure goes in `src/lib/`.** For example, `src/lib/rate-limit.ts` is
   the app's only rate limiter, used by routes across several features.
 - **No import cycles between features.**
@@ -192,7 +191,7 @@ if (notFound) return notFound;
 - **Error bodies are `{ error: string, code?: string }`.** `code` is a stable snake_case
   value the client can branch on (`credential_detected`, `dispatch_failed`).
 - Read `CODENAYA_CONVEX_INTERNAL_KEY` and other secrets per request, never at module
-  load, so `next build` works without them (`src/lib/openrouter.ts` explains why).
+  load, so `next build` works without them (`ai-providers/server/platform-model.ts` explains why).
 
 ## 5. Agent and Inngest
 
@@ -215,8 +214,9 @@ if (notFound) return notFound;
   return `Error: ...` strings for the agent's own mistakes (bad id, folder-not-file) so
   it can correct itself. Throw only for transient failures. Wrap the mutation in
   `toolStep?.run(...)`. `tools/update-file.ts` is the template.
-- **LLM access goes through OpenRouter only** (`src/lib/openrouter.ts`) or the user's
-  BYOK key (`features/ai-providers`). No new provider SDK clients.
+- **LLM access goes through the platform provider**
+  (`features/ai-providers/server/platform-model.ts`, chosen by `NEXT_PUBLIC_AI_PROVIDER`,
+  ADR 0005) or the user's BYOK key (`features/ai-providers`). No new provider SDK clients.
 - **Prompt text and model-visible strings** go in `constants.ts` next to the function.
 
 ## 6. UI
@@ -250,7 +250,7 @@ if (notFound) return notFound;
   throws `ConvexError`, routes return `{ error, code }` with a status, tools return
   `Error: ...`, and Inngest throws (retryable) or `NonRetriableError`.
 - A user-facing message names the fix. For example, the BYOK failure points to
-  `/settings/ai-providers`, and `readOpenRouterApiKey` names the variable to set.
+  `/settings/ai-providers`, and `readPlatformApiKey` names the variable to set.
 - Don't swallow errors. A `catch` either handles a specific, named case or rethrows.
   `catch {}` is allowed only around best-effort cleanup, with a comment saying so.
 - Sentry is already wired in: `sentry.*.config.ts`, `@inngest/middleware-sentry` in
@@ -344,3 +344,4 @@ if (notFound) return notFound;
 | [0002](adr/0002-agent-runtime-inngest-agentkit-openrouter.md) | Agent runs on Inngest AgentKit via OpenRouter; BYOK keys resolved outside steps |
 | [0003](adr/0003-e2b-node22-preview-template.md) | Cloud previews boot from a custom E2B Node 22 template |
 | [0004](adr/0004-e2e-clerk-user-pool.md) | e2e tests sign in from a pool of Clerk test users |
+| [0005](adr/0005-platform-ai-provider-by-env.md) | Platform AI provider chosen by env; Workflow backend retired |

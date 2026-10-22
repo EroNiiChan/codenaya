@@ -38,20 +38,19 @@ const customKey = {
 };
 
 const resolve = () =>
-  resolveEditorModel({ internalKey: "ik", userId: "user_1", task: "quickEdit" });
+  resolveEditorModel({ internalKey: "ik", userId: "user_1" });
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
   vi.stubEnv("OPENROUTER_API_KEY", "sk-or-platform");
-  vi.stubEnv("OPENROUTER_QUICK_EDIT_MODEL", "");
   vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "ik");
   mocks.openProviderKey.mockResolvedValue(SECRET);
   mocks.buildAiSdkModel.mockImplementation((target) => ({ byok: target }));
 });
 
 describe("resolveEditorModel", () => {
-  it("uses the platform OpenRouter model without a default key", async () => {
+  it("uses the platform provider's small model without a default key", async () => {
     mocks.query.mockResolvedValue(null);
 
     const resolved = await resolve();
@@ -61,9 +60,8 @@ describe("resolveEditorModel", () => {
       userId: "user_1",
     });
     expect(resolved?.key).toBeUndefined();
-    expect(resolved?.model).toMatchObject({
-      provider: "openai.chat",
-      modelId: "openai/gpt-5.4-mini",
+    expect(resolved?.model).toEqual({
+      byok: { provider: "openrouter", apiKey: "sk-or-platform", model: "openai/gpt-5.4-mini" },
     });
     expect(mocks.openProviderKey).not.toHaveBeenCalled();
   });
@@ -130,7 +128,7 @@ describe("resolveEditorModel", () => {
 
 describe("withEditorModel", () => {
   const run = (generate: Parameters<typeof withEditorModel>[1]) =>
-    withEditorModel({ userId: "user_1", task: "suggestion" }, generate);
+    withEditorModel({ userId: "user_1" }, generate);
 
   it("passes the resolved model to the generation", async () => {
     mocks.query.mockResolvedValue({ key: anthropicKey, modelId: "claude-opus-5-5" });

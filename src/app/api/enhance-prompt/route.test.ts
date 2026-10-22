@@ -37,7 +37,6 @@ describe("POST /api/enhance-prompt", () => {
     vi.unstubAllEnvs();
     resetRateLimits();
     vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
-    vi.stubEnv("OPENROUTER_ENHANCE_PROMPT_MODEL", "");
     mocks.auth.mockResolvedValue({ userId: "user_1" });
     mocks.generateObject.mockResolvedValue({ object: SPEC });
   });

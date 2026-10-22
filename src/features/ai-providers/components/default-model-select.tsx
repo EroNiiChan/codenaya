@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 
 import { AI_PROVIDERS, PLATFORM_PROVIDER, keyModels } from "../registry";
+import { platformModels, platformProviderId, resolvePlatformModel } from "../platform";
 import { fromChoiceValue, toChoiceValue } from "../model-choice";
 import { useSetAiPreferences } from "../hooks/use-ai-providers";
 import type { AiProviderKeySummary } from "../../../../convex/aiProviders";
@@ -39,6 +40,11 @@ export const DefaultModelSelect = ({
     (key) => key.status === "active" || key._id === defaultKeyId,
   );
   const defaultKey = keys.find((key) => key._id === defaultKeyId);
+  const provider = platformProviderId();
+  // A platform default saved under another provider shows as the one that runs.
+  const modelId = defaultKeyId
+    ? defaultModelId
+    : resolvePlatformModel(provider, null, defaultModelId).id;
 
   const handleChange = async (value: string) => {
     try {
@@ -58,7 +64,7 @@ export const DefaultModelSelect = ({
       <Select
         value={toChoiceValue({
           keyId: defaultKeyId ?? undefined,
-          modelId: defaultModelId,
+          modelId,
         })}
         onValueChange={(value) => void handleChange(value)}
       >
@@ -68,7 +74,7 @@ export const DefaultModelSelect = ({
         <SelectContent position="popper" className="max-h-80">
           <SelectGroup>
             <SelectLabel>{PLATFORM_PROVIDER.label}</SelectLabel>
-            {PLATFORM_PROVIDER.models.map((model) => (
+            {platformModels(provider, null).map((model) => (
               <SelectItem key={model.id} value={toChoiceValue({ modelId: model.id })}>
                 {model.label}
               </SelectItem>

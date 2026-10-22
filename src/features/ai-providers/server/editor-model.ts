@@ -2,14 +2,9 @@ import type { LanguageModel } from "ai";
 import { NextResponse } from "next/server";
 
 import { convex } from "@/lib/convex-client";
-import {
-  type EditorAiTask,
-  editorModel,
-  isOpenRouterConfigured,
-} from "@/lib/openrouter";
-
 import { AI_PROVIDERS, PROVIDER_KEY_ERROR_CODE, modelIdsFor } from "../registry";
 import { buildAiSdkModel } from "./ai-sdk-model";
+import { isPlatformConfigured, platformEditorModel } from "./platform-model";
 import { ProviderKeyError, isProviderKeyRejection } from "./resolve-run-model";
 import { openProviderKey } from "./sealed-key";
 import { api } from "../../../../convex/_generated/api";
@@ -17,7 +12,7 @@ import type { Doc } from "../../../../convex/_generated/dataModel";
 
 /**
  * The model for the editor AI routes (`/api/suggestion`, `/api/quick-edit`):
- * the user's default key when they set one, otherwise Codenaya's OpenRouter
+ * the user's default key when they set one, otherwise Codenaya's platform
  * model. Resolved per request on the server; the decrypted key never leaves it.
  *
  * As with agent runs, a key that cannot be used is an error, never a silent
@@ -48,11 +43,9 @@ const editorModelIdFor = (provider: Doc<"aiProviderKeys">["provider"], defaultMo
 export async function resolveEditorModel({
   internalKey,
   userId,
-  task,
 }: {
   internalKey: string;
   userId: string;
-  task: EditorAiTask;
 }): Promise<EditorModel | null> {
   const byok = await convex.query(api.system.getDefaultAiProviderKey, {
     internalKey,
@@ -60,7 +53,7 @@ export async function resolveEditorModel({
   });
 
   if (!byok) {
-    return isOpenRouterConfigured() ? { model: editorModel(task) } : null;
+    return isPlatformConfigured() ? { model: platformEditorModel() } : null;
   }
 
   const { key, modelId } = byok;
@@ -95,7 +88,7 @@ const keyErrorResponse = (message: string) =>
  * marks it invalid, as an agent run does. Other errors propagate.
  */
 export async function withEditorModel(
-  { userId, task }: { userId: string; task: EditorAiTask },
+  { userId }: { userId: string },
   generate: (model: LanguageModel) => Promise<Response>,
 ): Promise<Response> {
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
@@ -105,7 +98,7 @@ export async function withEditorModel(
 
   let resolved: EditorModel | null;
   try {
-    resolved = await resolveEditorModel({ internalKey, userId, task });
+    resolved = await resolveEditorModel({ internalKey, userId });
   } catch (error) {
     if (error instanceof ProviderKeyError) {
       return keyErrorResponse(error.message);

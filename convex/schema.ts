@@ -23,6 +23,7 @@ export const aiProviderValidator = v.union(
   v.literal("openrouter"),
   v.literal("openai"),
   v.literal("anthropic"),
+  v.literal("groq"),
   v.literal("custom"),
 );
 
@@ -155,7 +156,8 @@ export default defineSchema({
         v.literal("cancelled")
       )
     ),
-    // Workflow run id (when processed via Vercel Workflow SDK)
+    // Legacy: the Vercel Workflow run id, set by the retired Workflow backend
+    // (ADR 0005). Kept because existing rows have it; nothing writes it now.
     workflowRunId: v.optional(v.string()),
     // Agent activity for the chat panel. Bounded: see MAX_MESSAGE_STEPS.
     steps: v.optional(v.array(messageStepValidator)),
@@ -521,9 +523,8 @@ export default defineSchema({
   /**
    * Human-in-the-loop gate for destructive MCP tool calls.
    *
-   * The agent polls its own row from inside a durable step. Polling rather than
-   * a backend-specific signal keeps the behaviour identical across the Inngest
-   * and Workflow backends, which matters because one is the other's fallback.
+   * The agent polls its own row from inside a durable step, rather than waiting
+   * on a backend-specific signal.
    */
   mcpApprovals: defineTable({
     projectId: v.id("projects"),

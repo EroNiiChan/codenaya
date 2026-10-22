@@ -1,50 +1,11 @@
 import { inngest } from "@/inngest/client";
 import { convex } from "@/lib/convex-client";
-import {
-  cancelProcessMessageWorkflowByMessageId,
-  startProcessMessageWorkflow,
-} from "@/features/conversations/workflow/client";
-import { isVertexConfigured } from "@/features/conversations/workflow/lib/vertex-model";
 
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 import type { MessageMode } from "@/features/conversations/plan-mode";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-
-export type MessageProcessorBackend = "inngest" | "workflow";
-
-/**
- * Reads the configured backend from the `MESSAGE_PROCESSOR` env variable.
- * Defaults to `inngest` to keep existing behaviour unchanged. Set to
- * `workflow` to route message processing through the Vercel Workflow SDK
- * implementation.
- *
- * Inngest is the primary backend; Workflow is its fallback. Because the
- * Workflow implementation runs its agent on Google Vertex, selecting it without
- * Vertex credentials would fail on every message. Rather than accept that, an
- * unusable `workflow` selection degrades to `inngest` and warns — a fallback
- * that cannot run is worse than no fallback, because the failure surfaces only
- * once the primary is already down.
- */
-export function getMessageProcessorBackend(): MessageProcessorBackend {
-  const value = process.env.MESSAGE_PROCESSOR?.toLowerCase().trim();
-
-  if (value !== "workflow") {
-    return "inngest";
-  }
-
-  if (!isVertexConfigured()) {
-    console.warn(
-      "[message-processor] MESSAGE_PROCESSOR=workflow but Vertex credentials " +
-        "(GOOGLE_VERTEX_PROJECT / GOOGLE_CLIENT_EMAIL / GOOGLE_PRIVATE_KEY) are " +
-        "missing. Falling back to the Inngest backend.",
-    );
-    return "inngest";
-  }
-
-  return "workflow";
-}
 
 interface ProcessMessageDispatchInput {
   internalKey: string;
@@ -54,43 +15,22 @@ interface ProcessMessageDispatchInput {
   /** The project owner, the key of the per-user agent run concurrency (#242). */
   ownerId: string;
   message: string;
-  /**
-   * Validated model choice; omitted means the platform default. Inngest only:
-   * the Workflow backend always runs on Vertex with the platform key.
-   */
+  /** Validated model choice; omitted means the platform default. */
   model?: AgentModelChoice;
   /** Plan mode (#120): no write tools; omitted means build. */
   mode?: MessageMode;
 }
 
 interface DispatchResult {
-  backend: MessageProcessorBackend;
-  /** Inngest event id (if backend === "inngest"). */
+  /** Always Inngest since the Workflow backend was retired (ADR 0005); kept for API clients. */
+  backend: "inngest";
   eventId?: string;
-  /** Workflow run id (if backend === "workflow"). */
-  runId?: string;
 }
 
-/**
- * Dispatches a "user sent a message" event to the configured backend.
- * The two backends behave equivalently from the caller's perspective.
- */
+/** Dispatches a "user sent a message" event to the Inngest agent. */
 export async function dispatchProcessMessage(
   input: ProcessMessageDispatchInput,
 ): Promise<DispatchResult> {
-  const backend = getMessageProcessorBackend();
-
-  if (backend === "workflow") {
-    if (input.model?.keyId) {
-      console.warn(
-        "[message-processor] BYOK model requested on the Workflow backend; " +
-          "running on the platform Vertex model instead.",
-      );
-    }
-    const runId = await startProcessMessageWorkflow(input);
-    return { backend, runId };
-  }
-
   const event = await inngest.send({
     name: "message/sent",
     data: {
@@ -106,7 +46,7 @@ export async function dispatchProcessMessage(
     },
   });
 
-  return { backend, eventId: event.ids[0] };
+  return { backend: "inngest", eventId: event.ids[0] };
 }
 
 /** Written in place of the reply when the agent could not be started. */
@@ -148,20 +88,8 @@ export async function dispatchProcessMessageOrFail(
   }
 }
 
-/**
- * Cancels in-flight processing for a single assistant message. Routes to the
- * configured backend.
- */
-export async function dispatchCancelMessage(opts: {
-  internalKey: string;
-  messageId: Id<"messages">;
-}) {
-  const backend = getMessageProcessorBackend();
-
-  if (backend === "workflow") {
-    return cancelProcessMessageWorkflowByMessageId(opts);
-  }
-
+/** Cancels in-flight processing for a single assistant message. */
+export async function dispatchCancelMessage(opts: { messageId: Id<"messages"> }) {
   await inngest.send({
     name: "message/cancel",
     data: { messageId: opts.messageId },

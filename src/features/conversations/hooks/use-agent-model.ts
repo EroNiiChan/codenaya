@@ -2,16 +2,17 @@ import { useSyncExternalStore } from "react";
 
 import { modelIdsFor } from "@/features/ai-providers/registry";
 import {
+  platformModels,
+  platformProviderId,
+  resolvePlatformModel,
+} from "@/features/ai-providers/platform";
+import {
   useAiPreferences,
   useAiProviderKeys,
 } from "@/features/ai-providers/hooks/use-ai-providers";
 import type { AiProviderKeySummary } from "../../../../convex/aiProviders";
 
-import {
-  type AgentModelChoice,
-  DEFAULT_AGENT_MODEL_ID,
-  isAgentModelId,
-} from "../agent-models";
+import type { AgentModelChoice } from "../agent-models";
 
 const STORAGE_KEY = "codenaya:agent-model";
 
@@ -83,15 +84,17 @@ function setModel(model: AgentModelChoice) {
 }
 
 /**
- * Whether a choice can still be sent: a platform model on the allowlist, or a
- * model of one of the user's keys. While keys are loading a BYOK choice is
+ * Whether a choice can still be sent: one of the platform provider's models,
+ * or a model of one of the user's keys. While keys are loading a BYOK choice is
  * kept; the server validates it either way.
  */
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
 ) {
-  if (!choice.keyId) return isAgentModelId(choice.modelId);
+  if (!choice.keyId) {
+    return platformModels(platformProviderId(), null).some((m) => m.id === choice.modelId);
+  }
   if (!keys) return true;
   const key = keys.find((k) => k._id === choice.keyId);
   return Boolean(key && modelIdsFor(key).includes(choice.modelId));
@@ -123,7 +126,7 @@ export function useAgentModel() {
     [stored, preferred].find(
       (choice): choice is AgentModelChoice =>
         choice !== null && isAvailable(choice, keys),
-    ) ?? { modelId: DEFAULT_AGENT_MODEL_ID };
+    ) ?? { modelId: resolvePlatformModel(platformProviderId(), null, undefined).id };
 
   return [model, setModel] as const;
 }

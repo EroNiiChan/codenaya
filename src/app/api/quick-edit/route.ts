@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       .replace("{instruction}", instruction)
       .replace("{documentation}", documentationContext);
 
-    return await withEditorModel({ userId, task: "quickEdit" }, async (model) => {
+    return await withEditorModel({ userId }, async (model) => {
       const { object } = await generateObject({
         model,
         output: "object",

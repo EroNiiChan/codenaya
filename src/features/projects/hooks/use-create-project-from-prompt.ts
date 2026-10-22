@@ -63,6 +63,11 @@ export const useCreateProjectFromPrompt = () => {
             toast.error(body.error ?? CREDENTIAL_ERROR);
             return false;
           }
+          // Platform AI has no key; nothing was created.
+          if (body.code === "ai_not_configured" && body.error) {
+            toast.error(body.error);
+            return false;
+          }
         }
         toast.error("Unable to create project");
         return false;

@@ -33,9 +33,6 @@
 		"@opentelemetry/propagator-jaeger": ">=2.9.0 <3",
 		"@opentelemetry/sdk-node": ">=0.220.0 <0.223.0",
 		"nanoid@3": ">=3.3.18 <4",
-		"@workflow/core": {
-			"nanoid": ">=5.1.16 <6"
-		},
 		"brace-expansion@1": ">=1.1.18 <2",
 		"brace-expansion@2": ">=2.1.4 <3",
 		"brace-expansion@5": ">=5.0.7 <6",
@@ -43,7 +40,6 @@
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^3.0.1",
-		"@ai-sdk/google-vertex": "^4.0.139",
 		"@ai-sdk/openai": "^3.0.60",
 		"@clerk/nextjs": "^7.2.7",
 		"@clerk/ui": "^1.39.0",
@@ -93,7 +89,6 @@
 		"@sentry/nextjs": "^10.50.0",
 		"@tanstack/react-form": "^1.27.7",
 		"@webcontainer/api": "^1.6.1",
-		"@workflow/ai": "^4.1.2",
 		"@xterm/addon-fit": "^0.11.0",
 		"@xterm/xterm": "^6.0.0",
 		"ai": "^6.0.6",
@@ -126,7 +121,6 @@
 		"tar": ">=7.5.22 <8",
 		"typescript": "^5",
 		"use-stick-to-bottom": "^1.1.1",
-		"workflow": "^4.2.5",
 		"yaml": "^2.9.1",
 		"zod": "^4.2.1",
 		"zustand": "^5.0.9"

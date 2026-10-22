@@ -1,5 +1,4 @@
 import { withSentryConfig } from "@sentry/nextjs";
-import { withWorkflow } from "workflow/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -50,7 +49,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(withWorkflow(nextConfig), {
+export default withSentryConfig(nextConfig, {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 

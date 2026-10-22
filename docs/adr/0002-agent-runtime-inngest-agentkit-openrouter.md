@@ -1,6 +1,6 @@
 # 0002. Agent runs on Inngest AgentKit via OpenRouter; BYOK keys resolved outside steps
 
-- Status: Accepted
+- Status: Accepted. The platform-provider and Workflow bullets are superseded by [0005](0005-platform-ai-provider-by-env.md)
 - Date: 2026-10-14
 - Related: #91, #96, #97, #152, #158, #159, #186
 
