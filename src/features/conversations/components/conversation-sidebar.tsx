@@ -134,7 +134,11 @@ export const ConversationSidebar = ({
 
   // The message being sent shows at once, until its saved copy arrives; the
   // request saves it only after a few server round-trips.
-  const [pending, setPending] = useState<{ text: string; userCount: number } | null>(null);
+  const [pending, setPending] = useState<{
+    text: string;
+    imageUrls: string[];
+    userCount: number;
+  } | null>(null);
   const userCount =
     conversationMessages?.filter((message) => message.role === "user").length ?? 0;
 
@@ -309,7 +313,11 @@ export const ConversationSidebar = ({
       finalMessage = `${skills}${contextStrs.join("\n\n")}\n\n${rest}`;
     }
 
-    setPending({ text: finalMessage, userCount });
+    setPending({
+      text: finalMessage,
+      imageUrls: message.files.map((file) => file.url),
+      userCount,
+    });
     setInput("");
     let result: Awaited<ReturnType<typeof sendMessage>> = "blocked";
     try {
@@ -454,6 +462,7 @@ export const ConversationSidebar = ({
             {pending && userCount <= pending.userCount && (
               <UserMessage
                 content={pending.text}
+                imageUrls={pending.imageUrls}
                 skillNames={slashMenu.skillNames}
                 animate
               />

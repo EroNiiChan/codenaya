@@ -41,6 +41,7 @@ test.describe("sending a chat message", () => {
     await expect(bubble).toBeVisible();
     await expect(composer).toHaveValue("");
     await expect(send).toBeDisabled();
+    await expect.poll(() => requests).toBe(1);
 
     // Another Enter while the first send is in flight sends nothing.
     await composer.fill("a second message");

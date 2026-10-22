@@ -102,30 +102,36 @@ export async function POST(request: Request) {
 
   const projectId = conversation.projectId;
 
-  // Cancel this project's running replies while saving the user message; the
-  // placeholder below must come after, or it would be cancelled too.
-  await Promise.all([
-    convex
-      .query(api.system.getProcessingMessages, { internalKey, projectId })
-      .then((processingMessages) =>
-        Promise.all(
-          processingMessages.map((msg) =>
-            cancelProcessingMessage({ internalKey, messageId: msg._id })
-          )
-        )
-      ),
-    convex.mutation(api.system.createMessage, {
+  // Find all processing messages in this project
+  const processingMessages = await convex.query(
+    api.system.getProcessingMessages,
+    {
       internalKey,
-      conversationId: conversation._id,
       projectId,
-      role: "user",
-      content: message,
-      // Only sent with images: only the sender's own uploads can be attached.
-      ...(images?.length
-        ? { images: images as Id<"_storage">[], ownerId: userId }
-        : {}),
-    }),
-  ]);
+    }
+  );
+
+  if (processingMessages.length > 0) {
+    // Cancel all processing messages
+    await Promise.all(
+      processingMessages.map((msg) =>
+        cancelProcessingMessage({ internalKey, messageId: msg._id })
+      )
+    );
+  }
+
+  // Create user message
+  await convex.mutation(api.system.createMessage, {
+    internalKey,
+    conversationId: conversation._id,
+    projectId,
+    role: "user",
+    content: message,
+    // Only sent with images: only the sender's own uploads can be attached.
+    ...(images?.length
+      ? { images: images as Id<"_storage">[], ownerId: userId }
+      : {}),
+  });
 
   // Create assistant message placeholder with processing status
   const assistantMessageId = await convex.mutation(
