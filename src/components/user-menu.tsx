@@ -1,9 +1,12 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
-import { SettingsIcon } from "lucide-react";
+import { useQuery } from "convex/react";
+import { SettingsIcon, ShieldIcon } from "lucide-react";
 
 import { ACCOUNT_SETTINGS_URL, SETTINGS_URL } from "@/features/settings/nav";
+
+import { api } from "../../convex/_generated/api";
 
 interface UserMenuProps {
   /** Tailwind size class for the avatar, e.g. `size-7`. */
@@ -16,6 +19,9 @@ interface UserMenuProps {
  * profile; any profile link Clerk still renders navigates there too.
  */
 export const UserMenu = ({ avatarClassName }: UserMenuProps) => {
+  // Cosmetic only: /admin and every admin function check on the server.
+  const isAdmin = useQuery(api.admin.isAdmin);
+
   return (
     <UserButton
       userProfileMode="navigation"
@@ -34,6 +40,13 @@ export const UserMenu = ({ avatarClassName }: UserMenuProps) => {
           labelIcon={<SettingsIcon className="size-4" />}
           href={SETTINGS_URL}
         />
+        {isAdmin && (
+          <UserButton.Link
+            label="Admin"
+            labelIcon={<ShieldIcon className="size-4" />}
+            href="/admin"
+          />
+        )}
       </UserButton.MenuItems>
     </UserButton>
   );

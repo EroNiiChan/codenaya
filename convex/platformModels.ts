@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { type Infer, v } from "convex/values";
 
-import { MAX_PLATFORM_MODELS, MAX_USD_PER_MTOK } from "../src/features/admin/limits";
+import { MAX_PLATFORM_MODELS, MAX_USD_PER_MTOK } from "../src/features/admin/platform-models";
 import { MAX_MODEL_ID_LENGTH } from "../src/features/ai-providers/registry";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
@@ -120,11 +120,10 @@ export const list = query({
 const configValidator = v.object({
   models: v.array(platformModelValidator),
   defaultModelId: v.string(),
-  updatedAt: v.number(),
 });
 
 const toConfig = (doc: Doc<"platformModelConfigs"> | null) =>
-  doc && { models: doc.models, defaultModelId: doc.defaultModelId, updatedAt: doc.updatedAt };
+  doc && { models: doc.models, defaultModelId: doc.defaultModelId };
 
 /** The full saved selection, prices included, for the /admin editor. */
 export const getForAdmin = query({

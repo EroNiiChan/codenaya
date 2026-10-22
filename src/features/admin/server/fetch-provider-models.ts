@@ -1,30 +1,14 @@
-import type { Infer } from "convex/values";
-
-import type { platformProviderValidator } from "../../../../convex/schema";
 import { MAX_MODEL_ID_LENGTH } from "../../ai-providers/registry";
+import type { FetchedModel, PlatformProviderId } from "../platform-models";
 
 /**
  * Lists the models the platform key can use, live from the provider, for the
  * /admin picker. The provider JSON is untrusted: every row is narrowed, bounded
  * and normalized here, and malformed rows are dropped.
  *
- * `tools` and `vision` are null when the provider's API doesn't say (OpenAI,
- * Groq). The admin then confirms tool calling by hand; prices are only given
- * by OpenRouter.
+ * OpenAI and Groq don't report tool calling or vision, so the admin confirms
+ * tool calling by hand there.
  */
-
-export type PlatformProviderId = Infer<typeof platformProviderValidator>;
-
-export interface FetchedModel {
-  id: string;
-  name: string;
-  vendor: string;
-  contextLength?: number;
-  vision: boolean | null;
-  tools: boolean | null;
-  inputUsdPerMTok?: number;
-  outputUsdPerMTok?: number;
-}
 
 /** Bounds the response; OpenRouter lists ~350 today. */
 export const MAX_FETCHED_MODELS = 1000;

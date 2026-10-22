@@ -76,8 +76,9 @@ describe("requireAdmin", () => {
     expect(await unverified.query(api.admin.isAdmin, {})).toBe(false);
     await expectNotFound(unverified.mutation(api.platformModels.save, SAVE));
     // A missing claim counts as unverified too.
-    const { emailVerified: _, ...noClaim } = ADMIN;
-    expect(await t.withIdentity(noClaim).query(api.admin.isAdmin, {})).toBe(false);
+    expect(
+      await t.withIdentity({ ...ADMIN, emailVerified: undefined }).query(api.admin.isAdmin, {}),
+    ).toBe(false);
   });
 
   test("with ADMIN_EMAIL unset nobody is admin", async () => {
