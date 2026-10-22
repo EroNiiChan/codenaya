@@ -1,6 +1,8 @@
 /**
- * Models the user can pick for the coding agent, shared by the chat UI and the
- * server. Kept free of server-only imports so the client bundle can use it.
+ * The curated OpenRouter catalog: the models users can pick when the platform
+ * runs on OpenRouter (`ai-providers/platform.ts`), and the models of an
+ * OpenRouter BYOK key. Kept free of server-only imports so the client bundle
+ * can use it.
  *
  * Every id is an OpenRouter model id that advertises `tools` in
  * `supported_parameters` on `GET https://openrouter.ai/api/v1/models` — the
@@ -9,8 +11,8 @@
  * `vision` mirrors `image` in the model's `architecture.input_modalities` on
  * the same endpoint: whether the agent can be sent attached images.
  *
- * The server treats this list as an allowlist: any other id is replaced with
- * the default, so a crafted request cannot route runs to arbitrary models.
+ * The server treats the platform list as an allowlist: any other id is replaced
+ * with the default, so a crafted request cannot route runs to arbitrary models.
  */
 export const AGENT_MODELS = [
   { id: "openai/gpt-5.6-luna", label: "GPT-5.6 Luna", provider: "OpenAI", vision: true },
@@ -33,17 +35,8 @@ export const AGENT_MODELS = [
 export type AgentModel = (typeof AGENT_MODELS)[number];
 export type AgentModelId = AgentModel["id"];
 
-/** The model used when the user has not picked one. */
+/** The OpenRouter model used when the user has not picked one. */
 export const DEFAULT_AGENT_MODEL_ID: AgentModelId = "openai/gpt-5.6-luna";
-
-export function isAgentModelId(value: unknown): value is AgentModelId {
-  return AGENT_MODELS.some((model) => model.id === value);
-}
-
-/** Returns `value` when it is an allowlisted model id, otherwise the default. */
-export function resolveAgentModelId(value: unknown): AgentModelId {
-  return isAgentModelId(value) ? value : DEFAULT_AGENT_MODEL_ID;
-}
 
 /**
  * What a run uses: a platform model (no `keyId`), or a model on one of the

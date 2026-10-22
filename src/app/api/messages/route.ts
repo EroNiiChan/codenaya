@@ -172,7 +172,6 @@ export async function POST(request: Request) {
     success: true,
     backend: dispatch.backend,
     eventId: dispatch.eventId,
-    runId: dispatch.runId,
     messageId: assistantMessageId,
   });
 };

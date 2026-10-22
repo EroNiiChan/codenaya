@@ -4,7 +4,6 @@ import { AGENT_MODELS, DEFAULT_AGENT_MODEL_ID } from "../conversations/agent-mod
 import {
   AI_PROVIDER_IDS,
   AI_PROVIDERS,
-  PLATFORM_PROVIDER,
   baseUrlFor,
   isAiProviderId,
   modelIdsFor,
@@ -21,21 +20,21 @@ describe("AI provider registry", () => {
   });
 
   it("gives every fixed provider an https base URL, models and a title model", () => {
-    for (const id of ["openrouter", "openai", "anthropic"] as const) {
+    for (const id of ["openrouter", "openai", "anthropic", "groq"] as const) {
       const provider = AI_PROVIDERS[id];
       expect(new URL(provider.baseUrl!).protocol).toBe("https:");
       expect(provider.models.length).toBeGreaterThan(0);
       expect(provider.titleModel).toBeTruthy();
+      expect(provider.models.map((m) => m.id)).toContain(provider.defaultModel);
       expect(new Set(provider.models.map((m) => m.id)).size).toBe(provider.models.length);
     }
   });
 
-  it("reuses the agent model allowlist for OpenRouter and the platform", () => {
+  it("reuses the agent model allowlist for OpenRouter", () => {
     expect(AI_PROVIDERS.openrouter.models.map((m) => m.id)).toEqual(
       AGENT_MODELS.map((m) => m.id),
     );
-    expect(PLATFORM_PROVIDER.models).toBe(AI_PROVIDERS.openrouter.models);
-    expect(PLATFORM_PROVIDER.defaultModelId).toBe(DEFAULT_AGENT_MODEL_ID);
+    expect(AI_PROVIDERS.openrouter.defaultModel).toBe(DEFAULT_AGENT_MODEL_ID);
   });
 
   it("uses bare model ids for direct providers, title model included", () => {

@@ -56,7 +56,7 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   Landing: `landing/landing-prompt-composer.tsx` (`savePendingPrompt` /
   `takePendingPrompt`). Prompts containing credentials are rejected (422). Dispatch failure
   returns 502 and the project still opens.
-- Env: Inngest (dev server or cloud), `OPENROUTER_API_KEY` (or a BYOK key, F17).
+- Env: Inngest (dev server or cloud), the active platform provider's key (`NEXT_PUBLIC_AI_PROVIDER`, default `openrouter`; ADR 0005), or a BYOK key (F17).
 - E2E: `dashboard-composer.spec.ts`, `landing-prompt.spec.ts`.
 
 **F4. Open project IDE**: Works
@@ -81,14 +81,11 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `checkBuild`, `scrapeUrls`, `setEnvVar`, `loadSkill`, plus MCP tools (F12). Finish gate in
   `inngest/build-check-gate.ts`; `checkBuild` runs `tsc --noEmit` and `vite build` in E2B for
   Vite projects (static checks only without `E2B_API_KEY`) → `convex/system.ts` writes.
-  Default model `openai/gpt-5.6-luna` (`agent-models.ts`).
-- Fallback: `MESSAGE_PROCESSOR=workflow` routes to the Vercel Workflow implementation
-  (`features/conversations/workflow/*`, Google Vertex). It falls back to Inngest when Vertex
-  env is missing. It has no BYOK, images, skills, `checkBuild`, `setEnvVar` or MCP tools, and
-  no per-owner run cap. Fallback status: Unverified.
-- Env: `OPENROUTER_API_KEY`, Inngest; optional `E2B_API_KEY` (build check),
-  `FIRECRAWL_API_KEY` (URL scraping); optional `GOOGLE_VERTEX_PROJECT`, `GOOGLE_CLIENT_EMAIL`,
-  `GOOGLE_PRIVATE_KEY`.
+  Platform models are the active provider's catalog (`ai-providers/platform.ts`); an unlisted
+  id runs on its default (OpenRouter: `openai/gpt-5.6-luna`). Without the provider's key a
+  send gets 503 `ai_not_configured`.
+- Env: the active platform provider's key (`NEXT_PUBLIC_AI_PROVIDER`, default `openrouter`; ADR 0005), Inngest; optional `E2B_API_KEY` (build check), `FIRECRAWL_API_KEY` (URL
+  scraping).
 - E2E: `chat-panel.spec.ts`, `chat-run-block.spec.ts`, `chat-stalled-run.spec.ts`,
   `chat-dispatch-failure.spec.ts`, `chat-overflow.spec.ts`, `agent-model-select.spec.ts`,
   `agent-check-build.spec.ts`, `agent-vite-scaffold.spec.ts`.
@@ -107,10 +104,10 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `editor/extensions/quick-edit/*`, `selection-tooltip.ts` → `POST /api/quick-edit` (scrapes
   URLs in the instruction through Firecrawl when `FIRECRAWL_API_KEY` is set; `src/lib/firecrawl.ts`
   returns `null` without it). Both go through `withEditorModel`
-  (`ai-providers/server/editor-model.ts`): the user's default BYOK key if set, otherwise
-  OpenRouter via `editorModel()` in `src/lib/openrouter.ts` (default `openai/gpt-5.4-mini`,
-  overridable with `OPENROUTER_SUGGESTION_MODEL` / `OPENROUTER_QUICK_EDIT_MODEL`).
-- Env: `OPENROUTER_API_KEY` (503 JSON error without it and without a default BYOK key).
+  (`ai-providers/server/editor-model.ts`): the user's default BYOK key if set, otherwise the
+  platform provider's small model via `platformEditorModel()`
+  (`ai-providers/server/platform-model.ts`; OpenRouter: `openai/gpt-5.4-mini`).
+- Env: the active platform provider's key (`NEXT_PUBLIC_AI_PROVIDER`, default `openrouter`; ADR 0005) (503 JSON error without it and without a default BYOK key).
 - E2E: `editor-ai.spec.ts`, `quick-edit.spec.ts`.
 
 **F8. Live preview with terminal**: Works (E2B) / Unverified (WebContainer)
@@ -231,7 +228,7 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 - E2E: `settings.spec.ts`.
 
 **F17. Bring your own key (BYOK) AI providers**: Works
-- Steps: Settings → AI providers → add an OpenRouter, OpenAI, Anthropic or custom
+- Steps: Settings → AI providers → add an OpenRouter, OpenAI, Anthropic, Groq or custom
   OpenAI-compatible key (tested before saving) → test or delete it → pick a default model.
   The chat model picker lists a group per active key; the agent, titles and editor AI then
   run on that key. A rejected key is marked invalid and the run ends with a pointer to
@@ -243,7 +240,7 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   checked on save and before every run.
 - Env: the KEK vars from F12.
 - E2E: `ai-providers.spec.ts`, `byok-agent-run.spec.ts`.
-- Gap: Enhance prompt (F20) always uses the platform OpenRouter key.
+- Gap: Enhance prompt (F20) always uses the platform key.
 
 **F18. Skills**: Works
 - Steps: Settings → Skills → create, edit, delete or import (`SKILL.md` from a GitHub URL or
@@ -267,9 +264,9 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
 **F20. Enhance prompt**: Works
 - Steps: wand button in the dashboard or chat composer → the prompt is rewritten in place →
   Undo until the text is edited.
-- Code: `use-enhance-prompt.ts` → `POST /api/enhance-prompt` (`editorModel("enhancePrompt")`,
-  overridable with `OPENROUTER_ENHANCE_PROMPT_MODEL`; credentials rejected with 422).
-- Env: `OPENROUTER_API_KEY`.
+- Code: `use-enhance-prompt.ts` → `POST /api/enhance-prompt` (`platformEditorModel()`;
+  credentials rejected with 422).
+- Env: the active platform provider's key (`NEXT_PUBLIC_AI_PROVIDER`, default `openrouter`; ADR 0005).
 - E2E: `enhance-prompt.spec.ts`.
 
 **F21. Image input in chat**: Works

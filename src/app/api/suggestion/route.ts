@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       .replace("{nextLines}", nextLines ?? "")
       .replace("{lineNumber}", lineNumber.toString());
 
-    return await withEditorModel({ userId, task: "suggestion" }, async (model) => {
+    return await withEditorModel({ userId }, async (model) => {
       const { object } = await generateObject({
         model,
         output: "object",

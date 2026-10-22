@@ -18,20 +18,22 @@ import {
   runModelLabel,
 } from "@/features/ai-providers/registry";
 import {
+  platformModels,
+  platformProviderId,
+  resolvePlatformModel,
+} from "@/features/ai-providers/platform";
+import {
   fromChoiceValue,
   toChoiceValue,
 } from "@/features/ai-providers/model-choice";
 import { useAiProviderKeys } from "@/features/ai-providers/hooks/use-ai-providers";
 
-import { AGENT_MODELS, type AgentModelChoice } from "../agent-models";
+import type { AgentModelChoice } from "../agent-models";
 
 /** Item with a muted tag on the right (the model's vendor or key). Drawn as
  *  `::after` so the trigger, which mirrors the item text, shows the name only. */
 const TAGGED_ITEM =
   "after:ml-auto after:shrink-0 after:pl-4 after:text-[11px] after:text-muted-foreground after:content-[attr(data-tag)]";
-
-const vendorOf = (modelId: string) =>
-  AGENT_MODELS.find((model) => model.id === modelId)?.provider;
 
 interface AgentModelSelectProps {
   value: AgentModelChoice;
@@ -72,16 +74,20 @@ export const AgentModelSelect = ({
             <PromptInputSelectValue />
           </PromptInputSelectTrigger>
         </TooltipTrigger>
-        <TooltipContent>{runModelLabel(value.modelId, selectedKey)}</TooltipContent>
+        <TooltipContent>
+          {selectedKey
+            ? runModelLabel(value.modelId, selectedKey)
+            : runModelLabel(resolvePlatformModel(platformProviderId(), null, value.modelId))}
+        </TooltipContent>
       </Tooltip>
       <PromptInputSelectContent position="popper" align="start" className="max-h-80">
         <SelectGroup>
           <SelectLabel>{PLATFORM_PROVIDER.label}</SelectLabel>
-          {PLATFORM_PROVIDER.models.map((model) => (
+          {platformModels(platformProviderId(), null).map((model) => (
             <PromptInputSelectItem
               key={model.id}
               value={toChoiceValue({ modelId: model.id })}
-              data-tag={vendorOf(model.id)}
+              data-tag={model.vendor}
               className={TAGGED_ITEM}
             >
               {model.label}

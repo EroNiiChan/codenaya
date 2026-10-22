@@ -10,7 +10,7 @@ import { providerFetch } from "./base-url";
  * requests leave from our server, so a custom endpoint goes through the SSRF
  * guarded fetch on every call.
  *
- * OpenRouter and custom endpoints use Chat Completions (`.chat`), the
+ * OpenRouter, Groq and custom endpoints use Chat Completions (`.chat`), the
  * OpenAI-compatible API they serve; OpenAI direct uses the SDK default.
  */
 export function buildAiSdkModel({
@@ -27,6 +27,7 @@ export function buildAiSdkModel({
     case "openai":
       return createOpenAI({ apiKey, baseURL })(model);
     case "openrouter":
+    case "groq":
       return createOpenAI({ apiKey, baseURL }).chat(model);
     case "custom":
       return createOpenAI({

@@ -66,8 +66,6 @@ describe.each(routes)("POST /api/$name", ({ call, result }) => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
-    vi.stubEnv("OPENROUTER_SUGGESTION_MODEL", "");
-    vi.stubEnv("OPENROUTER_QUICK_EDIT_MODEL", "");
     vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "ik");
     mocks.auth.mockResolvedValue({ userId: "user_1" });
     mocks.generateObject.mockResolvedValue({ object: result });

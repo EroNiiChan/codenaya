@@ -53,6 +53,7 @@ const target = (model: unknown) => {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv("NEXT_PUBLIC_AI_PROVIDER", "");
   vi.stubEnv("OPENROUTER_API_KEY", "sk-or-platform");
   mocks.openProviderKey.mockResolvedValue(SECRET);
   mocks.lookup.mockResolvedValue([{ address: "104.18.32.7", family: 4 }]);
@@ -72,6 +73,42 @@ describe("validateModelChoice (API route)", () => {
     });
     expect(await validate(undefined)).toMatchObject({ modelId: DEFAULT_AGENT_MODEL_ID });
     expect(mocks.query).not.toHaveBeenCalled();
+  });
+
+  it("resolves platform ids against the env provider, so old ids keep working", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AI_PROVIDER", "anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+
+    // An OpenRouter id saved before the switch runs on the new default.
+    expect(await validate("anthropic/claude-opus-5.5")).toEqual({
+      modelId: "claude-sonnet-5-5",
+      label: "Codenaya · Claude Sonnet 5.5",
+    });
+    expect(await validate("claude-opus-5-5")).toMatchObject({ modelId: "claude-opus-5-5" });
+    // AgentKit's Anthropic adapter is text-only.
+    await expect(
+      validateModelChoice({ internalKey: "ik", userId: "user_1", model: "claude-opus-5-5", withImages: true }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("refuses platform models with 503 ai_not_configured when the provider has no key", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AI_PROVIDER", "groq");
+    vi.stubEnv("GROQ_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { rejected } = await requireModelChoice({ internalKey: "ik", userId: "user_1", model: undefined });
+    expect(rejected?.status).toBe(503);
+    const body = await rejected?.json();
+    expect(body).toMatchObject({ code: "ai_not_configured" });
+    // The user sees what to do; the variable name stays in the server log.
+    expect(body.error).toContain("Settings → AI providers");
+    expect(body.error).not.toContain("GROQ_API_KEY");
+
+    // BYOK doesn't need the platform key.
+    mocks.query.mockResolvedValue(openAiKey);
+    expect(await validate({ keyId: "key_1", modelId: "gpt-5.6-luna" })).toMatchObject({
+      keyId: "key_1",
+    });
   });
 
   it("refuses a key the caller does not own with 403", async () => {
@@ -174,6 +211,30 @@ describe("resolveRunModel (agent run)", () => {
     });
     expect(target(run.title(0)).url).toContain("openrouter.ai");
     expect(mocks.openProviderKey).not.toHaveBeenCalled();
+  });
+
+  it("runs platform choices on the env provider's key and models", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AI_PROVIDER", "groq");
+    vi.stubEnv("GROQ_API_KEY", "gsk-platform");
+
+    const run = await resolve({ modelId: "x-ai/grok-4.7" });
+
+    expect(target(run.coding(0.3))).toMatchObject({
+      id: "openai/gpt-oss-120b",
+      authKey: "gsk-platform",
+    });
+    expect(target(run.coding()).url).toContain("api.groq.com/openai/v1");
+    expect(target(run.title(0)).id).toBe("openai/gpt-oss-20b");
+  });
+
+  it("ends a platform run with a clear reply when the provider has no key", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const error = await resolve({ modelId: "x-ai/grok-4.7" }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ProviderKeyError);
+    expect((error as Error).message).toMatch(/isn't available right now/);
   });
 
   it("builds BYOK models on the user's key and provider, title on its cheap model", async () => {
