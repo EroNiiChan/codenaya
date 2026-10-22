@@ -41,7 +41,6 @@ import {
   Item,
   ItemActions,
   ItemContent,
-  ItemDescription,
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
@@ -255,24 +254,18 @@ export const PlatformModelsCard = ({
         {/* Mobile and tablet: one stacked item per model. */}
         <ItemGroup className="gap-2 lg:hidden">
           {models.map((model) => (
-            <Item key={model.id} variant="outline" className="flex-col items-stretch gap-3">
-              <div className="flex items-start gap-2">
+            <Item key={model.id} variant="outline" className="flex-col flex-nowrap items-stretch gap-3">
+              <div className="flex min-w-0 items-start gap-2">
                 <ItemContent className="min-w-0">
                   <ItemTitle className="w-full">
                     <span className="truncate">{model.name}</span>
                   </ItemTitle>
-                  <ItemDescription className="truncate font-mono text-xs">
-                    {model.id} · {formatContext(model.contextLength)} context
-                  </ItemDescription>
+                  <p className="truncate font-mono text-xs text-muted-foreground">{model.id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatContext(model.contextLength)} context
+                  </p>
                 </ItemContent>
                 <ItemActions>
-                  {model.id === defaultId ? (
-                    <Badge>Default</Badge>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={() => draft.setDefault(model.id)}>
-                      Make default
-                    </Button>
-                  )}
                   <RemoveButton model={model} onRemove={() => requestRemove(model)} />
                 </ItemActions>
               </div>
@@ -286,13 +279,22 @@ export const PlatformModelsCard = ({
                   <PriceInput model={model} draft={draft} side="output" />
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <EyeIcon className="size-3.5" aria-hidden="true" />
                   Vision
                   <VisionSwitch model={model} provider={provider} draft={draft} />
                 </div>
                 <ToolsControl model={model} draft={draft} />
+                <div className="ml-auto">
+                  {model.id === defaultId ? (
+                    <Badge>Default</Badge>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => draft.setDefault(model.id)}>
+                      Make default
+                    </Button>
+                  )}
+                </div>
               </div>
             </Item>
           ))}

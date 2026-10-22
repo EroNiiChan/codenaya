@@ -11,7 +11,8 @@ import {
 const NOT_FOUND_HEADING = { level: 1, name: "Page not found" } as const;
 
 test("/admin is a 404 for signed-out visitors, with no sign-in redirect", async ({ page }) => {
-  await page.goto("/admin");
+  const response = await page.goto("/admin");
+  expect(response?.status()).toBe(404);
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", NOT_FOUND_HEADING)).toBeVisible();
 });
@@ -25,10 +26,11 @@ test("/admin is a 404 for a signed-in user who isn't the admin", async ({ page }
   test.skip(!hasClerkCredentials(), "Needs CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
   await signIn(page);
 
-  await page.goto("/admin");
+  const page404 = await page.goto("/admin");
+  expect(page404?.status()).toBe(404);
   await expect(page.getByRole("heading", NOT_FOUND_HEADING)).toBeVisible();
-  const response = await page.request.get("/api/admin/models");
-  expect(response.status()).toBe(404);
+  const api404 = await page.request.get("/api/admin/models");
+  expect(api404.status()).toBe(404);
 });
 
 test("the admin sees the model panel", async ({ page }) => {

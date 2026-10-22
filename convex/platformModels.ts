@@ -63,7 +63,7 @@ function assertValidSelection(models: PlatformModel[], defaultModelId: string) {
 const price = (m: PlatformModel) => `$${m.inputUsdPerMTok}/$${m.outputUsdPerMTok}`;
 
 /** "added a, b; removed c; default → x; price a: $3/$15; tools confirmed: b". */
-export function summarizeChange(
+function summarizeChange(
   before: Pick<Doc<"platformModelConfigs">, "models" | "defaultModelId"> | null,
   models: PlatformModel[],
   defaultModelId: string,

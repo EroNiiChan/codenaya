@@ -251,7 +251,7 @@ export const AddModelsCard = ({
           </p>
           <Button size="sm" onClick={addSelected} disabled={selected.size === 0}>
             <PlusIcon aria-hidden="true" />
-            Add {selected.size || ""} selected
+            {selected.size ? `Add ${selected.size} selected` : "Add selected"}
           </Button>
         </CardFooter>
       )}
