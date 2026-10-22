@@ -165,9 +165,13 @@ const LoadingRows = () => (
 export const PlatformModelsCard = ({
   draft,
   provider,
+  providerLabel,
+  isActive,
 }: {
   draft: PlatformModelDraft;
   provider: PlatformProviderId;
+  providerLabel: string;
+  isActive: boolean;
 }) => {
   const [pendingRemove, setPendingRemove] = useState<DraftModel | null>(null);
   const models = draft.draft?.models ?? [];
@@ -306,10 +310,12 @@ export const PlatformModelsCard = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Available to users</CardTitle>
+        <CardTitle>{providerLabel} models</CardTitle>
         <CardDescription>
-          The models users can pick on the Codenaya key, the default for new runs,
-          and what each costs us. Prices are USD per 1M tokens.
+          {isActive
+            ? "The models users can pick on the Codenaya key"
+            : `What users will see once ${providerLabel} is active`}
+          , the default for new runs, and what each costs us. Prices are USD per 1M tokens.
         </CardDescription>
         {models.length > 0 && (
           <CardAction>

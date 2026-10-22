@@ -28,7 +28,7 @@ import { aiProviderRequestError } from "@/features/ai-providers/hooks/use-ai-pro
 import { cn } from "@/lib/utils";
 
 import type { PlatformModelDraft } from "../hooks/use-platform-model-draft";
-import { type FetchedModel, MAX_PLATFORM_MODELS } from "../platform-models";
+import { type FetchedModel, MAX_PLATFORM_MODELS, type PlatformProviderId } from "../platform-models";
 import { formatContext } from "./platform-models-card";
 
 const NO_TOOLS_HINT = "No tool calling: the agent can't use this model";
@@ -61,9 +61,11 @@ const price = (model: FetchedModel) =>
 
 export const AddModelsCard = ({
   draft,
+  provider,
   providerLabel,
 }: {
   draft: PlatformModelDraft;
+  provider: PlatformProviderId;
   providerLabel: string;
 }) => {
   const [fetched, setFetched] = useState<FetchedModel[] | null>(null);
@@ -93,7 +95,7 @@ export const AddModelsCard = ({
     setError(null);
     try {
       const body = await ky
-        .get("/api/admin/models", { timeout: 20_000 })
+        .get("/api/admin/models", { searchParams: { provider }, timeout: 20_000 })
         .json<{ models: FetchedModel[] }>();
       setFetched(body.models);
       setSelected(new Set());

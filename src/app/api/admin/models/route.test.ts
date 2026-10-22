@@ -16,11 +16,15 @@ import { GET } from "./route";
 
 const KEY = "sk-or-very-secret";
 
+const get = (provider = "openrouter") =>
+  GET(new Request(`http://localhost/api/admin/models?provider=${provider}`));
+
 describe("GET /api/admin/models", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetRateLimits();
     vi.stubEnv("OPENROUTER_API_KEY", KEY);
+    vi.stubEnv("GROQ_API_KEY", "");
     vi.stubGlobal("fetch", mocks.fetch);
     mocks.auth.mockResolvedValue({ userId: "user_admin", getToken: mocks.getToken });
     mocks.getToken.mockResolvedValue("jwt");
@@ -42,19 +46,19 @@ describe("GET /api/admin/models", () => {
     ["not the admin", () => mocks.fetchQuery.mockResolvedValue(false)],
   ])("returns 404 when %s, without calling the provider", async (_, arrange) => {
     arrange();
-    const res = await GET();
+    const res = await get();
     expect(res.status).toBe(404);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("asks Convex with the caller's convex token", async () => {
-    await GET();
+    await get();
     expect(mocks.getToken).toHaveBeenCalledWith({ template: "convex" });
     expect(mocks.fetchQuery).toHaveBeenCalledWith(expect.anything(), {}, { token: "jwt" });
   });
 
   it("returns normalized models and never the key", async () => {
-    const res = await GET();
+    const res = await get();
     const text = await res.text();
 
     expect(res.status).toBe(200);
@@ -65,16 +69,27 @@ describe("GET /api/admin/models", () => {
     expect(text).not.toContain(KEY);
   });
 
+  it("returns 400 for an unknown provider", async () => {
+    expect((await get("vertex")).status).toBe(400);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 naming the variable when that provider's key is missing", async () => {
+    const res = await get("groq");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "ai_not_configured", error: expect.stringContaining("GROQ_API_KEY") });
+  });
+
   it("returns 503 when the key is missing", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "");
-    const res = await GET();
+    const res = await get();
     expect(res.status).toBe(503);
     expect((await res.json()).code).toBe("ai_not_configured");
   });
 
   it("returns 502 on an upstream error without echoing its body", async () => {
     mocks.fetch.mockResolvedValue(new Response(`upstream says ${KEY}`, { status: 500 }));
-    const res = await GET();
+    const res = await get();
     const text = await res.text();
 
     expect(res.status).toBe(502);

@@ -96,29 +96,15 @@ function summarizeChange(
 
 const publicModelValidator = platformModelValidator.pick("id", "name", "vendor", "vision", "contextLength");
 
-/** The models users may pick on the platform key, without prices. Null: use the catalog. */
-export const list = query({
-  args: { provider: platformProviderValidator },
-  returns: v.union(
-    v.object({ models: v.array(publicModelValidator), defaultModelId: v.string() }),
-    v.null(),
-  ),
-  handler: async (ctx, { provider }) => {
-    await verifyAuth(ctx);
-    const config = await getConfig(ctx, provider);
-    if (!config) return null;
-    return {
-      models: config.models.map(({ id, name, vendor, vision, contextLength }) => ({
-        id,
-        name,
-        vendor,
-        vision,
-        contextLength,
-      })),
-      defaultModelId: config.defaultModelId,
-    };
-  },
-});
+/** The single settings row; there is at most one. */
+const getSettings = (ctx: QueryCtx) => ctx.db.query("platformSettings").first();
+
+/**
+ * The provider platform runs use: the one the admin made active in /admin,
+ * else `fallbackProvider` (the `NEXT_PUBLIC_AI_PROVIDER` the caller read).
+ */
+const activeProvider = async (ctx: QueryCtx, fallbackProvider: Provider) =>
+  (await getSettings(ctx))?.activeProvider ?? fallbackProvider;
 
 const configValidator = v.object({
   models: v.array(platformModelValidator),
@@ -128,7 +114,40 @@ const configValidator = v.object({
 const toConfig = (doc: Doc<"platformModelConfigs"> | null) =>
   doc && { models: doc.models, defaultModelId: doc.defaultModelId };
 
-/** The full saved selection, prices included, for the /admin editor. */
+/**
+ * The active provider and the models users may pick on it, without prices.
+ * A null `config` means that provider's curated catalog.
+ */
+export const getActive = query({
+  args: { fallbackProvider: platformProviderValidator },
+  returns: v.object({
+    provider: platformProviderValidator,
+    config: v.union(
+      v.object({ models: v.array(publicModelValidator), defaultModelId: v.string() }),
+      v.null(),
+    ),
+  }),
+  handler: async (ctx, { fallbackProvider }) => {
+    await verifyAuth(ctx);
+    const provider = await activeProvider(ctx, fallbackProvider);
+    const config = await getConfig(ctx, provider);
+    return {
+      provider,
+      config: config && {
+        models: config.models.map(({ id, name, vendor, vision, contextLength }) => ({
+          id,
+          name,
+          vendor,
+          vision,
+          contextLength,
+        })),
+        defaultModelId: config.defaultModelId,
+      },
+    };
+  },
+});
+
+/** A provider's full saved selection, prices included, for the /admin editor. */
 export const getForAdmin = query({
   args: { provider: platformProviderValidator },
   returns: v.union(configValidator, v.null()),
@@ -138,13 +157,56 @@ export const getForAdmin = query({
   },
 });
 
-/** The full saved selection for the routes and the agent run. */
-export const getForServer = query({
-  args: { internalKey: v.string(), provider: platformProviderValidator },
-  returns: v.union(configValidator, v.null()),
-  handler: async (ctx, { internalKey, provider }) => {
+/**
+ * The active provider and its full saved selection, for the routes and the
+ * agent run: one round trip on the send path.
+ */
+export const getActiveForServer = query({
+  args: { internalKey: v.string(), fallbackProvider: platformProviderValidator },
+  returns: v.object({
+    provider: platformProviderValidator,
+    config: v.union(configValidator, v.null()),
+  }),
+  handler: async (ctx, { internalKey, fallbackProvider }) => {
     validateInternalKey(internalKey);
-    return toConfig(await getConfig(ctx, provider));
+    const provider = await activeProvider(ctx, fallbackProvider);
+    return { provider, config: toConfig(await getConfig(ctx, provider)) };
+  },
+});
+
+/**
+ * Makes `provider` the platform provider for every user, at once. Called only
+ * by `POST /api/admin/provider` with the admin's own token: the internal key
+ * proves the route checked that the provider's API key is configured, which
+ * only Next.js can see. The provider must have saved models, so users never
+ * land on an unpriced selection.
+ */
+export const setActiveProvider = mutation({
+  args: { internalKey: v.string(), provider: platformProviderValidator },
+  returns: v.null(),
+  handler: async (ctx, { internalKey, provider }) => {
+    const admin = await requireAdmin(ctx);
+    validateInternalKey(internalKey);
+    if (!(await getConfig(ctx, provider))) {
+      throw appError("CONFLICT", `Save models for ${provider} before making it active`);
+    }
+
+    const settings = await getSettings(ctx);
+    if (settings?.activeProvider === provider) return null;
+    const fields = { activeProvider: provider, updatedAt: Date.now(), updatedBy: admin.id };
+    if (settings) {
+      await ctx.db.patch("platformSettings", settings._id, fields);
+    } else {
+      await ctx.db.insert("platformSettings", fields);
+    }
+
+    await writeAudit(
+      ctx,
+      admin,
+      "platformProvider.set",
+      `${settings?.activeProvider ?? "env default"} → ${provider}`,
+    );
+    return null;
   },
 });
 

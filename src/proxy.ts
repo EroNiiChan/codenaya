@@ -1,7 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
-import { adminUserIdOrNull } from '@/features/admin/server/require-admin';
+import { adminOrNull } from '@/features/admin/server/require-admin';
 import { SIGN_IN_URL, SIGN_UP_URL } from '@/features/auth/constants';
 
 const isAdminPage = createRouteMatcher(['/admin(.*)']);
@@ -14,7 +14,7 @@ export default clerkMiddleware(
     // /admin is the exception, only so non-admins get a real 404 status: with
     // Cache Components the layout's `notFound()` runs after the shell has
     // streamed as a 200. The layout still checks too.
-    if (isAdminPage(request) && !(await adminUserIdOrNull(await auth()))) {
+    if (isAdminPage(request) && !(await adminOrNull(await auth()))) {
       return NextResponse.rewrite(new URL('/404', request.url), { status: 404 });
     }
   },

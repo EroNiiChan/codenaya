@@ -43,7 +43,7 @@ test("the admin sees the model panel", async ({ page }) => {
   await page.goto("/admin");
   await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Models" })).toBeVisible();
-  await expect(page.getByText("Available to users")).toBeVisible();
+  await expect(page.getByText("Platform provider")).toBeVisible();
   await page.getByRole("tab", { name: "Audit log" }).click();
   await expect(page.getByText("Who changed what")).toBeVisible();
 });

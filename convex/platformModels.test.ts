@@ -99,37 +99,102 @@ describe("platformModels.save audit", () => {
 });
 
 describe("platformModels reads", () => {
-  test("list hides prices and returns null without a doc", async () => {
+  test("getActive hides prices and returns a null config without a doc", async () => {
     const t = asAdmin();
-    expect(await t.query(api.platformModels.list, { provider: "openrouter" })).toBeNull();
+    const active = { fallbackProvider: "openrouter" as const };
+    expect(await t.query(api.platformModels.getActive, active)).toEqual({
+      provider: "openrouter",
+      config: null,
+    });
 
     await save(t, [model("a", { contextLength: 128_000 })]);
-    expect(await t.query(api.platformModels.list, { provider: "openrouter" })).toEqual({
-      models: [{ id: "a", name: "A", vendor: "acme", vision: false, contextLength: 128_000 }],
-      defaultModelId: "a",
+    expect(await t.query(api.platformModels.getActive, active)).toEqual({
+      provider: "openrouter",
+      config: {
+        models: [{ id: "a", name: "A", vendor: "acme", vision: false, contextLength: 128_000 }],
+        defaultModelId: "a",
+      },
     });
     // Another provider's selection is separate.
-    expect(await t.query(api.platformModels.list, { provider: "groq" })).toBeNull();
+    expect(
+      (await t.query(api.platformModels.getActive, { fallbackProvider: "groq" })).config,
+    ).toBeNull();
   });
 
-  test("list requires a signed-in user", async () => {
+  test("getActive requires a signed-in user", async () => {
     await expect(
-      setup().query(api.platformModels.list, { provider: "openrouter" }),
+      setup().query(api.platformModels.getActive, { fallbackProvider: "openrouter" }),
     ).rejects.toMatchObject({ data: { code: "UNAUTHENTICATED" } });
   });
 
-  test("getForServer returns prices with the key and rejects a bad key", async () => {
+  test("getActiveForServer returns prices with the key and rejects a bad key", async () => {
     const t = asAdmin();
     await save(t, [model("a")]);
 
-    const config = await t.query(api.platformModels.getForServer, {
+    const active = await t.query(api.platformModels.getActiveForServer, {
       internalKey: INTERNAL_KEY,
-      provider: "openrouter",
+      fallbackProvider: "openrouter",
     });
-    expect(config?.models[0]).toMatchObject({ inputUsdPerMTok: 3, outputUsdPerMTok: 15 });
+    expect(active.config?.models[0]).toMatchObject({ inputUsdPerMTok: 3, outputUsdPerMTok: 15 });
 
     await expect(
-      t.query(api.platformModels.getForServer, { internalKey: "nope", provider: "openrouter" }),
+      t.query(api.platformModels.getActiveForServer, {
+        internalKey: "nope",
+        fallbackProvider: "openrouter",
+      }),
+    ).rejects.toMatchObject({ data: { code: "UNAUTHENTICATED" } });
+  });
+});
+
+describe("platformModels.setActiveProvider", () => {
+  const SWITCH = { internalKey: INTERNAL_KEY, provider: "groq" as const };
+  const saveGroq = (t: Admin) =>
+    t.mutation(api.platformModels.save, {
+      provider: "groq",
+      models: [model("llama", { tools: "confirmed" })],
+      defaultModelId: "llama",
+    });
+
+  test("the saved provider wins over the env fallback, for users and the server", async () => {
+    const base = setup();
+    const t = base.withIdentity(ADMIN);
+    await saveGroq(t);
+    await t.mutation(api.platformModels.setActiveProvider, SWITCH);
+
+    const user = base.withIdentity({ subject: "user_x" });
+    const forUser = await user.query(api.platformModels.getActive, { fallbackProvider: "openrouter" });
+    expect(forUser.provider).toBe("groq");
+    expect(forUser.config?.defaultModelId).toBe("llama");
+    const forServer = await t.query(api.platformModels.getActiveForServer, {
+      internalKey: INTERNAL_KEY,
+      fallbackProvider: "openrouter",
+    });
+    expect(forServer).toMatchObject({ provider: "groq", config: { defaultModelId: "llama" } });
+
+    expect((await auditSummaries(t))[0]).toBe("env default → groq");
+  });
+
+  test("rejects a provider without saved models", async () => {
+    await expect(
+      asAdmin().mutation(api.platformModels.setActiveProvider, SWITCH),
+    ).rejects.toMatchObject({ data: { code: "CONFLICT" } });
+  });
+
+  test("a non-admin is rejected even with the internal key", async () => {
+    const base = setup();
+    await saveGroq(base.withIdentity(ADMIN));
+    await expect(
+      base.withIdentity({ subject: "user_x", email: "x@example.com", emailVerified: true })
+        .mutation(api.platformModels.setActiveProvider, SWITCH),
+    ).rejects.toMatchObject({ data: { code: "NOT_FOUND" } });
+  });
+
+  test("the admin can't call it from the browser, without the internal key", async () => {
+    // The key check on the provider's API key lives in POST /api/admin/provider.
+    const t = asAdmin();
+    await saveGroq(t);
+    await expect(
+      t.mutation(api.platformModels.setActiveProvider, { ...SWITCH, internalKey: "guess" }),
     ).rejects.toMatchObject({ data: { code: "UNAUTHENTICATED" } });
   });
 });

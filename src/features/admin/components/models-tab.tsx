@@ -1,13 +1,19 @@
 "use client";
 
+import { useState } from "react";
+import { useQuery } from "convex/react";
 import { CircleAlertIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import { api } from "../../../../convex/_generated/api";
 
 import { type PlatformModelDraft, usePlatformModelDraft } from "../hooks/use-platform-model-draft";
 import type { PlatformProviderId } from "../platform-models";
 import { AddModelsCard } from "./add-models-card";
 import { PlatformModelsCard } from "./platform-models-card";
+import { type PlatformProviderStatus, ProviderCard } from "./provider-card";
 
 /** Docked to the bottom of the viewport while the selection has unsaved edits. */
 const SaveBar = ({ draft }: { draft: PlatformModelDraft }) => {
@@ -46,20 +52,56 @@ const SaveBar = ({ draft }: { draft: PlatformModelDraft }) => {
   );
 };
 
-export const ModelsTab = ({
-  provider,
-  providerLabel,
-}: {
+interface ProviderModelsProps {
   provider: PlatformProviderId;
-  providerLabel: string;
-}) => {
+  activeProvider: PlatformProviderId;
+  providers: PlatformProviderStatus[];
+  onEdit: (provider: PlatformProviderId) => void;
+}
+
+/** One provider's editor. Remounted per provider, so a draft never crosses providers. */
+const ProviderModels = ({ provider, activeProvider, providers, onEdit }: ProviderModelsProps) => {
   const draft = usePlatformModelDraft(provider);
+  const label = providers.find((p) => p.id === provider)!.label;
 
   return (
     <>
-      <PlatformModelsCard draft={draft} provider={provider} />
-      <AddModelsCard draft={draft} providerLabel={providerLabel} />
+      <ProviderCard
+        providers={providers}
+        activeProvider={activeProvider}
+        editing={provider}
+        onEdit={onEdit}
+        isDirty={draft.isDirty}
+        hasSavedModels={draft.hasSaved}
+      />
+      <PlatformModelsCard draft={draft} provider={provider} providerLabel={label} isActive={provider === activeProvider} />
+      <AddModelsCard draft={draft} provider={provider} providerLabel={label} />
       {draft.isDirty && <SaveBar draft={draft} />}
     </>
+  );
+};
+
+export const ModelsTab = ({
+  providers,
+  fallbackProvider,
+}: {
+  providers: PlatformProviderStatus[];
+  /** `NEXT_PUBLIC_AI_PROVIDER`, active until the admin picks one. */
+  fallbackProvider: PlatformProviderId;
+}) => {
+  const active = useQuery(api.platformModels.getActive, { fallbackProvider });
+  const [editing, setEditing] = useState<PlatformProviderId | null>(null);
+
+  if (!active) return <Skeleton className="h-48 w-full" aria-label="Loading provider" />;
+  const provider = editing ?? active.provider;
+
+  return (
+    <ProviderModels
+      key={provider}
+      provider={provider}
+      activeProvider={active.provider}
+      providers={providers}
+      onEdit={setEditing}
+    />
   );
 };

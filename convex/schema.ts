@@ -483,6 +483,16 @@ export default defineSchema({
     updatedBy: v.string(),
   }).index("by_provider", ["provider"]),
 
+  /**
+   * Platform settings the admin changes at runtime. A single row; none means
+   * the env defaults (`NEXT_PUBLIC_AI_PROVIDER`).
+   */
+  platformSettings: defineTable({
+    activeProvider: platformProviderValidator,
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }),
+
   /** Every admin change, written in the same transaction as the change. */
   adminAuditLog: defineTable({
     actorId: v.string(),
