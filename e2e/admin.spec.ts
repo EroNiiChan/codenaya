@@ -4,6 +4,7 @@ import {
   addTestingToken,
   ensureTestUser,
   hasClerkCredentials,
+  revokeStaleSessions,
   signIn,
   signInWithTicket,
 } from "./clerk-auth";
@@ -38,7 +39,9 @@ test("the admin sees the model panel", async ({ page }) => {
   const adminEmail = process.env.E2E_ADMIN_EMAIL;
   test.skip(!hasClerkCredentials() || !adminEmail, "Needs Clerk secrets and E2E_ADMIN_EMAIL");
   await addTestingToken(page);
-  await signInWithTicket(page, (await ensureTestUser(adminEmail)).id);
+  const admin = await ensureTestUser(adminEmail);
+  await revokeStaleSessions(admin.id);
+  await signInWithTicket(page, admin.id);
 
   await page.goto("/admin");
   await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
