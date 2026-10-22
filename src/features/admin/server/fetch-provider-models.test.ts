@@ -24,7 +24,6 @@ describe("normalizeProviderModels", () => {
           name: "Auto Router",
           architecture: { input_modalities: ["text"] },
           pricing: { prompt: "-1", completion: "nope" },
-
           supported_parameters: ["temperature"],
         },
       ],
