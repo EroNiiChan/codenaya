@@ -76,22 +76,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const { runModel, rejected } = await requireModelChoice({
-    internalKey,
-    userId,
-    model,
-    withImages: Boolean(images?.length),
-  });
+  // Independent reads, in parallel: each Convex round-trip delays the send.
+  const [{ runModel, rejected }, { found: conversation, notFound }] =
+    await Promise.all([
+      requireModelChoice({
+        internalKey,
+        userId,
+        model,
+        withImages: Boolean(images?.length),
+      }),
+      requireOwnedConversation({
+        internalKey,
+        userId,
+        conversationId,
+      }),
+    ]);
 
   if (rejected) {
     return rejected;
   }
-
-  const { found: conversation, notFound } = await requireOwnedConversation({
-    internalKey,
-    userId,
-    conversationId,
-  });
 
   if (notFound) {
     return notFound;
