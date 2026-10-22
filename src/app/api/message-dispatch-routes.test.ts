@@ -92,6 +92,17 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
     expect(mocks.inngestSend.mock.calls[0][0].data).toMatchObject({ ownerId: "user_1" });
   });
 
+  it("answers 503 ai_not_configured without the platform key, creating nothing", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+
+    const res = await call();
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "ai_not_configured" });
+    expect(mocks.mutation).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+  });
+
   it("answers 429 past the per-user limit without starting a run (#242)", async () => {
     for (let i = 0; i < rateLimit.limit; i++) checkRateLimit("user_1", rateLimit);
 

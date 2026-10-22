@@ -197,9 +197,9 @@ export function runModelLabel(
   key?: { provider: AiProviderId; label: string; modelIds?: readonly string[] },
 ): string {
   const modelLabel =
-    typeof model === "string"
-      ? ((key ? keyModels(key) : []).find((m) => m.id === model)?.label ?? model)
-      : model.label;
+    typeof model !== "string"
+      ? model.label
+      : ((key && keyModels(key).find((m) => m.id === model)?.label) ?? model);
   const provider = !key
     ? PLATFORM_PROVIDER.label
     : key.provider === "custom"
