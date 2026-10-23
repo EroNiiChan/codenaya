@@ -26,6 +26,7 @@ import { planIdValidator } from "./schema";
  * ponytail: a constant on purpose; #105 replaces the body with its plan read
  * and no caller changes.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the arguments #105 reads
 export const userPlanId = async (_ctx: QueryCtx, _userId: string): Promise<PlanId> => "free";
 
 const getRow = (ctx: QueryCtx, planId: PlanId) =>

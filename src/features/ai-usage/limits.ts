@@ -107,3 +107,12 @@ export function usageLimitMessage(status: UsageStatus, month: string): string {
 
 /** The error code routes answer a blocked platform request with (402). */
 export const USAGE_LIMIT_CODE = "usage_limit";
+
+/** How far along the cap closest to its limit is, 0–100; null without caps. */
+export function capProgress(status: Pick<UsageStatus, "costMicroUsd" | "tokens"> & PlanLimits): number | null {
+  const share = (used: number, cap: number | undefined) =>
+    cap === undefined ? null : cap === 0 ? 1 : used / cap;
+  const shares = [share(status.costMicroUsd, status.costLimitMicroUsd), share(status.tokens, status.tokenLimit)]
+    .filter((s): s is number => s !== null);
+  return shares.length ? Math.min(100, Math.round(Math.max(...shares) * 100)) : null;
+}
