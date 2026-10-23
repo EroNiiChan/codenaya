@@ -20,6 +20,7 @@ describe("limits", () => {
 
   it("shows sub-cent amounts instead of rounding them to $0.00", () => {
     expect(formatUsd(1_000)).toBe("$0.001");
+    expect(formatUsd(1_856)).toBe("$0.0019");
     expect(formatUsd(1_234_567)).toBe("$1.23");
   });
 });

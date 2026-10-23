@@ -59,7 +59,7 @@ export const TopSpendersCard = ({ month, monthLabel }: { month: string; monthLab
             <TableHead className="w-24 text-right">Spent</TableHead>
             <TableHead className="hidden w-28 text-right md:table-cell">Tokens</TableHead>
             <TableHead className="hidden w-32 sm:table-cell">Of cap</TableHead>
-            <TableHead className="hidden w-32 lg:table-cell">Last used</TableHead>
+            <TableHead className="hidden w-40 lg:table-cell">Last used</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

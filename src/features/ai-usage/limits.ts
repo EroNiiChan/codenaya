@@ -67,13 +67,13 @@ export function usageStatus(
   };
 }
 
-/** "$3.00"; sub-cent amounts keep their digits ("$0.0012"). */
+/** "$3.00"; sub-cent amounts aren't rounded to $0.00 ("$0.0019"). */
 export const formatUsd = (micro: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: micro > 0 && micro < 10_000 ? 6 : 2,
+    maximumFractionDigits: micro > 0 && micro < 10_000 ? 4 : 2,
   }).format(micro / MICRO_USD_PER_USD);
 
 export const formatTokens = (tokens: number) => tokens.toLocaleString("en-US");
