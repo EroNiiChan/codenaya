@@ -27,6 +27,31 @@ export const aiProviderValidator = v.union(
   v.literal("custom"),
 );
 
+/** Providers the Codenaya platform key can run on (`NEXT_PUBLIC_AI_PROVIDER`). */
+export const platformProviderValidator = v.union(
+  v.literal("openrouter"),
+  v.literal("openai"),
+  v.literal("anthropic"),
+  v.literal("groq"),
+);
+
+/**
+ * A model the admin made available to users on the platform key. `tools` is
+ * "reported" when the provider's API said it supports tool calling, and
+ * "confirmed" when the API didn't say and the admin vouched for it. Prices are
+ * required: an enabled model is never unpriced (USD per 1M tokens).
+ */
+export const platformModelValidator = v.object({
+  id: v.string(),
+  name: v.string(),
+  vendor: v.string(),
+  contextLength: v.optional(v.number()),
+  vision: v.boolean(),
+  tools: v.union(v.literal("reported"), v.literal("confirmed")),
+  inputUsdPerMTok: v.number(),
+  outputUsdPerMTok: v.number(),
+});
+
 /**
  * The model an assistant message was produced with. `keyId` is set when the
  * run used the user's own key (BYOK), which is what billing reads to charge no
@@ -445,6 +470,39 @@ export default defineSchema({
     defaultModelId: v.string(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  /**
+   * The admin's model selection for one platform provider, saved from /admin.
+   * One bounded doc per provider (at most MAX_PLATFORM_MODELS models). No doc
+   * means users get the provider's curated catalog.
+   */
+  platformModelConfigs: defineTable({
+    provider: platformProviderValidator,
+    models: v.array(platformModelValidator),
+    defaultModelId: v.string(),
+    updatedAt: v.number(),
+    // identity.subject of the admin who saved it.
+    updatedBy: v.string(),
+  }).index("by_provider", ["provider"]),
+
+  /**
+   * Platform settings the admin changes at runtime. A single row; none means
+   * the env defaults (`NEXT_PUBLIC_AI_PROVIDER`).
+   */
+  platformSettings: defineTable({
+    activeProvider: platformProviderValidator,
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }),
+
+  /** Every admin change, written in the same transaction as the change. */
+  adminAuditLog: defineTable({
+    actorId: v.string(),
+    actorEmail: v.string(),
+    action: v.string(),
+    summary: v.string(),
+    at: v.number(),
+  }).index("by_at", ["at"]),
 
   /**
    * Environment variables injected into a project's preview at runtime.

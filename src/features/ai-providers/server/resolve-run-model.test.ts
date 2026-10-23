@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
+  platform: vi.fn(),
   openProviderKey: vi.fn(),
   lookup: vi.fn(),
 }));
 
-vi.mock("@/lib/convex-client", () => ({ convex: { query: mocks.query } }));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query, mocks.platform) } };
+});
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
 vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
 
@@ -39,6 +43,18 @@ const customKey = {
   baseUrl: "https://api.groq.test/openai/v1",
   modelIds: ["llama-4-scout"],
   status: "active" as const,
+};
+
+/** The admin switched to Groq in /admin and saved two models; the env still says OpenRouter. */
+const GROQ_SAVED = {
+  provider: "groq",
+  config: {
+    models: [
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", vendor: "meta", vision: false },
+      { id: "qwen/qwen3-32b", name: "Qwen3 32B", vendor: "qwen", vision: true },
+    ],
+    defaultModelId: "llama-3.3-70b-versatile",
+  },
 };
 
 /** The model and endpoint an AgentKit adapter was built for. */
@@ -89,6 +105,34 @@ describe("validateModelChoice (API route)", () => {
     await expect(
       validateModelChoice({ internalKey: "ik", userId: "user_1", model: "claude-opus-5-5", withImages: true }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("uses the admin's saved provider and models over the env", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk-platform");
+    mocks.platform.mockReturnValue(GROQ_SAVED);
+
+    // An OpenRouter id from before the switch runs on the saved default.
+    expect(await validate("anthropic/claude-opus-5.5")).toEqual({
+      modelId: "llama-3.3-70b-versatile",
+      label: "Codenaya · Llama 3.3 70B",
+    });
+    expect(await validate("qwen/qwen3-32b")).toMatchObject({ modelId: "qwen/qwen3-32b" });
+    // Vision comes from the saved selection.
+    const withImages = (model: string) =>
+      validateModelChoice({ internalKey: "ik", userId: "user_1", model, withImages: true });
+    await expect(withImages("llama-3.3-70b-versatile")).rejects.toMatchObject({ status: 400 });
+    expect(await withImages("qwen/qwen3-32b")).toMatchObject({ modelId: "qwen/qwen3-32b" });
+  });
+
+  it("refuses with 503 when the saved provider's key is missing, whatever the env has", async () => {
+    vi.stubEnv("GROQ_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.platform.mockReturnValue(GROQ_SAVED);
+
+    await expect(validate("qwen/qwen3-32b")).rejects.toMatchObject({
+      status: 503,
+      code: "ai_not_configured",
+    });
   });
 
   it("refuses platform models with 503 ai_not_configured when the provider has no key", async () => {
@@ -225,6 +269,19 @@ describe("resolveRunModel (agent run)", () => {
     });
     expect(target(run.coding()).url).toContain("api.groq.com/openai/v1");
     expect(target(run.title(0)).id).toBe("openai/gpt-oss-20b");
+  });
+
+  it("runs on the admin's saved provider and models over the env", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk-platform");
+    mocks.platform.mockReturnValue(GROQ_SAVED);
+
+    const run = await resolve({ modelId: "x-ai/grok-4.7" });
+
+    expect(target(run.coding(0.3))).toMatchObject({
+      id: "llama-3.3-70b-versatile",
+      authKey: "gsk-platform",
+    });
+    expect(target(run.coding()).url).toContain("api.groq.com/openai/v1");
   });
 
   it("ends a platform run with a clear reply when the provider has no key", async () => {

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { convex } from "@/lib/convex-client";
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
-import { platformProviderId, resolvePlatformModel } from "../platform";
+import { resolvePlatformModel } from "../platform";
 import {
   modelAcceptsImages,
   modelIdsFor,
@@ -15,6 +15,7 @@ import { buildAgentKitModel } from "./agentkit-model";
 import { assertSafeProviderBaseUrl } from "./base-url";
 import {
   AI_NOT_CONFIGURED_MESSAGE,
+  activePlatform,
   isPlatformConfigured,
   platformAgentModel,
   platformTitleModel,
@@ -87,10 +88,6 @@ export class ModelChoiceError extends Error {
 const toChoice = (input: ModelChoiceInput): AgentModelChoice =>
   typeof input === "object" ? input : { modelId: input ?? "" };
 
-/** Platform runs: an unlisted id falls back to the provider's default. */
-const platformModel = (modelId: string) =>
-  resolvePlatformModel(platformProviderId(), null, modelId);
-
 /** The message has images and the model cannot read them. */
 const visionRequired = (label: string) =>
   new ModelChoiceError(
@@ -99,8 +96,9 @@ const visionRequired = (label: string) =>
   );
 
 /**
- * Route-side check. Platform ids outside the active provider's list fall back
- * to its default, and a platform without a key is refused; a BYOK choice must name a key the caller owns and a model
+ * Route-side check. Platform ids outside the active provider's selection
+ * (/admin, else its catalog) fall back to its default, and a platform without
+ * a key is refused; a BYOK choice must name a key the caller owns and a model
  * that key's provider offers. With `withImages`, the model must accept images.
  */
 export async function validateModelChoice({
@@ -116,10 +114,11 @@ export async function validateModelChoice({
 }): Promise<RunModelChoice> {
   const { keyId, modelId } = toChoice(model);
   if (!keyId) {
-    if (!isPlatformConfigured()) {
+    const { provider, config } = await activePlatform(internalKey);
+    if (!isPlatformConfigured(provider)) {
       throw new ModelChoiceError(AI_NOT_CONFIGURED_MESSAGE, 503, "ai_not_configured");
     }
-    const model = platformModel(modelId);
+    const model = resolvePlatformModel(provider, config, modelId);
     const label = runModelLabel(model);
     if (withImages && !model.vision) {
       throw visionRequired(label);
@@ -223,14 +222,17 @@ export async function resolveRunModel({
   choice: AgentModelChoice;
 }): Promise<RunModel> {
   if (!choice.keyId) {
+    // Re-read, not taken from the event: the admin may have switched provider
+    // or removed the model since the route checked it.
+    const { provider, config } = await activePlatform(internalKey);
     // The key can go missing between the route's check and the run (a redeploy).
-    if (!isPlatformConfigured()) {
+    if (!isPlatformConfigured(provider)) {
       throw new ProviderKeyError(AI_NOT_CONFIGURED_MESSAGE);
     }
-    const modelId = platformModel(choice.modelId).id;
+    const modelId = resolvePlatformModel(provider, config, choice.modelId).id;
     return {
-      coding: (temperature) => platformAgentModel(modelId, temperature),
-      title: (temperature) => platformAgentModel(platformTitleModel(), temperature),
+      coding: (temperature) => platformAgentModel(provider, modelId, temperature),
+      title: (temperature) => platformAgentModel(provider, platformTitleModel(provider), temperature),
     };
   }
 

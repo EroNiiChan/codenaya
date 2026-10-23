@@ -11,9 +11,10 @@ const mocks = vi.hoisted(() => ({
   mutation: vi.fn(),
 }));
 
-vi.mock("@/lib/convex-client", () => ({
-  convex: { query: mocks.query, mutation: mocks.mutation },
-}));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query), mutation: mocks.mutation } };
+});
 
 import { DEFAULT_CONVERSATION_TITLE } from "../constants";
 import { drive, text } from "./process-message.driver";

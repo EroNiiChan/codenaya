@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   generateObject: vi.fn(),
+  query: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
 vi.mock("ai", () => ({ generateObject: mocks.generateObject }));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query), mutation: vi.fn() } };
+});
 
 import {
   ENHANCE_PROMPT_RATE_LIMIT,
@@ -36,8 +41,13 @@ describe("POST /api/enhance-prompt", () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     resetRateLimits();
+    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", "internal");
+    // Explicit, so a NEXT_PUBLIC_AI_PROVIDER in the shell can't change the provider.
+    vi.stubEnv("NEXT_PUBLIC_AI_PROVIDER", "openrouter");
     vi.stubEnv("OPENROUTER_API_KEY", "sk-or-test");
     mocks.auth.mockResolvedValue({ userId: "user_1" });
+    // No default key of their own: the platform model runs.
+    mocks.query.mockResolvedValue(null);
     mocks.generateObject.mockResolvedValue({ object: SPEC });
   });
 
@@ -57,6 +67,7 @@ describe("POST /api/enhance-prompt", () => {
     const res = await post({ prompt: "todo app" });
 
     expect(res.status).toBe(503);
+    expect((await res.json()).code).toBe("ai_not_configured");
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 

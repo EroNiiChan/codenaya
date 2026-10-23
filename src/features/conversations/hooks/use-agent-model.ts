@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import { modelIdsFor } from "@/features/ai-providers/registry";
 import {
+  type ActivePlatform,
   platformModels,
   platformProviderId,
   resolvePlatformModel,
@@ -9,6 +10,7 @@ import {
 import {
   useAiPreferences,
   useAiProviderKeys,
+  usePlatformModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
 import type { AiProviderKeySummary } from "../../../../convex/aiProviders";
 
@@ -85,15 +87,17 @@ function setModel(model: AgentModelChoice) {
 
 /**
  * Whether a choice can still be sent: one of the platform provider's models,
- * or a model of one of the user's keys. While keys are loading a BYOK choice is
- * kept; the server validates it either way.
+ * or a model of one of the user's keys. While either list is loading the
+ * choice is kept; the server validates it either way.
  */
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
+  platform: ActivePlatform | undefined,
 ) {
   if (!choice.keyId) {
-    return platformModels(platformProviderId(), null).some((m) => m.id === choice.modelId);
+    if (!platform) return true;
+    return platformModels(platform.provider, platform.config).some((m) => m.id === choice.modelId);
   }
   if (!keys) return true;
   const key = keys.find((k) => k._id === choice.keyId);
@@ -114,6 +118,8 @@ export function useAgentModel() {
   );
   const keys = useAiProviderKeys();
   const preferences = useAiPreferences();
+  const platform = usePlatformModels();
+  const fallback = platform ?? { provider: platformProviderId(), config: null };
 
   const preferred: AgentModelChoice | null = preferences
     ? {
@@ -125,8 +131,8 @@ export function useAgentModel() {
   const model =
     [stored, preferred].find(
       (choice): choice is AgentModelChoice =>
-        choice !== null && isAvailable(choice, keys),
-    ) ?? { modelId: resolvePlatformModel(platformProviderId(), null, undefined).id };
+        choice !== null && isAvailable(choice, keys, platform),
+    ) ?? { modelId: resolvePlatformModel(fallback.provider, fallback.config, undefined).id };
 
   return [model, setModel] as const;
 }

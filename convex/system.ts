@@ -9,6 +9,7 @@ import {
 } from "./schema";
 import { createCheckpoint } from "./checkpoints";
 import { appError } from "./errors";
+import { validateInternalKey } from "./internalKey";
 import {
   CASCADE_BATCH_SIZE,
   deleteRows,
@@ -36,33 +37,6 @@ const MAX_RECENT_MESSAGES = 50;
 
 /** A project runs one agent at a time; lost runs are failed by a cron. */
 const MAX_PROCESSING_MESSAGES = 20;
-
-const validateInternalKey = (key: string) => {
-  const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
-
-  if (!internalKey) {
-    throw new Error("CODENAYA_CONVEX_INTERNAL_KEY is not configured");
-  }
-
-  if (!keysMatch(key, internalKey)) {
-    throw appError("UNAUTHENTICATED", "Invalid internal key");
-  }
-};
-
-/**
- * Constant-time string compare, so response timing doesn't reveal how much of
- * a guessed key was right (#211). The Convex runtime has no
- * `crypto.timingSafeEqual`. Only the secret's length can leak.
- */
-const keysMatch = (given: string, secret: string) => {
-  const a = new TextEncoder().encode(given);
-  const b = new TextEncoder().encode(secret);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < b.length; i++) {
-    diff |= (a[i] ?? 0) ^ b[i];
-  }
-  return diff === 0;
-};
 
 export const getConversationById = query({
   args: {

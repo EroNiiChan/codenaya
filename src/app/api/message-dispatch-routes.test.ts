@@ -8,9 +8,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
-vi.mock("@/lib/convex-client", () => ({
-  convex: { query: mocks.query, mutation: mocks.mutation },
-}));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query), mutation: mocks.mutation } };
+});
 vi.mock("@/inngest/client", () => ({
   inngest: { send: mocks.inngestSend },
 }));

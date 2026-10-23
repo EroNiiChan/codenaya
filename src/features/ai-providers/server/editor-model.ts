@@ -4,14 +4,20 @@ import { NextResponse } from "next/server";
 import { convex } from "@/lib/convex-client";
 import { AI_PROVIDERS, PROVIDER_KEY_ERROR_CODE, modelIdsFor } from "../registry";
 import { buildAiSdkModel } from "./ai-sdk-model";
-import { isPlatformConfigured, platformEditorModel } from "./platform-model";
+import {
+  AI_NOT_CONFIGURED_MESSAGE,
+  activePlatform,
+  isPlatformConfigured,
+  platformEditorModel,
+} from "./platform-model";
 import { ProviderKeyError, isProviderKeyRejection } from "./resolve-run-model";
 import { openProviderKey } from "./sealed-key";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 
 /**
- * The model for the editor AI routes (`/api/suggestion`, `/api/quick-edit`):
+ * The model for the editor AI routes (`/api/suggestion`, `/api/quick-edit`,
+ * `/api/enhance-prompt`):
  * the user's default key when they set one, otherwise Codenaya's platform
  * model. Resolved per request on the server; the decrypted key never leaves it.
  *
@@ -47,13 +53,16 @@ export async function resolveEditorModel({
   internalKey: string;
   userId: string;
 }): Promise<EditorModel | null> {
-  const byok = await convex.query(api.system.getDefaultAiProviderKey, {
-    internalKey,
-    userId,
-  });
+  // In parallel, so a platform request pays no extra round trip.
+  const [byok, platform] = await Promise.all([
+    convex.query(api.system.getDefaultAiProviderKey, { internalKey, userId }),
+    activePlatform(internalKey),
+  ]);
 
   if (!byok) {
-    return isPlatformConfigured() ? { model: platformEditorModel() } : null;
+    return isPlatformConfigured(platform.provider)
+      ? { model: platformEditorModel(platform.provider) }
+      : null;
   }
 
   const { key, modelId } = byok;
@@ -79,6 +88,9 @@ export async function resolveEditorModel({
   };
 }
 
+const notConfigured = () =>
+  NextResponse.json({ error: AI_NOT_CONFIGURED_MESSAGE, code: "ai_not_configured" }, { status: 503 });
+
 const keyErrorResponse = (message: string) =>
   NextResponse.json({ error: message, code: PROVIDER_KEY_ERROR_CODE }, { status: 422 });
 
@@ -93,7 +105,7 @@ export async function withEditorModel(
 ): Promise<Response> {
   const internalKey = process.env.CODENAYA_CONVEX_INTERNAL_KEY;
   if (!internalKey) {
-    return NextResponse.json({ error: "AI is not configured" }, { status: 503 });
+    return notConfigured();
   }
 
   let resolved: EditorModel | null;
@@ -107,7 +119,7 @@ export async function withEditorModel(
   }
 
   if (!resolved) {
-    return NextResponse.json({ error: "AI is not configured" }, { status: 503 });
+    return notConfigured();
   }
 
   const { model, key } = resolved;

@@ -81,8 +81,8 @@ Open bugs only. Gaps found in code without an issue are listed on the flow itsel
   `checkBuild`, `scrapeUrls`, `setEnvVar`, `loadSkill`, plus MCP tools (F12). Finish gate in
   `inngest/build-check-gate.ts`; `checkBuild` runs `tsc --noEmit` and `vite build` in E2B for
   Vite projects (static checks only without `E2B_API_KEY`) → `convex/system.ts` writes.
-  Platform models are the active provider's catalog (`ai-providers/platform.ts`); an unlisted
-  id runs on its default (OpenRouter: `openai/gpt-5.6-luna`). Without the provider's key a
+  Platform models are the admin's selection in /admin for the active provider (ADR 0006), else
+  its catalog (`ai-providers/platform.ts`); an unlisted id runs on its default (OpenRouter: `openai/gpt-5.6-luna`). Without the provider's key a
   send gets 503 `ai_not_configured`.
 - Env: the active platform provider's key (`NEXT_PUBLIC_AI_PROVIDER`, default `openrouter`; ADR 0005), Inngest; optional `E2B_API_KEY` (build check), `FIRECRAWL_API_KEY` (URL
   scraping).

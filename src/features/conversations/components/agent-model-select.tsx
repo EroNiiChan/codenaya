@@ -19,14 +19,16 @@ import {
 } from "@/features/ai-providers/registry";
 import {
   platformModels,
-  platformProviderId,
   resolvePlatformModel,
 } from "@/features/ai-providers/platform";
 import {
   fromChoiceValue,
   toChoiceValue,
 } from "@/features/ai-providers/model-choice";
-import { useAiProviderKeys } from "@/features/ai-providers/hooks/use-ai-providers";
+import {
+  useAiProviderKeys,
+  usePlatformModelsOrCatalog,
+} from "@/features/ai-providers/hooks/use-ai-providers";
 
 import type { AgentModelChoice } from "../agent-models";
 
@@ -56,6 +58,7 @@ export const AgentModelSelect = ({
     (key) => key.status === "active" || key._id === value.keyId,
   );
   const selectedKey = keys.find((key) => key._id === value.keyId);
+  const platform = usePlatformModelsOrCatalog();
 
   return (
     <PromptInputSelect
@@ -77,13 +80,13 @@ export const AgentModelSelect = ({
         <TooltipContent>
           {selectedKey
             ? runModelLabel(value.modelId, selectedKey)
-            : runModelLabel(resolvePlatformModel(platformProviderId(), null, value.modelId))}
+            : runModelLabel(resolvePlatformModel(platform.provider, platform.config, value.modelId))}
         </TooltipContent>
       </Tooltip>
       <PromptInputSelectContent position="popper" align="start" className="max-h-80">
         <SelectGroup>
           <SelectLabel>{PLATFORM_PROVIDER.label}</SelectLabel>
-          {platformModels(platformProviderId(), null).map((model) => (
+          {platformModels(platform.provider, platform.config).map((model) => (
             <PromptInputSelectItem
               key={model.id}
               value={toChoiceValue({ modelId: model.id })}

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as aiProviders from "../aiProviders.js";
 import type * as auth from "../auth.js";
 import type * as chatImages from "../chatImages.js";
@@ -19,7 +20,9 @@ import type * as errors from "../errors.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
+import type * as internalKey from "../internalKey.js";
 import type * as maintenance from "../maintenance.js";
+import type * as platformModels from "../platformModels.js";
 import type * as projectCascade from "../projectCascade.js";
 import type * as projectCopy from "../projectCopy.js";
 import type * as projects from "../projects.js";
@@ -36,6 +39,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   aiProviders: typeof aiProviders;
   auth: typeof auth;
   chatImages: typeof chatImages;
@@ -47,7 +51,9 @@ declare const fullApi: ApiFromModules<{
   files: typeof files;
   http: typeof http;
   integrations: typeof integrations;
+  internalKey: typeof internalKey;
   maintenance: typeof maintenance;
+  platformModels: typeof platformModels;
   projectCascade: typeof projectCascade;
   projectCopy: typeof projectCopy;
   projects: typeof projects;

@@ -1,14 +1,25 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
+import { adminOrNull } from '@/features/admin/server/require-admin';
 import { SIGN_IN_URL, SIGN_UP_URL } from '@/features/auth/constants';
+
+const isAdminPage = createRouteMatcher(['/admin(.*)']);
 
 // Routes are protected where they read data (`auth.protect()` in pages,
 // `requireUserId()` in route handlers), not here. The URLs tell
 // `auth.protect()` where to send signed-out visitors.
-export default clerkMiddleware({
-  signInUrl: SIGN_IN_URL,
-  signUpUrl: SIGN_UP_URL,
-});
+export default clerkMiddleware(
+  async (auth, request) => {
+    // /admin is the exception, only so non-admins get a real 404 status: with
+    // Cache Components the layout's `notFound()` runs after the shell has
+    // streamed as a 200. The layout still checks too.
+    if (isAdminPage(request) && !(await adminOrNull(await auth()))) {
+      return NextResponse.rewrite(new URL('/404', request.url), { status: 404 });
+    }
+  },
+  { signInUrl: SIGN_IN_URL, signUpUrl: SIGN_UP_URL },
+);
 
 export const config = {
   matcher: [

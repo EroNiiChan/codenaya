@@ -4,7 +4,8 @@ import { AI_PROVIDERS, type ProviderModel } from "./registry";
  * The Codenaya platform provider: which provider runs users' requests when
  * they have no key of their own, and which of its models they may pick.
  *
- * Chosen by `NEXT_PUBLIC_AI_PROVIDER` (ADR 0005). Public on purpose: it holds
+ * The admin picks it in /admin (ADR 0006); `NEXT_PUBLIC_AI_PROVIDER` is the
+ * fallback until they do (ADR 0005). Public on purpose: it holds
  * no secret, and the client needs it to list the right models. Client-safe;
  * the provider keys are read only in `server/platform-model.ts`.
  */
@@ -16,15 +17,36 @@ export type PlatformProviderId = (typeof PLATFORM_PROVIDER_IDS)[number];
 /** Today's behaviour, used when the env is unset or invalid. */
 export const DEFAULT_PLATFORM_PROVIDER: PlatformProviderId = "openrouter";
 
-/** An admin's model selection for a provider. Not stored yet; `null` means the catalog. */
+/** An admin's model selection for a provider (/admin); `null` means the catalog. */
 export interface PlatformModelConfig {
   models: readonly ProviderModel[];
   defaultModelId: string;
 }
 
+/** The provider platform requests run on, and its selection (null: catalog). */
+export interface ActivePlatform {
+  provider: PlatformProviderId;
+  config: PlatformModelConfig | null;
+}
+
+/** A selection as Convex stores it, in the resolver's shape. */
+export const platformConfigFrom = (
+  saved: {
+    models: readonly { id: string; name: string; vendor: string; vision: boolean }[];
+    defaultModelId: string;
+  } | null,
+): PlatformModelConfig | null =>
+  saved && {
+    models: saved.models.map(({ id, name, vendor, vision }) => ({ id, label: name, vendor, vision })),
+    defaultModelId: saved.defaultModelId,
+  };
+
 let warnedInvalid = false;
 
-/** The active platform provider. An invalid value falls back to the default, once logged. */
+/**
+ * The env's platform provider: the fallback until the admin picks one in
+ * /admin. An invalid value falls back to the default, once logged.
+ */
 export function platformProviderId(): PlatformProviderId {
   // Read as a literal so Next inlines it into the client bundle.
   const value = process.env.NEXT_PUBLIC_AI_PROVIDER?.trim().toLowerCase();

@@ -11,14 +11,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: mocks.auth }));
 vi.mock("ai", () => ({ generateObject: mocks.generateObject }));
-vi.mock("@/lib/convex-client", () => ({
-  convex: { query: mocks.query, mutation: mocks.mutation },
-}));
+vi.mock("@/lib/convex-client", async () => {
+  const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
+  return { convex: { query: withEnvPlatform(mocks.query), mutation: mocks.mutation } };
+});
 vi.mock("@/features/ai-providers/server/sealed-key", () => ({
   openProviderKey: mocks.openProviderKey,
 }));
 vi.mock("@/lib/firecrawl", () => ({ getFirecrawl: mocks.getFirecrawl }));
 
+import { AI_NOT_CONFIGURED_MESSAGE } from "@/features/ai-providers/server/platform-model";
 import { POST as suggestionPOST } from "./suggestion/route";
 import { POST as quickEditPOST } from "./quick-edit/route";
 import { MAX_SCRAPED_CHARS, MAX_SCRAPE_URLS } from "@/lib/scrape-limits";
@@ -89,7 +91,10 @@ describe.each(routes)("POST /api/$name", ({ call, result }) => {
     const res = await call();
 
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "AI is not configured" });
+    expect(await res.json()).toEqual({
+      error: AI_NOT_CONFIGURED_MESSAGE,
+      code: "ai_not_configured",
+    });
     expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 
