@@ -82,18 +82,12 @@ describe("aiUsage.record", () => {
     expect(await record(t, "run:t0", { modelId: "mini" })).toMatchObject({ costMicroUsd: 12_207 + 2_368 });
   });
 
-  test("a provider without saved prices counts tokens at no cost", async () => {
+  test("a provider without saved prices is never free: it pays the fallback rate", async () => {
     const t = await setup();
-    await setLimits(t, { monthlyTokenLimit: 1_801 });
-
-    expect(await record(t, "run:t0", { provider: "groq" })).toMatchObject({
-      costMicroUsd: 0,
-      tokens: 1_801,
-      exceeded: true,
-      exceededBy: "tokens",
-    });
+    // 1,234 × $15 + 567 × $75 per 1M tokens.
+    expect(await record(t, "run:t0", { provider: "groq" })).toMatchObject({ costMicroUsd: 61_035, tokens: 1_801 });
     const [event] = await t.run((ctx) => ctx.db.query("aiUsageEvents").take(1));
-    expect(event).toMatchObject({ priced: false, costMicroUsd: 0 });
+    expect(event).toMatchObject({ priced: false, costMicroUsd: 61_035 });
   });
 
   test("a new UTC month starts a new total", async () => {

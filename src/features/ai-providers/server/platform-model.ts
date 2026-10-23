@@ -1,4 +1,5 @@
 import { wrapLanguageModel } from "ai";
+import { after } from "next/server";
 
 import { type UsageStatus, monthKey } from "@/features/ai-usage/limits";
 import { convex } from "@/lib/convex-client";
@@ -105,8 +106,8 @@ export const platformTitleModel = (provider: PlatformProviderId) =>
 /**
  * AI SDK model for the editor AI routes. Editor tasks are short and
  * latency-sensitive, so they run on the provider's small model. Each call is
- * metered to `userId`; a failed record is logged, not thrown, since the user
- * already has the answer.
+ * metered to `userId` after the response is sent (`after`), so the answer
+ * doesn't wait on the write; a failed record is logged, not thrown.
  */
 export function platformEditorModel(
   provider: PlatformProviderId,
@@ -119,8 +120,8 @@ export function platformEditorModel(
       specificationVersion: "v3",
       wrapGenerate: async ({ doGenerate }) => {
         const result = await doGenerate();
-        await convex
-          .mutation(api.aiUsage.record, {
+        after(() =>
+          convex.mutation(api.aiUsage.record, {
             internalKey,
             key: `editor:${crypto.randomUUID()}`,
             userId,
@@ -129,8 +130,8 @@ export function platformEditorModel(
             modelId,
             inputTokens: result.usage.inputTokens.total ?? 0,
             outputTokens: result.usage.outputTokens.total ?? 0,
-          })
-          .catch((error) => console.error("[ai-usage] failed to record editor usage", error));
+          }).catch((error) => console.error("[ai-usage] failed to record editor usage", error)),
+        );
         return result;
       },
     },

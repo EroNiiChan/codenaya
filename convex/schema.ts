@@ -555,7 +555,7 @@ export default defineSchema({
     inputTokens: v.number(),
     outputTokens: v.number(),
     costMicroUsd: v.number(),
-    // False when the provider had no saved prices: tokens count, cost is 0.
+    // False when the provider had no saved prices: charged at UNPRICED_FALLBACK_PRICE.
     priced: v.boolean(),
     at: v.number(),
   }).index("by_key", ["key"]),

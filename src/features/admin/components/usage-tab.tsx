@@ -5,7 +5,7 @@ import { CircleAlertIcon, InfoIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { monthKey } from "@/features/ai-usage/limits";
+import { UNPRICED_FALLBACK_PRICE, monthKey, monthName } from "@/features/ai-usage/limits";
 
 import { api } from "../../../../convex/_generated/api";
 
@@ -13,16 +13,14 @@ import type { PlatformProviderId } from "../platform-models";
 import { PlanLimitsCard } from "./plan-limits-card";
 import { TopSpendersCard } from "./top-spenders-card";
 
+const FALLBACK_RATE = `$${UNPRICED_FALLBACK_PRICE.inputUsdPerMTok}/$${UNPRICED_FALLBACK_PRICE.outputUsdPerMTok}`;
+
 /** Per-plan monthly caps on Codenaya AI, and who is using it this month. */
 export const UsageTab = ({ fallbackProvider }: { fallbackProvider: PlatformProviderId }) => {
   const limits = useQuery(api.planLimits.listPlanLimits, {});
   const active = useQuery(api.platformModels.getActive, { fallbackProvider });
   const month = monthKey();
-  const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const monthLabel = monthName(month, true);
 
   return (
     <>
@@ -31,8 +29,8 @@ export const UsageTab = ({ fallbackProvider }: { fallbackProvider: PlatformProvi
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>Models not configured: usage isn&apos;t priced</AlertTitle>
           <AlertDescription>
-            The active provider has no saved prices, so its usage costs $0 and only token caps apply. Save its
-            models in the Models tab.
+            The active provider has no saved prices, so its usage is charged at a fallback of {FALLBACK_RATE}{" "}
+            per 1M tokens and users hit their caps early. Save its models with prices in the Models tab.
           </AlertDescription>
         </Alert>
       )}

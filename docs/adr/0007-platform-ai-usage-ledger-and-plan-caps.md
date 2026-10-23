@@ -21,8 +21,9 @@ count calls twice.
   and bumps the aggregate in the same transaction, so a retried step never counts twice.
 - **Money is integer micro-USD.** Prices are USD per 1M tokens, so `tokens × $/MTok`
   is exactly µUSD. The price is the saved price of the provider that ran (`platformModelConfigs`),
-  else that provider's default model's price (over, not under), else unpriced: cost 0 and
-  only token caps apply. Prices never travel in events.
+  else that provider's default model's price (over, not under), else a high fallback rate
+  (`UNPRICED_FALLBACK_PRICE`, $15/$75 per 1M tokens) marked `priced: false`: unpriced usage
+  is never free, so the USD caps keep working. Prices never travel in events.
 - **Caps per plan** (`convex/planLimits.ts`, `planLimits` table): optional USD and token
   caps; no row means the `PLANS` default (monthly credits in USD, no token cap). Reaching
   either cap, exactly at the cap included, blocks.

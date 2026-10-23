@@ -3,6 +3,7 @@ import { type Infer, v } from "convex/values";
 
 import {
   MAX_TOKENS_PER_CALL,
+  UNPRICED_FALLBACK_PRICE,
   type UsageStatus,
   costMicroUsd,
   monthKey,
@@ -51,7 +52,7 @@ export async function usageStatusFor(ctx: QueryCtx, userId: string, month: strin
 /**
  * The price of a call on `provider`: the model's saved price, else the
  * default model's (the title and editor models are rarely listed; this
- * overestimates). No saved selection: unpriced, so only token caps apply.
+ * overestimates). No saved selection: null, charged at the fallback rate.
  */
 async function priceFor(
   ctx: QueryCtx,
@@ -109,8 +110,9 @@ export const record = mutation({
       .unique();
     if (seen) return await usageStatusFor(ctx, seen.userId, seen.month);
 
+    // Unpriced is never free: the fallback rate keeps the USD cap working.
     const price = await priceFor(ctx, call.provider, call.modelId);
-    const cost = price ? costMicroUsd(inputTokens, outputTokens, price) : 0;
+    const cost = costMicroUsd(inputTokens, outputTokens, price ?? UNPRICED_FALLBACK_PRICE);
     await ctx.db.insert("aiUsageEvents", {
       ...call,
       month,

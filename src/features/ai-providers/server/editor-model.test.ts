@@ -13,6 +13,11 @@ vi.mock("@/lib/convex-client", async () => {
   return { convex: { query: withEnvPlatform(mocks.query, mocks.platform), mutation: mocks.mutation } };
 });
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
+// Outside a request, run `after` callbacks at once.
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  after: (task: () => unknown) => task(),
+}));
 vi.mock("./ai-sdk-model", () => ({ buildAiSdkModel: mocks.buildAiSdkModel }));
 
 import type { LanguageModelV3 } from "@ai-sdk/provider";

@@ -14,6 +14,13 @@ export const MICRO_USD_PER_USD = 1_000_000;
 export const MAX_MONTHLY_USD_LIMIT = 10_000;
 export const MAX_MONTHLY_TOKEN_LIMIT = 1_000_000_000;
 
+/**
+ * The rate for a provider with no saved prices: high (frontier-model level) so
+ * the USD cap still bites instead of counting the usage as free. The admin
+ * page warns until prices are saved.
+ */
+export const UNPRICED_FALLBACK_PRICE = { inputUsdPerMTok: 15, outputUsdPerMTok: 75 };
+
 /** Tokens one model call may record; a larger number is a bug, not usage. */
 export const MAX_TOKENS_PER_CALL = 10_000_000;
 
@@ -63,7 +70,7 @@ export function usageStatus(
     ...limits,
     ...usage,
     exceeded: overUsd || overTokens,
-    ...(overUsd ? { exceededBy: "usd" as const } : overTokens ? { exceededBy: "tokens" as const } : {}),
+    ...((overUsd || overTokens) && { exceededBy: overUsd ? ("usd" as const) : ("tokens" as const) }),
   };
 }
 
@@ -78,6 +85,14 @@ export const formatUsd = (micro: number) =>
 
 export const formatTokens = (tokens: number) => tokens.toLocaleString("en-US");
 
+/** "October", or with `withYear` "October 2026". */
+export const monthName = (month: string, withYear = false) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "long",
+    ...(withYear ? { year: "numeric" as const } : {}),
+    timeZone: "UTC",
+  });
+
 /** First day of the next UTC month, e.g. "November 1". */
 export const resetDate = (month: string) => {
   const [year, m] = month.split("-").map(Number);
@@ -91,16 +106,12 @@ export const resetDate = (month: string) => {
 /** The reply when a cap blocks platform AI: which cap, the plan, when it resets, the way out. */
 export function usageLimitMessage(status: UsageStatus, month: string): string {
   const plan = PLANS[status.planId].name;
-  const monthName = new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "long",
-    timeZone: "UTC",
-  });
   const used =
     status.exceededBy === "tokens"
       ? `${formatTokens(status.tokenLimit ?? 0)} tokens`
       : formatUsd(status.costLimitMicroUsd ?? 0);
   return (
-    `You've used your ${plan} plan's ${used} of Codenaya AI for ${monthName}. ` +
+    `You've used your ${plan} plan's ${used} of Codenaya AI for ${monthName(month)}. ` +
     `It resets on ${resetDate(month)}. Add your own API key in Settings → AI providers to keep going.`
   );
 }
@@ -110,8 +121,12 @@ export const USAGE_LIMIT_CODE = "usage_limit";
 
 /** How far along the cap closest to its limit is, 0–100; null without caps. */
 export function capProgress(status: Pick<UsageStatus, "costMicroUsd" | "tokens"> & PlanLimits): number | null {
-  const share = (used: number, cap: number | undefined) =>
-    cap === undefined ? null : cap === 0 ? 1 : used / cap;
+  const share = (used: number, cap: number | undefined) => {
+    if (cap === undefined) return null;
+    // A cap of 0 means "off": the user is blocked, so the bar shows full.
+    if (cap === 0) return 1;
+    return used / cap;
+  };
   const shares = [share(status.costMicroUsd, status.costLimitMicroUsd), share(status.tokens, status.tokenLimit)]
     .filter((s): s is number => s !== null);
   return shares.length ? Math.min(100, Math.round(Math.max(...shares) * 100)) : null;
