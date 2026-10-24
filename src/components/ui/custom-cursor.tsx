@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useSyncExternalStore } from "react";
 
 interface Ripple {
   id: number;
@@ -8,8 +8,27 @@ interface Ripple {
   y: number;
 }
 
+const checkPointerEnabled = () => {
+  if (typeof window === "undefined") return false;
+  const isFinePointer = window.matchMedia("(pointer: fine)").matches;
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return isFinePointer && !prefersReducedMotion;
+};
+
+const subscribePointer = (callback: () => void) => {
+  if (typeof window === "undefined") return () => {};
+  const m1 = window.matchMedia("(pointer: fine)");
+  const m2 = window.matchMedia("(prefers-reduced-motion: reduce)");
+  m1.addEventListener("change", callback);
+  m2.addEventListener("change", callback);
+  return () => {
+    m1.removeEventListener("change", callback);
+    m2.removeEventListener("change", callback);
+  };
+};
+
 export function CustomCursor() {
-  const [enabled, setEnabled] = useState(false);
+  const enabled = useSyncExternalStore(subscribePointer, checkPointerEnabled, () => false);
   const [visible, setVisible] = useState(false);
   const [isDown, setIsDown] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -28,14 +47,6 @@ export function CustomCursor() {
   // to avoid CSS keyframe animation transforms overriding translate3d
   const dotContainerRef = useRef<HTMLDivElement>(null);
   const ringContainerRef = useRef<HTMLDivElement>(null);
-
-  // Check pointer capability (avoid rendering on touch screens / mobile)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const isFinePointer = window.matchMedia("(pointer: fine)").matches;
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setEnabled(isFinePointer && !prefersReducedMotion);
-  }, []);
 
   // Cleanup pending ripple timeouts on unmount
   useEffect(() => {

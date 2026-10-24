@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 import { CodenayaLogo } from "@/components/codenaya-logo";
