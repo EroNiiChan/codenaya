@@ -17,6 +17,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SIGN_IN_URL, SIGN_UP_URL } from "@/features/auth/constants";
+import { CodenayaLogo } from "@/components/codenaya-logo";
 import { cn } from "@/lib/utils";
 
 import { UserMenu } from "./user-menu";
@@ -51,7 +52,7 @@ const Brand = () => (
     href="/"
     className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
   >
-    <img src="/logo-alt.svg" alt="Codenaya" className="size-6 dark:invert-0 invert" />
+    <CodenayaLogo blinking size={22} />
     <span className="text-[15px] font-semibold tracking-tight text-foreground">codenaya</span>
   </Link>
 );
