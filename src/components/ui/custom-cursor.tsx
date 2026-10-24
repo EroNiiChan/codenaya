@@ -198,7 +198,7 @@ export function CustomCursor() {
               ? "size-10 border-2 border-brand/80 bg-brand/10 opacity-90 animate-cursor-pulse shadow-[0_0_12px_rgba(232,130,79,0.3)]"
               : isInput
                 ? "h-7 w-2 rounded-xs border border-brand/60 bg-brand/15 opacity-80"
-                : "size-7 border border-brand/50 bg-brand/5 opacity-60"
+                : "size-7 border border-brand/50 bg-brand/5 opacity-60 animate-cursor-pulse"
             }`}
         />
       </div>
