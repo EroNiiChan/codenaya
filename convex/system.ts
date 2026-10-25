@@ -24,6 +24,13 @@ import {
   findSibling,
   getProjectFile,
 } from "./files";
+import {
+  insertFileContent,
+  readFileContent,
+  withContents,
+  withoutContent,
+  writeFileContent,
+} from "./fileContents";
 import { resolveProjectSkills } from "./skills";
 import { countProjectBuilt } from "./stats";
 import { MAX_ENV_VARS } from "./envVars";
@@ -261,10 +268,11 @@ export const getProjectFiles = query({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    return await ctx.db
+    const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .take(MAX_PROJECT_FILES);
+    return withoutContent(files);
   },
 });
 
@@ -307,7 +315,8 @@ export const getFileById = query({
     const fileId = ctx.db.normalizeId("files", args.fileId);
     if (!fileId) return null;
 
-    return await getProjectFile(ctx, args.projectId, fileId);
+    const file = await getProjectFile(ctx, args.projectId, fileId);
+    return file && { ...file, content: await readFileContent(ctx, file) };
   },
 });
 
@@ -328,10 +337,7 @@ export const updateFile = mutation({
       throw new Error("File not found");
     }
 
-    await ctx.db.patch("files", args.fileId, {
-      content: args.content,
-      updatedAt: Date.now(),
-    });
+    await writeFileContent(ctx, file, args.content);
 
     return args.fileId;
   },
@@ -357,11 +363,11 @@ export const createFile = mutation({
     const fileId = await ctx.db.insert("files", {
       projectId: args.projectId,
       name: args.name,
-      content: args.content,
       type: "file",
       parentId: args.parentId,
       updatedAt: Date.now(),
     });
+    await insertFileContent(ctx, fileId, args.projectId, args.content);
 
     return fileId;
   },
@@ -406,11 +412,11 @@ export const createFiles = mutation({
       const fileId = await ctx.db.insert("files", {
         projectId: args.projectId,
         name: file.name,
-        content: file.content,
         type: "file",
         parentId: args.parentId,
         updatedAt: Date.now(),
       });
+      await insertFileContent(ctx, fileId, args.projectId, file.content);
 
       results.push({ name: file.name, fileId });
     }
@@ -510,6 +516,15 @@ export const cleanup = mutation({
   returns: v.object({ deleted: v.number(), done: v.boolean() }),
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+
+    // Content rows first, so none is left without its file.
+    const contents = await ctx.db
+      .query("fileContents")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .take(CASCADE_BATCH_SIZE);
+    if (await deleteRows(ctx, "fileContents", contents)) {
+      return { deleted: contents.length, done: false };
+    }
 
     const files = await ctx.db
       .query("files")
@@ -624,7 +639,7 @@ export const getProjectFilesWithUrls = query({
       .take(MAX_PROJECT_FILES);
 
     return await Promise.all(
-      files.map(async (file) => {
+      (await withContents(ctx, args.projectId, files)).map(async (file) => {
         if (file.storageId) {
           const url = await ctx.storage.getUrl(file.storageId);
           return { ...file, storageUrl: url };

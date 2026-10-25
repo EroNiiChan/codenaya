@@ -22,6 +22,11 @@ export const useFiles = (projectId: Id<"projects"> | null) => {
   return useQuery(api.files.getFiles, projectId ? { projectId } : "skip");
 };
 
+/** The files with their text, for the preview. `useFiles` is metadata only (#412). */
+export const useFilesWithContent = (projectId: Id<"projects"> | null) => {
+  return useQuery(api.files.getFilesWithUrls, projectId ? { projectId } : "skip");
+};
+
 export const useFile = (fileId: Id<"files"> | null) => {
   const shouldSkip = !fileId || isOptimisticFileId(fileId);
   return useQuery(api.files.getFile, shouldSkip ? "skip" : { id: fileId });

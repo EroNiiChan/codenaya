@@ -28,6 +28,7 @@ const QUERIES: Record<string, () => unknown> = {
   "system:getProjectById": () => ({ ownerId: "user_1" }),
   "system:getProjectMcpConnections": () => [],
   "system:getProjectFiles": () => projectFiles,
+  "system:getProjectFilesWithUrls": () => projectFiles,
   "system:getProjectSkills": () => [],
 };
 

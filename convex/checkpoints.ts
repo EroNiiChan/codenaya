@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { appError } from "./errors";
+import { insertFileContent, withContents, writeFileContent } from "./fileContents";
 import { releaseBlobs, releaseStorageIfUnreferenced } from "./projectCascade";
 import { getOwnedProject } from "./projects";
 
@@ -100,7 +101,9 @@ export async function createCheckpoint(
     .first();
   if (existing) return existing._id;
 
-  const files = withPaths(await projectFiles(ctx, args.projectId));
+  const files = withPaths(
+    await withContents(ctx, args.projectId, await projectFiles(ctx, args.projectId)),
+  );
   const checkpointId = await ctx.db.insert("checkpoints", {
     projectId: args.projectId,
     messageId: args.messageId,
@@ -149,11 +152,16 @@ async function restoreCheckpoint(
   const wanted = new Map(rows.map((row) => [row.path, row]));
   const kept = new Map<string, Doc<"files">>();
 
-  for (const { file, path } of withPaths(await projectFiles(ctx, checkpoint.projectId))) {
+  const files = await projectFiles(ctx, checkpoint.projectId);
+  const text = new Map(
+    (await withContents(ctx, checkpoint.projectId, files)).map((file) => [file._id, file.content]),
+  );
+  for (const { file, path } of withPaths(files)) {
     if (wanted.get(path)?.type === file.type) {
       kept.set(path, file);
       continue;
     }
+    await writeFileContent(ctx, file, undefined);
     await ctx.db.delete("files", file._id);
     if (file.storageId) await releaseStorageIfUnreferenced(ctx, file.storageId);
   }
@@ -166,12 +174,11 @@ async function restoreCheckpoint(
     const existing = kept.get(row.path);
     if (existing) {
       ids.set(row.path, existing._id);
-      if (existing.content !== row.content || existing.storageId !== row.storageId) {
-        await ctx.db.patch("files", existing._id, {
-          content: row.content,
-          storageId: row.storageId,
-          updatedAt: now,
-        });
+      if (text.get(existing._id) !== row.content) {
+        await writeFileContent(ctx, existing, row.content);
+      }
+      if (existing.storageId !== row.storageId) {
+        await ctx.db.patch("files", existing._id, { storageId: row.storageId, updatedAt: now });
       }
       continue;
     }
@@ -181,10 +188,12 @@ async function restoreCheckpoint(
       parentId: slash === -1 ? undefined : ids.get(row.path.slice(0, slash)),
       name: row.path.slice(slash + 1),
       type: row.type,
-      content: row.content,
       storageId: row.storageId,
       updatedAt: now,
     });
+    if (row.content !== undefined) {
+      await insertFileContent(ctx, fileId, checkpoint.projectId, row.content);
+    }
     ids.set(row.path, fileId);
   }
 
