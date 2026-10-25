@@ -174,6 +174,15 @@ describe("importGithubRepo", () => {
     expect(created("README.md")).toHaveLength(1);
   });
 
+  it("fails the step when a batch write fails, so the retry re-imports from clean", async () => {
+    mocks.mutation.mockImplementation(async (_fn, args) => {
+      if (args.files) throw new Error("transient");
+      return args.name ? `id:${args.name}` : { deleted: 0, done: true };
+    });
+
+    await expect(runJob()).rejects.toThrow("transient");
+  });
+
   it("uploads a binary file to storage instead of writing it as text", async () => {
     // ky posts a Request object; the archive download passes a URL string.
     fetchMock.mockImplementation(async (input: string | Request) =>
