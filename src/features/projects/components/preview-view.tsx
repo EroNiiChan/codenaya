@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils";
 
 import { EnvVarsDialog } from "./env-vars-dialog";
 import { useProject } from "../hooks/use-projects";
-import { useFiles } from "../hooks/use-files";
+import { useFilesWithContent } from "../hooks/use-files";
 import { markPreviewOpened } from "../utils/first-run";
 import { useActiveRun } from "@/features/conversations/hooks/use-conversations";
 import {
@@ -77,7 +77,7 @@ export const PreviewView = ({
   const searchParams = useSearchParams();
   
   const project = useProject(projectId);
-  const files = useFiles(projectId);
+  const files = useFilesWithContent(projectId);
   const [terminalChoice, setTerminalChoice] = usePreviewTerminal();
   const [refreshKey, setRefreshKey] = useState(0);
   const [device, setDevice] = usePreviewDevice();

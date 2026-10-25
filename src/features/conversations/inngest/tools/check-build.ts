@@ -172,7 +172,8 @@ export const createCheckBuildTool = ({
     handler: async (_params, { step: toolStep }) => {
       try {
         return await toolStep?.run("check-build", async () => {
-          const rows = await convex.query(api.system.getProjectFiles, {
+          // The metadata list has no text since #412; this one carries it.
+          const rows = await convex.query(api.system.getProjectFilesWithUrls, {
             internalKey,
             projectId,
           });
