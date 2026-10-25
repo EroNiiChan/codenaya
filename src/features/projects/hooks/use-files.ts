@@ -18,8 +18,12 @@ export const isOptimisticFileId = (id: string | null | undefined): boolean => {
   return typeof id === "string" && id.includes("-");
 };
 
+// The list re-reads every file on each write, and an import writes thousands,
+// so it loads once the import is done (#411).
 export const useFiles = (projectId: Id<"projects"> | null) => {
-  return useQuery(api.files.getFiles, projectId ? { projectId } : "skip");
+  const project = useQuery(api.projects.getById, projectId ? { id: projectId } : "skip");
+  const ready = project != null && project.importStatus !== "importing";
+  return useQuery(api.files.getFiles, projectId && ready ? { projectId } : "skip");
 };
 
 export const useFile = (fileId: Id<"files"> | null) => {
