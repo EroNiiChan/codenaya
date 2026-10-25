@@ -89,9 +89,8 @@ export const findSibling = async (
  * inside one transaction's limits (#212).
  */
 export const deleteFileTree = async (ctx: MutationCtx, file: Doc<"files">) => {
-  if (file.type === "file" && !file.storageId) {
-    await writeFileContent(ctx, file, undefined);
-  }
+  // Any file can hold a row (updateFile doesn't check the type), so always look.
+  await writeFileContent(ctx, file, undefined);
   await ctx.db.delete("files", file._id);
 
   // Then its blob, unless another file or checkpoint still uses it

@@ -198,6 +198,15 @@ describe("fileContents (#412)", () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     expect(await contentRows(t)).toEqual([]);
 
+    // A binary file the agent wrote text into still has its row removed.
+    const binary = await t.run(async (ctx) => {
+      const storageId = await ctx.storage.store(new Blob(["png"]));
+      return ctx.db.insert("files", { projectId: one.projectId, name: "logo.png", type: "file", storageId, updatedAt: 0 });
+    });
+    await t.mutation(api.system.updateFile, { internalKey: INTERNAL_KEY, projectId: one.projectId, fileId: binary, content: "x" });
+    await alice.mutation(api.files.deleteFile, { id: binary });
+    expect(await contentRows(t)).toEqual([]);
+
     const two = await seedProject(t, alice);
     let done = false;
     while (!done) {
