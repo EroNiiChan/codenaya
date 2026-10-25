@@ -29,7 +29,8 @@ all database reads (2.2 GB in one cycle), well over the Free limit.
   (ZIP, preview), `system.getFileById`, `system.getProjectFilesWithUrls`
   (GitHub export, check-build). No new public or internal-key function.
 - A content write never patches the `files` doc, so file lists don't re-run on
-  edits.
+  edits. `files.updatedAt` therefore tracks metadata changes only (nothing
+  reads it).
 - Every path that deletes a file deletes its content row first (file and
   folder delete, import cleanup, project cascade, checkpoint restore).
 - Migration is widen → migrate → narrow. This change widens (`files.content`

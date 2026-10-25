@@ -32,6 +32,7 @@ export const readFileContent = async (ctx: QueryCtx, file: Doc<"files">) =>
  * Sets a file's text, or removes it when `content` is undefined (a binary or
  * deleted file). Clears the legacy field too, so no read falls back to stale
  * text. Pass the stored doc, not one already merged with its content.
+ * Leaves `files.updatedAt` alone (nothing reads it), so lists don't re-run.
  */
 export const writeFileContent = async (
   ctx: MutationCtx,
@@ -71,7 +72,19 @@ export const withContents = async <T extends Doc<"files">>(
     .withIndex("by_project", (q) => q.eq("projectId", projectId))
     .take(files.length);
   const byFile = new Map(rows.map((row) => [row.fileId, row.content]));
-  return files.map((file) => ({ ...file, content: byFile.get(file._id) ?? file.content }));
+  // A full range may be cut short (a project past the caller's cap), so a text
+  // file it missed is looked up on its own.
+  const truncated = rows.length === files.length;
+  return await Promise.all(
+    files.map(async (file) => ({
+      ...file,
+      content:
+        byFile.get(file._id) ??
+        (truncated && file.type === "file" && !file.storageId
+          ? await readFileContent(ctx, file)
+          : file.content),
+    })),
+  );
 };
 
 /** Drops the legacy field from list results, so they read the same before and after the backfill. */

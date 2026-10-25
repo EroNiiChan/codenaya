@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { withContents } from "./fileContents";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -115,6 +116,23 @@ describe("fileContents (#412)", () => {
       expect(files.map((file) => file.name)).toEqual(expect.arrayContaining(["legacy.ts", "moved.ts"]));
       for (const file of files) expect(file).not.toHaveProperty("content");
     }
+  });
+
+  test("withContents finds the text of files outside a cut-short content range", async () => {
+    const { t, alice } = setup();
+    const { projectId } = await seedProject(t, alice);
+    await alice.mutation(api.files.createFile, { projectId, name: "later.ts", content: "// later" });
+
+    // One file of three text files: the range returns moved.ts's row, not later.ts's.
+    const texts = await t.run(async (ctx) => {
+      const files = await ctx.db
+        .query("files")
+        .withIndex("by_project", (q) => q.eq("projectId", projectId))
+        .collect();
+      const later = files.filter((file) => file.name === "later.ts");
+      return (await withContents(ctx, projectId, later)).map((file) => file.content);
+    });
+    expect(texts).toEqual(["// later"]);
   });
 
   test("a list of 2,000 moved files reads only their metadata", async () => {
