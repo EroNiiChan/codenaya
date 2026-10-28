@@ -19,34 +19,12 @@ export const PROMO_OPUS_RUN_LIMIT = 20;
 
 export const PROMO_PATH = "/promo";
 
-export type PromoModelKind = "opus" | "sonnet";
-
-export interface PromoModel {
-  id: string;
-  label: string;
-  vendor: string;
-  vision: boolean;
-  kind: PromoModelKind;
-}
-
 /**
- * The promo models on each platform provider that serves Claude. Groq and
- * OpenAI don't, so the promotion has no models there. Vision follows the
- * provider catalogs: AgentKit's Anthropic adapter forwards text only.
+ * The run a promo model takes: "opus" counts against the claim's runs,
+ * "sonnet" doesn't. Which models are promo models is the platform catalog's
+ * `access` (ADR 0010).
  */
-const PROMO_MODELS: Partial<Record<string, readonly PromoModel[]>> = {
-  openrouter: [
-    { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", vendor: "Anthropic", vision: true, kind: "opus" },
-    { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5", vendor: "Anthropic", vision: true, kind: "sonnet" },
-  ],
-  anthropic: [
-    { id: "claude-opus-5-5", label: "Claude Opus 5.5", vendor: "Anthropic", vision: false, kind: "opus" },
-    { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", vendor: "Anthropic", vision: false, kind: "sonnet" },
-  ],
-};
-
-export const promoModelsFor = (provider: string): readonly PromoModel[] =>
-  PROMO_MODELS[provider] ?? [];
+export type PromoModelKind = "opus" | "sonnet";
 
 export const isPromoActive = (now: number) => now < PROMO_ENDS_AT;
 
@@ -72,7 +50,7 @@ export type PromoRunRefusal = "ended" | "opus_used_up";
 
 export const promoRunRefusal = (
   claim: PromoClaimState,
-  model: Pick<PromoModel, "kind">,
+  model: { kind: PromoModelKind },
   now: number,
 ): PromoRunRefusal | null => {
   if (!isPromoActive(now)) return "ended";

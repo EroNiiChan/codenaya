@@ -17,10 +17,7 @@ import {
   keyModels,
   runModelLabel,
 } from "@/features/ai-providers/registry";
-import {
-  platformModels,
-  resolvePickableModel,
-} from "@/features/ai-providers/platform";
+import { resolveCatalogModel } from "@/features/ai-providers/platform";
 import {
   fromChoiceValue,
   toChoiceValue,
@@ -28,10 +25,7 @@ import {
 import {
   useAiProviderKeys,
   usePlatformModelsOrCatalog,
-  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
-import { opusRunsLeft } from "@/features/promotions/github-promo";
-import { usePromoClaim } from "@/features/promotions/hooks/use-promo";
 
 import type { AgentModelChoice } from "../agent-models";
 
@@ -63,8 +57,9 @@ export const AgentModelSelect = ({
   );
   const selectedKey = keys.find((key) => key._id === value.keyId);
   const platform = usePlatformModelsOrCatalog();
-  const promoModels = usePromoModels(platform) ?? [];
-  const promoClaim = usePromoClaim();
+  const everyoneModels = platform.models.filter((model) => model.access === "everyone");
+  const promoModels = platform.models.filter((model) => model.access !== "everyone");
+  const selectedPlatformModel = resolveCatalogModel(platform, value.modelId);
 
   return (
     <PromptInputSelect
@@ -86,26 +81,24 @@ export const AgentModelSelect = ({
         <TooltipContent>
           {selectedKey
             ? runModelLabel(value.modelId, selectedKey)
-            : runModelLabel(
-                resolvePickableModel(platform.provider, platform.config, promoModels, value.modelId),
-              )}
+            : runModelLabel({ id: selectedPlatformModel.id, label: selectedPlatformModel.name })}
         </TooltipContent>
       </Tooltip>
       <PromptInputSelectContent position="popper" align="start" className="max-h-80">
         <SelectGroup>
           <SelectLabel>{PLATFORM_PROVIDER.label}</SelectLabel>
-          {platformModels(platform.provider, platform.config).map((model) => (
+          {everyoneModels.map((model) => (
             <PromptInputSelectItem
               key={model.id}
               value={toChoiceValue({ modelId: model.id })}
               data-tag={model.vendor}
               className={TAGGED_ITEM}
             >
-              {model.label}
+              {model.name}
             </PromptInputSelectItem>
           ))}
         </SelectGroup>
-        {promoClaim && promoModels.length > 0 && (
+        {promoModels.length > 0 && (
           <SelectGroup>
             <SelectLabel>Free promotion</SelectLabel>
             {promoModels.map((model) => (
@@ -113,11 +106,13 @@ export const AgentModelSelect = ({
                 key={model.id}
                 value={toChoiceValue({ modelId: model.id })}
                 data-tag={
-                  model.kind === "opus" ? `${opusRunsLeft(promoClaim)} runs left` : "Unlimited"
+                  model.access === "promo_counted"
+                    ? `${platform.countedRunsLeft} runs left`
+                    : "Unlimited"
                 }
                 className={TAGGED_ITEM}
               >
-                {model.label}
+                {model.name}
               </PromptInputSelectItem>
             ))}
           </SelectGroup>

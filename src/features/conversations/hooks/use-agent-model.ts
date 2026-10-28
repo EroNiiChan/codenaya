@@ -2,18 +2,16 @@ import { useSyncExternalStore } from "react";
 
 import { modelIdsFor } from "@/features/ai-providers/registry";
 import {
-  type ActivePlatform,
-  platformModels,
+  envCatalog,
   platformProviderId,
-  resolvePlatformModel,
+  resolveCatalogModel,
 } from "@/features/ai-providers/platform";
 import {
+  type PlatformModels,
   useAiPreferences,
   useAiProviderKeys,
   usePlatformModels,
-  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
-import type { PromoModel } from "@/features/promotions/github-promo";
 import type { AiProviderKeySummary } from "../../../../convex/aiProviders";
 
 import type { AgentModelChoice } from "../agent-models";
@@ -88,21 +86,19 @@ function setModel(model: AgentModelChoice) {
 }
 
 /**
- * Whether a choice can still be sent: one of the platform provider's models,
- * a promo model the user claimed, or a model of one of the user's keys. While
- * any of the lists is loading the choice is kept; the server validates it either way.
+ * Whether a choice can still be sent: one of the platform models the user may
+ * pick (promo models included while their claim can run them), or a model of
+ * one of the user's keys. While any of the lists is loading the choice is
+ * kept; the server validates it either way.
  */
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
-  platform: ActivePlatform | undefined,
-  promoModels: readonly PromoModel[] | undefined,
+  platform: PlatformModels | undefined,
 ) {
   if (!choice.keyId) {
-    if (!platform || !promoModels) return true;
-    return [...platformModels(platform.provider, platform.config), ...promoModels].some(
-      (m) => m.id === choice.modelId,
-    );
+    if (!platform) return true;
+    return platform.models.some((m) => m.id === choice.modelId);
   }
   if (!keys) return true;
   const key = keys.find((k) => k._id === choice.keyId);
@@ -124,8 +120,6 @@ export function useAgentModel() {
   const keys = useAiProviderKeys();
   const preferences = useAiPreferences();
   const platform = usePlatformModels();
-  const promoModels = usePromoModels(platform);
-  const fallback = platform ?? { provider: platformProviderId(), config: null };
 
   const preferred: AgentModelChoice | null = preferences
     ? {
@@ -137,8 +131,13 @@ export function useAgentModel() {
   const model =
     [stored, preferred].find(
       (choice): choice is AgentModelChoice =>
-        choice !== null && isAvailable(choice, keys, platform, promoModels),
-    ) ?? { modelId: resolvePlatformModel(fallback.provider, fallback.config, undefined).id };
+        choice !== null && isAvailable(choice, keys, platform),
+    ) ?? {
+      modelId: resolveCatalogModel<{ id: string }>(
+        platform ?? envCatalog(platformProviderId()),
+        undefined,
+      ).id,
+    };
 
   return [model, setModel] as const;
 }
