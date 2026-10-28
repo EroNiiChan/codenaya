@@ -79,13 +79,16 @@ function assertValidCatalog({ models, defaultModelId, utilityModelId }: Catalog)
       throw invalid(`Prices for ${model.id} must be between $0 and $${MAX_USD_PER_MTOK} per 1M tokens`);
     }
   }
-  // Every user may be sent to these, so they must be offered to everyone.
+  // Every user's runs may land on these, so they must be open to everyone. The
+  // utility model may be hidden: a cheap model for titles that users don't pick.
   for (const [role, id] of [
     ["default", defaultModelId],
     ["utility", utilityModelId],
   ] as const) {
     const model = byId.get(id);
-    if (!model || model.hidden) throw invalid(`The ${role} model must be a visible catalog model`);
+    if (!model || (role === "default" && model.hidden)) {
+      throw invalid(`The ${role} model must be a ${role === "default" ? "visible " : ""}catalog model`);
+    }
     if (model.access !== "everyone") throw invalid(`The ${role} model must be open to everyone`);
   }
 }

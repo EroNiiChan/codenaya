@@ -40,7 +40,8 @@ admin panel. Only OpenRouter's models API returns prices.
   is unchanged.
 - **Utility model**: `utilityModelId` names the catalog model used for chat
   titles, editor autocomplete, quick edit and prompt enhancement (today: the
-  active provider's `titleModel`). It must be `access: "everyone"`.
+  active provider's `titleModel`). It must be `access: "everyone"`, and may be
+  hidden (a cheap model users don't pick); the default model may not.
 - **No catalog** (fresh deploy): the env provider's curated catalog
   (`NEXT_PUBLIC_AI_PROVIDER`, `AI_PROVIDERS[p]`), as today, mapped into the same
   shape with that provider as every route.
@@ -70,7 +71,7 @@ admin panel. Only OpenRouter's models API returns prices.
   set, then calls `platformCatalog.save` with the admin's token **and** the
   internal key; Convex refuses either missing. No admin write is callable from
   the browser alone.
-- **Guards**: a $0 price, or a change over 50% from the saved price, needs
+- **Guards**: a new or changed $0 price, or a change over 50% from the saved price, needs
   `confirmRiskyPrices` (UI confirm dialog; enforced in Convex). Re-routing and
   removing models ask for confirmation.
 - **Audit**: every save writes `adminAuditLog` with structured `changes`

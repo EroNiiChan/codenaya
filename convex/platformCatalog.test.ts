@@ -132,7 +132,6 @@ describe("platformCatalog.save validation", () => {
     ["an empty name", [model("a", { name: " " })], {}],
     ["a default that isn't listed", [model("a")], { defaultModelId: "b" }],
     ["a hidden default", [model("a", { hidden: true }), model("b")], { utilityModelId: "b" }],
-    ["a hidden utility model", [model("a"), model("b", { hidden: true })], { utilityModelId: "b" }],
     [
       "a promo default",
       [model("a", { access: "promo_counted" }), model("b")],
@@ -161,6 +160,16 @@ describe("platformCatalog.save price guard", () => {
 
     await save(t, free, { confirmRiskyPrices: true });
     expect((await t.query(api.platformCatalog.getForAdmin, {}))?.models).toHaveLength(2);
+
+    // Saved once, an unchanged $0 price doesn't ask again.
+    await save(t, [...free, model("b")]);
+    expect((await t.query(api.platformCatalog.getForAdmin, {}))?.models).toHaveLength(3);
+  });
+
+  test("a hidden utility model is allowed, for titles users don't pick", async () => {
+    const t = asAdmin();
+    await save(t, [model("a"), model("mini", { hidden: true })], { utilityModelId: "mini" });
+    expect((await t.query(api.platformCatalog.getForAdmin, {}))?.utilityModelId).toBe("mini");
   });
 
   test("a blended change over 50% needs confirming, a smaller one doesn't", async () => {

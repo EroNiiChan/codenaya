@@ -22,9 +22,10 @@ export const MAX_USD_PER_MTOK = 1000;
 export const RISKY_PRICE_CHANGE_RATIO = 0.5;
 
 /**
- * Ids of the models whose price needs `confirmRiskyPrices` (ADR 0010): a $0
- * blended price, or one more than `RISKY_PRICE_CHANGE_RATIO` away from the
- * saved price of the same id. New models are judged on the $0 rule alone.
+ * Ids of the models whose price needs `confirmRiskyPrices` (ADR 0010): a new
+ * or changed $0 blended price, or one more than `RISKY_PRICE_CHANGE_RATIO`
+ * away from the saved price of the same id. An unchanged price never asks
+ * again, so free models don't prompt on every save.
  */
 export const riskyPriceModelIds = (
   saved: readonly Pick<CatalogModel, "id" | "pricing">[],
@@ -35,6 +36,7 @@ export const riskyPriceModelIds = (
     .filter((model) => {
       const price = blendedUsdPerMTok(model.pricing);
       const before = savedPrices.get(model.id);
+      if (price === before) return false;
       return (
         price === 0 ||
         (before !== undefined && Math.abs(price - before) > RISKY_PRICE_CHANGE_RATIO * before)
