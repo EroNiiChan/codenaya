@@ -101,3 +101,62 @@ describe("requireAdmin", () => {
     ).toBe(true);
   });
 });
+
+describe("ADMIN_USER_ID pin", () => {
+  test("when set, the verified email must also be that Clerk user", async () => {
+    vi.stubEnv("ADMIN_USER_ID", ` ${ADMIN.subject} `);
+    const t = setup();
+
+    expect(await t.withIdentity(ADMIN).query(api.admin.isAdmin, {})).toBe(true);
+    const impostor = t.withIdentity({ ...ADMIN, subject: "user_impostor" });
+    expect(await impostor.query(api.admin.isAdmin, {})).toBe(false);
+    await expectNotFound(impostor.mutation(api.platformModels.save, SAVE));
+    await expectNotFound(impostor.query(api.admin.listAudit, PAGE));
+  });
+
+  test("the user id alone is not enough", async () => {
+    vi.stubEnv("ADMIN_USER_ID", ADMIN.subject);
+    const t = setup();
+    expect(
+      await t.withIdentity({ ...ADMIN, email: "other@example.com" }).query(api.admin.isAdmin, {}),
+    ).toBe(false);
+  });
+});
+
+describe("listAudit", () => {
+  const INTERNAL_KEY = "test-internal-key";
+  const CATALOG_MODEL = {
+    id: "a",
+    name: "A",
+    vendor: "acme",
+    provider: "openrouter" as const,
+    providerModelId: "acme/a",
+    vision: false,
+    tools: "reported" as const,
+    pricing: { mode: "blended" as const, usdPerMTok: 8 },
+    access: "everyone" as const,
+    hidden: false,
+  };
+
+  test("returns the request and structured changes, bounded", async () => {
+    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", INTERNAL_KEY);
+    const admin = setup().withIdentity(ADMIN);
+    await admin.mutation(api.platformCatalog.save, {
+      internalKey: INTERNAL_KEY,
+      models: [CATALOG_MODEL],
+      defaultModelId: "a",
+      utilityModelId: "a",
+      confirmRiskyPrices: false,
+      request: { requestId: "req_1", ip: "203.0.113.7", userAgent: "x".repeat(2000) },
+    });
+
+    const [row] = (await admin.query(api.admin.listAudit, PAGE)).page;
+    expect(row).toMatchObject({ action: "platformCatalog.save", requestId: "req_1", ip: "203.0.113.7" });
+    expect(row.userAgent).toHaveLength(500);
+    expect(row.changes?.map((c) => c.field)).toEqual(["model:a", "defaultModelId", "utilityModelId"]);
+  });
+
+  test("a non-admin gets NOT_FOUND", async () => {
+    await expectNotFound(setup().withIdentity(OTHER).query(api.admin.listAudit, PAGE));
+  });
+});
