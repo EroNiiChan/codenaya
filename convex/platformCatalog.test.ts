@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { MAX_PLATFORM_MODELS } from "../src/features/admin/platform-models";
 import type { CatalogModel } from "../src/features/ai-providers/catalog";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -391,6 +392,26 @@ describe("platformCatalog.migrateFromProviderConfigs", () => {
 
     expect(await migrate()).toBe("already migrated");
     expect(await auditRows(t)).toHaveLength(1);
+  });
+
+  test("seeds promo models only into the room a full selection leaves", async () => {
+    const t = asAdmin();
+    const full = Array.from({ length: MAX_PLATFORM_MODELS }, (_, i) => legacy(`m${i}`, 1, 1));
+    await t.run(async (ctx) => {
+      await ctx.db.insert("platformModelConfigs", {
+        provider: "openrouter",
+        models: full,
+        defaultModelId: "m0",
+        updatedAt: 1,
+        updatedBy: ADMIN.subject,
+      });
+    });
+
+    expect(
+      await t.mutation(internal.platformCatalog.migrateFromProviderConfigs, {
+        fallbackProvider: "openrouter",
+      }),
+    ).toBe(`migrated ${MAX_PLATFORM_MODELS} openrouter models (+0 promo), default m0`);
   });
 
   test("seeds the GitHub promo's models on a Claude provider, keeping listed ones", async () => {

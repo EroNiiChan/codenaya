@@ -293,11 +293,6 @@ export const save = mutation({
 const MIGRATION_ACTOR: Admin = { id: "system:migration", email: "system:migration" };
 
 /**
- * One-off: builds the catalog from the deprecated per-provider config of the
- * active provider (`platformSettings`, else `fallbackProvider`). No-op when a
- * catalog exists. Run with `npx convex run platformCatalog:migrateFromProviderConfigs`.
- */
-/**
  * The GitHub promo's models (ADR 0009), which the old setup added for claimants
  * on top of the selection: the migration seeds them so claimants keep them.
  * Prices are OpenRouter's at migration time; the admin can re-route them (e.g.
@@ -358,6 +353,11 @@ const PROMO_SEEDS: Partial<Record<CatalogModel["provider"], CatalogModel[]>> = {
   ],
 };
 
+/**
+ * One-off: builds the catalog from the deprecated per-provider config of the
+ * active provider (`platformSettings`, else `fallbackProvider`). No-op when a
+ * catalog exists. Run with `npx convex run platformCatalog:migrateFromProviderConfigs`.
+ */
 export const migrateFromProviderConfigs = internalMutation({
   args: {
     fallbackProvider: platformProviderValidator,
@@ -386,7 +386,10 @@ export const migrateFromProviderConfigs = internalMutation({
     }));
     // A promo model the selection already offered everyone stays as it was.
     const listed = new Set(migrated.map((m) => m.id));
-    const promo = (PROMO_SEEDS[provider] ?? []).filter((m) => !listed.has(m.id));
+    // Only into the room left, so the catalog stays one `save` accepts.
+    const promo = (PROMO_SEEDS[provider] ?? [])
+      .filter((m) => !listed.has(m.id))
+      .slice(0, Math.max(0, MAX_PLATFORM_MODELS - migrated.length));
     const catalog: Catalog = {
       models: [...migrated, ...promo],
       defaultModelId: config.defaultModelId,
