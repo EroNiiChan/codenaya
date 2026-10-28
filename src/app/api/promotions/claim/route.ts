@@ -61,7 +61,20 @@ export async function POST() {
   }
 
   const token = await getGithubToken(userId);
-  const account = token ? await fetchGithubAccount(token) : null;
+  let account;
+  try {
+    account = token ? await fetchGithubAccount(token) : null;
+  } catch (error) {
+    // GitHub down, rate-limited or slow: nothing was claimed, so a retry is safe.
+    console.error("[promo] GitHub account lookup failed", error);
+    return NextResponse.json(
+      {
+        error: "Couldn't reach GitHub to check your account. Please try again.",
+        code: "github_unavailable",
+      },
+      { status: 502 },
+    );
+  }
   if (!account) {
     return claimError("github_not_linked");
   }

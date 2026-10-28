@@ -76,6 +76,17 @@ describe("POST /api/promotions/claim", () => {
     expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
+  it("answers 502 to retry when GitHub fails, claiming nothing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    githubAnswers(new Response("", { status: 503 }));
+
+    const res = await POST();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ code: "github_unavailable" });
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
   it("maps Convex's refusal to its code and status", async () => {
     mocks.mutation.mockRejectedValue(
       new ConvexError({ code: "FORBIDDEN", message: "too new", reason: "github_too_new" }),
