@@ -83,6 +83,8 @@
 
   --animate-cursor-ripple: cursor-ripple 550ms cubic-bezier(0, 0.2, 0.8, 1) forwards;
   --animate-cursor-pulse: cursor-pulse 1.2s ease-in-out infinite;
+  --animate-cursor-blink: cursor-blink 1.2s ease-in-out infinite;
+  --animate-logo-cursor-blink: logo-cursor-blink 1.2s ease-in-out infinite;
 
   @keyframes cursor-ripple {
     0% {
@@ -124,15 +126,10 @@
   }
 }
 
-/* Custom Cursor Animations */
-.animate-cursor-pulse {
-  animation: cursor-pulse 1.2s ease-in-out infinite;
-}
-.animate-cursor-ripple {
-  animation: cursor-ripple 550ms cubic-bezier(0, 0.2, 0.8, 1) forwards;
-}
-.animate-cursor-blink {
-  animation: cursor-blink 1.2s ease-in-out infinite;
+/* CustomCursor draws the pointer while it is on screen: hide the native one. */
+.custom-cursor-active,
+.custom-cursor-active * {
+  cursor: none !important;
 }
 
 /* 

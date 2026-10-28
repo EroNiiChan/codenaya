@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { ShortcutsDialog } from "@/components/shortcuts-dialog";
-import { CustomCursor } from "@/components/ui/custom-cursor";
 import { AuthLoadingView } from "@/features/auth/components/auth-loading-view";
 import { AGENT_MODELS } from "@/features/conversations/agent-models";
 
@@ -89,7 +88,6 @@ export default function RootLayout({
             ClerkProvider, which Cache Components requires under <Suspense>. */}
         <Suspense fallback={<AuthLoadingView />}>
           <Providers>
-            <CustomCursor />
             {children}
             <Toaster />
             <ShortcutsDialog />

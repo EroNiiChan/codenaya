@@ -37,6 +37,7 @@ export function CustomCursor() {
 
   const visibleRef = useRef(false);
   const rippleTimeouts = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const rippleId = useRef(0);
 
   // Current real mouse coordinates
   const mousePos = useRef({ x: -200, y: -200 });
@@ -58,7 +59,7 @@ export function CustomCursor() {
   }, []);
 
   const addRipple = useCallback((x: number, y: number) => {
-    const id = Date.now() + Math.random();
+    const id = ++rippleId.current;
     setRipples((prev) => [...prev.slice(-3), { id, x, y }]);
     const timer = setTimeout(() => {
       rippleTimeouts.current.delete(timer);
@@ -81,14 +82,26 @@ export function CustomCursor() {
     }
   }, []);
 
+  // Hide the native pointer only while the overlay is drawn, so there is
+  // never two cursors and never none.
+  const drawn = enabled && visible;
+  useEffect(() => {
+    if (!drawn) return;
+    const root = document.documentElement;
+    root.classList.add("custom-cursor-active");
+    return () => root.classList.remove("custom-cursor-active");
+  }, [drawn]);
+
   useEffect(() => {
     if (!enabled) return;
 
-    let animId: number;
+    // 0 while idle: the loop stops once the ring catches up with the mouse.
+    let animId = 0;
 
     const onMouseMove = (e: MouseEvent) => {
       mousePos.current = { x: e.clientX, y: e.clientY };
       showCursor();
+      if (!animId) animId = requestAnimationFrame(loop);
 
       // Check if target is interactive or an input
       const target = e.target as HTMLElement | null;
@@ -116,7 +129,9 @@ export function CustomCursor() {
       setIsDown(false);
     };
 
-    const onMouseLeave = (e: MouseEvent) => {
+    // No relatedTarget: the pointer left the window or went into an iframe,
+    // where mousemove can't follow it.
+    const onMouseOut = (e: MouseEvent) => {
       if (!e.relatedTarget) {
         hideCursor();
       }
@@ -136,6 +151,12 @@ export function CustomCursor() {
       followerPos.current.x += (mousePos.current.x - followerPos.current.x) * lerp;
       followerPos.current.y += (mousePos.current.y - followerPos.current.y) * lerp;
 
+      // Converged: snap to the mouse and idle until the next mousemove.
+      const settled =
+        Math.abs(mousePos.current.x - followerPos.current.x) < 0.1 &&
+        Math.abs(mousePos.current.y - followerPos.current.y) < 0.1;
+      if (settled) followerPos.current = { ...mousePos.current };
+
       if (dotContainerRef.current) {
         dotContainerRef.current.style.transform = `translate3d(${mousePos.current.x}px, ${mousePos.current.y}px, 0)`;
       }
@@ -143,23 +164,21 @@ export function CustomCursor() {
         ringContainerRef.current.style.transform = `translate3d(${followerPos.current.x}px, ${followerPos.current.y}px, 0)`;
       }
 
-      animId = requestAnimationFrame(loop);
+      animId = settled ? 0 : requestAnimationFrame(loop);
     };
 
     window.addEventListener("mousemove", onMouseMove, { passive: true });
     window.addEventListener("mousedown", onMouseDown, { passive: true });
     window.addEventListener("mouseup", onMouseUp, { passive: true });
-    document.documentElement.addEventListener("mouseleave", onMouseLeave);
+    document.addEventListener("mouseout", onMouseOut);
     document.documentElement.addEventListener("mouseenter", onMouseEnter);
     window.addEventListener("blur", onBlur);
-
-    animId = requestAnimationFrame(loop);
 
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
-      document.documentElement.removeEventListener("mouseleave", onMouseLeave);
+      document.removeEventListener("mouseout", onMouseOut);
       document.documentElement.removeEventListener("mouseenter", onMouseEnter);
       window.removeEventListener("blur", onBlur);
       cancelAnimationFrame(animId);
@@ -193,9 +212,9 @@ export function CustomCursor() {
       >
         <div
           className={`-translate-x-1/2 -translate-y-1/2 rounded-full transition-[width,height,background-color,border-color,opacity] duration-200 ease-out ${isDown
-            ? "size-9 border-2 border-brand bg-brand/20 opacity-95 animate-cursor-pulse shadow-[0_0_15px_rgba(232,130,79,0.5)]"
+            ? "size-9 border-2 border-brand bg-brand/20 opacity-95 animate-cursor-pulse shadow-[0_0_15px_color-mix(in_oklab,var(--brand)_50%,transparent)]"
             : isHovering
-              ? "size-10 border-2 border-brand/80 bg-brand/10 opacity-90 animate-cursor-pulse shadow-[0_0_12px_rgba(232,130,79,0.3)]"
+              ? "size-10 border-2 border-brand/80 bg-brand/10 opacity-90 animate-cursor-pulse shadow-[0_0_12px_color-mix(in_oklab,var(--brand)_30%,transparent)]"
               : isInput
                 ? "h-7 w-2 rounded-xs border border-brand/60 bg-brand/15 opacity-80"
                 : "size-7 border border-brand/50 bg-brand/5 opacity-60 animate-cursor-pulse"
@@ -211,12 +230,12 @@ export function CustomCursor() {
       >
         <div
           className={`-translate-x-1/2 -translate-y-1/2 rounded-full bg-brand transition-[width,height,border-radius] duration-150 ${isDown
-            ? "size-3 animate-cursor-blink shadow-[0_0_16px_rgba(232,130,79,0.95)]"
+            ? "size-3 animate-cursor-blink shadow-[0_0_16px_color-mix(in_oklab,var(--brand)_95%,transparent)]"
             : isHovering
-              ? "size-2.5 shadow-[0_0_10px_rgba(232,130,79,0.8)]"
+              ? "size-2.5 shadow-[0_0_10px_color-mix(in_oklab,var(--brand)_80%,transparent)]"
               : isInput
-                ? "h-4 w-1 rounded-full animate-cursor-blink shadow-[0_0_8px_rgba(232,130,79,0.8)]"
-                : "size-2 shadow-[0_0_8px_rgba(232,130,79,0.6)]"
+                ? "h-4 w-1 rounded-full animate-cursor-blink shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_80%,transparent)]"
+                : "size-2 shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_60%,transparent)]"
             }`}
         />
       </div>
