@@ -8,7 +8,6 @@ import {
   isPromoActive,
   isPromoRefusalCode,
   opusRunsLeft,
-  promoModelsFor,
   promoRunRefusal,
 } from "./github-promo";
 
@@ -39,12 +38,6 @@ describe("github promo rules", () => {
     expect(promoRunRefusal(usedUp, sonnet, before)).toBeNull();
     expect(promoRunRefusal({ opusRunsUsed: 0 }, sonnet, PROMO_ENDS_AT)).toBe("ended");
     expect(opusRunsLeft({ opusRunsUsed: PROMO_OPUS_RUN_LIMIT + 3 })).toBe(0);
-  });
-
-  it("offers Opus and Sonnet only on providers that serve Claude", () => {
-    expect(promoModelsFor("openrouter").map((m) => m.kind)).toEqual(["opus", "sonnet"]);
-    expect(promoModelsFor("groq")).toEqual([]);
-    expect(promoModelsFor("anthropic").map((m) => m.id)).toEqual(["claude-opus-5-5", "claude-sonnet-5-5"]);
   });
 
   it("recognises the send routes' refusal codes", () => {

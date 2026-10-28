@@ -49,25 +49,64 @@ const customKey = {
   status: "active" as const,
 };
 
-/** The admin switched to Groq in /admin and saved two models; the env still says OpenRouter. */
+/** A saved catalog model (ADR 0010): routed to OpenRouter under its own id unless overridden. */
+const catalogModel = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name,
+  vendor: "v",
+  provider: "openrouter",
+  providerModelId: id,
+  vision: true,
+  tools: "confirmed",
+  pricing: { mode: "blended", usdPerMTok: 1 },
+  access: "everyone",
+  hidden: false,
+  ...extra,
+});
+
+/** The admin saved two models routed to Groq; the env still says OpenRouter. */
 const GROQ_SAVED = {
-  provider: "groq",
-  config: {
-    models: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B", vendor: "meta", vision: false },
-      { id: "qwen/qwen3-32b", name: "Qwen3 32B", vendor: "qwen", vision: true },
-    ],
-    defaultModelId: "llama-3.3-70b-versatile",
-  },
+  models: [
+    catalogModel("llama-3.3-70b-versatile", "Llama 3.3 70B", { provider: "groq", vision: false }),
+    catalogModel("qwen/qwen3-32b", "Qwen3 32B", { provider: "groq" }),
+  ],
+  defaultModelId: "llama-3.3-70b-versatile",
+  utilityModelId: "llama-3.3-70b-versatile",
 };
 
-/** The admin saved one OpenRouter model, so Claude needs the promotion (ADR 0009). */
-const OPENROUTER_SAVED = {
-  provider: "openrouter",
-  config: {
-    models: [{ id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", vendor: "google", vision: true }],
-    defaultModelId: "google/gemini-3.8-flash",
-  },
+/**
+ * Opus and Sonnet on the official Anthropic key for promo claimants (ADR
+ * 0009), everything else on OpenRouter, titles and editor AI on a hidden mini.
+ */
+const ROUTED_SAVED = {
+  models: [
+    catalogModel("google/gemini-3.8-flash", "Gemini 3.8 Flash"),
+    catalogModel("x-ai/grok-4.7", "Grok 4.7"),
+    catalogModel("anthropic/claude-opus-5.5", "Claude Opus 5.5", {
+      provider: "anthropic",
+      providerModelId: "claude-opus-5-5",
+      vision: false,
+      access: "promo_counted",
+    }),
+    catalogModel("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", {
+      provider: "anthropic",
+      providerModelId: "claude-sonnet-5-5",
+      vision: false,
+      access: "promo_unlimited",
+    }),
+    catalogModel("z-ai/glm-5.3", "GLM 5.3", { hidden: true }),
+    catalogModel("openai/gpt-5.4-mini", "GPT-5.4 mini", { hidden: true }),
+  ],
+  defaultModelId: "google/gemini-3.8-flash",
+  utilityModelId: "openai/gpt-5.4-mini",
+};
+
+/** `ROUTED_SAVED` with Opus offered to everyone, so no claim is involved. */
+const OPUS_FOR_EVERYONE = {
+  ...ROUTED_SAVED,
+  models: ROUTED_SAVED.models.map((model) =>
+    model.id === "anthropic/claude-opus-5.5" ? { ...model, access: "everyone" } : model,
+  ),
 };
 
 /** The model and endpoint an AgentKit adapter was built for. */
@@ -96,11 +135,14 @@ describe("validateModelChoice (API route)", () => {
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "anthropic/claude-opus-5.5",
       label: "Codenaya · Claude Opus 5.5",
+      provider: "openrouter",
     });
     expect(await validate({ modelId: "evil/model" })).toMatchObject({
       modelId: DEFAULT_AGENT_MODEL_ID,
     });
     expect(await validate(undefined)).toMatchObject({ modelId: DEFAULT_AGENT_MODEL_ID });
+    // Users can't pick the env catalog's hidden utility model.
+    expect(await validate("openai/gpt-5.4-mini")).toMatchObject({ modelId: DEFAULT_AGENT_MODEL_ID });
     expect(mocks.query).not.toHaveBeenCalled();
   });
 
@@ -112,6 +154,7 @@ describe("validateModelChoice (API route)", () => {
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "claude-sonnet-5-5",
       label: "Codenaya · Claude Sonnet 5.5",
+      provider: "anthropic",
     });
     expect(await validate("claude-opus-5-5")).toMatchObject({ modelId: "claude-opus-5-5" });
     // AgentKit's Anthropic adapter is text-only.
@@ -120,14 +163,15 @@ describe("validateModelChoice (API route)", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("uses the admin's saved provider and models over the env", async () => {
+  it("uses the admin's saved catalog over the env", async () => {
     vi.stubEnv("GROQ_API_KEY", "gsk-platform");
     mocks.platform.mockReturnValue(GROQ_SAVED);
 
-    // An OpenRouter id from before the switch runs on the saved default.
+    // An id the catalog doesn't list runs on its default.
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "llama-3.3-70b-versatile",
       label: "Codenaya · Llama 3.3 70B",
+      provider: "groq",
     });
     expect(await validate("qwen/qwen3-32b")).toMatchObject({ modelId: "qwen/qwen3-32b" });
     // Vision comes from the saved selection.
@@ -137,7 +181,7 @@ describe("validateModelChoice (API route)", () => {
     expect(await withImages("qwen/qwen3-32b")).toMatchObject({ modelId: "qwen/qwen3-32b" });
   });
 
-  it("refuses with 503 when the saved provider's key is missing, whatever the env has", async () => {
+  it("refuses with 503 when the saved route's key is missing, whatever the env has", async () => {
     vi.stubEnv("GROQ_API_KEY", "");
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.platform.mockReturnValue(GROQ_SAVED);
@@ -146,6 +190,41 @@ describe("validateModelChoice (API route)", () => {
       status: 503,
       code: "ai_not_configured",
     });
+  });
+
+  it("routes each model to its own provider (ADR 0010)", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
+
+    expect(await validate("anthropic/claude-opus-5.5")).toEqual({
+      modelId: "anthropic/claude-opus-5.5",
+      label: "Codenaya · Claude Opus 5.5",
+      provider: "anthropic",
+    });
+    expect(await validate("x-ai/grok-4.7")).toEqual({
+      modelId: "x-ai/grok-4.7",
+      label: "Codenaya · Grok 4.7",
+      provider: "openrouter",
+    });
+  });
+
+  it("refuses only the routes whose provider has no key, never re-routing them", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
+
+    await expect(validate("anthropic/claude-opus-5.5")).rejects.toMatchObject({
+      status: 503,
+      code: "ai_not_configured",
+    });
+    expect(await validate("x-ai/grok-4.7")).toMatchObject({ provider: "openrouter" });
+  });
+
+  it("runs the default for a hidden model", async () => {
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
+
+    expect(await validate("z-ai/glm-5.3")).toMatchObject({ modelId: "google/gemini-3.8-flash" });
+    expect(await validate("openai/gpt-5.4-mini")).toMatchObject({ modelId: "google/gemini-3.8-flash" });
   });
 
   it("refuses platform models with 503 ai_not_configured when the provider has no key", async () => {
@@ -258,13 +337,18 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
   const validate = (model: string, withImages = false) =>
     validateModelChoice({ internalKey: "ik", userId: "user_1", model, withImages });
 
-  it("accepts a claimant's promo model the selection lacks, without taking a run", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+  beforeEach(() => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+  });
+
+  it("accepts a claimant's promo model, taking the kind from its access, without taking a run", async () => {
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
     mocks.query.mockResolvedValue({ opusRunsUsed: 3 });
 
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "anthropic/claude-opus-5.5",
       label: "Codenaya · Claude Opus 5.5",
+      provider: "anthropic",
       promoKind: "opus",
     });
     expect(mocks.query).toHaveBeenCalledWith(expect.anything(), { internalKey: "ik", userId: "user_1" });
@@ -274,13 +358,24 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
     expect(
       await requireModelChoice({ internalKey: "ik", userId: "user_1", model: "anthropic/claude-sonnet-5.5" }),
     ).toEqual({
-      runModel: { modelId: "anthropic/claude-sonnet-5.5", label: "Codenaya · Claude Sonnet 5.5" },
+      runModel: {
+        modelId: "anthropic/claude-sonnet-5.5",
+        label: "Codenaya · Claude Sonnet 5.5",
+        provider: "anthropic",
+      },
       promoKind: "sonnet",
     });
   });
 
+  it("lets a claimant with no counted runs left still run an unlimited promo model", async () => {
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
+    mocks.query.mockResolvedValue({ opusRunsUsed: 20 });
+
+    expect(await validate("anthropic/claude-sonnet-5.5")).toMatchObject({ promoKind: "sonnet" });
+  });
+
   it("refuses with the claim's reason instead of falling back", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
     mocks.query.mockResolvedValue({ opusRunsUsed: 20 });
 
     const { rejected } = await requireModelChoice({
@@ -302,22 +397,21 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
   });
 
   it("checks images before reading the claim", async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
-    mocks.platform.mockReturnValue({
-      provider: "anthropic",
-      config: {
-        models: [{ id: "claude-fable-5-1", name: "Claude Fable 5.1", vendor: "anthropic", vision: false }],
-        defaultModelId: "claude-fable-5-1",
-      },
-    });
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
 
-    await expect(validate("claude-opus-5-5", true)).rejects.toMatchObject({ status: 400 });
+    await expect(validate("anthropic/claude-opus-5.5", true)).rejects.toMatchObject({ status: 400 });
     expect(mocks.query).not.toHaveBeenCalled();
   });
 
-  it("needs no claim when the selection already offers the model to everyone", async () => {
+  it("needs no claim when the catalog offers the model to everyone", async () => {
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
     expect(await validate("anthropic/claude-opus-5.5")).toMatchObject({
       modelId: "anthropic/claude-opus-5.5",
+    });
+    // Nor without a catalog: the env catalog has no promo models.
+    mocks.platform.mockReturnValue(null);
+    expect(await validate("anthropic/claude-opus-5.5")).toMatchObject({
+      provider: "openrouter",
     });
     expect(mocks.query).not.toHaveBeenCalled();
   });
@@ -393,7 +487,7 @@ describe("resolveRunModel (agent run)", () => {
     expect(target(run.title(0)).id).toBe("openai/gpt-oss-20b");
   });
 
-  it("runs on the admin's saved provider and models over the env", async () => {
+  it("runs on the admin's saved catalog over the env", async () => {
     vi.stubEnv("GROQ_API_KEY", "gsk-platform");
     mocks.platform.mockReturnValue(GROQ_SAVED);
 
@@ -406,17 +500,64 @@ describe("resolveRunModel (agent run)", () => {
     expect(target(run.coding()).url).toContain("api.groq.com/openai/v1");
   });
 
+  it("runs each model on its route's provider, key and model id", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
+
+    const opus = await resolve({ modelId: "anthropic/claude-opus-5.5" });
+    expect(target(opus.coding(0.3))).toMatchObject({ id: "claude-opus-5-5", authKey: "sk-ant-platform" });
+    expect(target(opus.coding()).url).toContain("api.anthropic.com");
+
+    const grok = await resolve({ modelId: "x-ai/grok-4.7" });
+    expect(target(grok.coding(0.3))).toMatchObject({ id: "x-ai/grok-4.7", authKey: "sk-or-platform" });
+    expect(target(grok.coding()).url).toContain("openrouter.ai");
+
+    // Hidden models run the default.
+    const hidden = await resolve({ modelId: "z-ai/glm-5.3" });
+    expect(target(hidden.coding()).id).toBe("google/gemini-3.8-flash");
+  });
+
+  it("writes titles on the utility model's route, else on the run's own", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
+
+    const run = await resolve({ modelId: "anthropic/claude-opus-5.5" });
+    expect(target(run.title(0))).toMatchObject({ id: "openai/gpt-5.4-mini", authKey: "sk-or-platform" });
+
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const withoutUtilityKey = await resolve({ modelId: "anthropic/claude-opus-5.5" });
+    expect(target(withoutUtilityKey.title(0))).toMatchObject({
+      id: "claude-opus-5-5",
+      authKey: "sk-ant-platform",
+    });
+  });
+
+  it("ends the run when its route has no key, while other routes run", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.platform.mockReturnValue(OPUS_FOR_EVERYONE);
+
+    await expect(resolve({ modelId: "anthropic/claude-opus-5.5" })).rejects.toBeInstanceOf(
+      ProviderKeyError,
+    );
+    expect(target((await resolve({ modelId: "x-ai/grok-4.7" })).coding()).id).toBe("x-ai/grok-4.7");
+  });
+
   it("runs a promo model for a project whose owner claimed", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
     mocks.query.mockResolvedValue(true);
 
     const run = await resolve({ modelId: "anthropic/claude-sonnet-5.5" });
 
-    expect(target(run.coding(0.3)).id).toBe("anthropic/claude-sonnet-5.5");
+    expect(mocks.query).toHaveBeenCalledWith(expect.anything(), { internalKey: "ik", projectId: "p1" });
+    expect(target(run.coding(0.3)).id).toBe("claude-sonnet-5-5");
   });
 
   it("ends a promo run with a pointer to /promo when the owner hasn't claimed", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
     mocks.query.mockResolvedValue(false);
 
     const error = await resolve({ modelId: "anthropic/claude-opus-5.5" }).catch((caught: unknown) => caught);

@@ -134,13 +134,22 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
       mocks.mutation.mock.calls.filter(([ref]) => getFunctionName(ref) === name);
 
     beforeEach(() => {
-      // The admin's selection lacks Claude, so Opus is a promo model.
+      vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
+      // The admin's catalog routes Opus to Anthropic, for promo claimants only.
+      const model = {
+        vendor: "v",
+        vision: true,
+        tools: "confirmed",
+        pricing: { mode: "blended", usdPerMTok: 1 },
+        hidden: false,
+      };
       mocks.platform.mockReturnValue({
-        provider: "openrouter",
-        config: {
-          models: [{ id: "x-ai/grok-4.7", name: "Grok 4.7", vendor: "xAI", vision: true }],
-          defaultModelId: "x-ai/grok-4.7",
-        },
+        models: [
+          { ...model, id: "x-ai/grok-4.7", name: "Grok 4.7", provider: "openrouter", providerModelId: "x-ai/grok-4.7", access: "everyone" },
+          { ...model, id: OPUS, name: "Claude Opus 5.5", provider: "anthropic", providerModelId: "claude-opus-5-5", access: "promo_counted" },
+        ],
+        defaultModelId: "x-ai/grok-4.7",
+        utilityModelId: "x-ai/grok-4.7",
       });
       const answers: Record<string, unknown> = {
         "promoClaims:getForServer": { opusRunsUsed: 0 },
@@ -156,6 +165,11 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
       expect(res.status).toBe(200);
       expect(calledFn("promoClaims:takeRun").map(([, args]) => args)).toEqual([runArgs]);
       expect(calledFn("promoClaims:refundRun")).toEqual([]);
+      // The message records the route's provider (ADR 0010).
+      expect(calledFn("system:createMessage").find(([, args]) => args.role === "assistant")?.[1])
+        .toMatchObject({
+          runModel: { modelId: OPUS, label: "Codenaya · Claude Opus 5.5", provider: "anthropic" },
+        });
     });
 
     it("gives the run back when creating the send throws", async () => {
