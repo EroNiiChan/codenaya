@@ -23,6 +23,7 @@ import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
 import type * as internalKey from "../internalKey.js";
 import type * as maintenance from "../maintenance.js";
+import type * as platformCatalog from "../platformCatalog.js";
 import type * as platformModels from "../platformModels.js";
 import type * as projectCascade from "../projectCascade.js";
 import type * as projectCopy from "../projectCopy.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   integrations: typeof integrations;
   internalKey: typeof internalKey;
   maintenance: typeof maintenance;
+  platformCatalog: typeof platformCatalog;
   platformModels: typeof platformModels;
   projectCascade: typeof projectCascade;
   projectCopy: typeof projectCopy;
