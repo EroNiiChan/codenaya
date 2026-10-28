@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 export interface CodenayaLogoProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
   blinking?: boolean;
+  /** Hide from assistive tech when nearby text already says what it means. */
+  decorative?: boolean;
 }
 
 /**
@@ -20,8 +22,13 @@ export function CodenayaLogo({
   size = 24,
   className,
   blinking = false,
+  decorative = false,
   ...props
 }: CodenayaLogoProps) {
+  const a11y = decorative
+    ? { "aria-hidden": true }
+    : { role: "img", "aria-label": "Codenaya" };
+
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -30,8 +37,7 @@ export function CodenayaLogo({
       height={size}
       fill="none"
       className={cn("shrink-0 select-none", className)}
-      aria-label="Codenaya"
-      role="img"
+      {...a11y}
       {...props}
     >
       <path

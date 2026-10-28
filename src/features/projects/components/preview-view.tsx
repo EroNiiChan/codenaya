@@ -473,12 +473,12 @@ const PreviewContent = ({
 
     {/* Hidden under the first build: PreviewBuilding already says the same. */}
     {agentWorking && !building && (
-      <div className="pointer-events-none absolute top-3 right-3 z-40 flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md border border-brand/30 shadow-lg text-xs font-medium text-foreground motion-safe:animate-in fade-in-0 duration-200">
+      <div role="status" className="pointer-events-none absolute top-3 right-3 z-40 flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-card/95 backdrop-blur-md border border-brand/30 shadow-lg text-xs font-medium text-foreground motion-safe:animate-in fade-in-0 duration-200">
         <span className="relative flex size-2">
           <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75" />
           <span className="relative inline-flex rounded-full size-2 bg-brand" />
         </span>
-        <CodenayaLogo size={16} blinking={true} />
+        <CodenayaLogo size={16} blinking={true} decorative />
         <span className="text-[11px] text-muted-foreground font-mono">Agent working</span>
       </div>
     )}

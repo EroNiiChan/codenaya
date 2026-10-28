@@ -8,6 +8,27 @@ interface Ripple {
   y: number;
 }
 
+// Inputs you type into; checkboxes, buttons, etc. count as interactive instead.
+const TEXT_INPUT = `input:not(${["checkbox", "radio", "submit", "button", "range", "file", "color", "reset", "image"]
+  .map((type) => `[type='${type}']`)
+  .join(", ")})`;
+
+type Mode = "down" | "hover" | "input" | "idle";
+
+const RING_CLASS: Record<Mode, string> = {
+  down: "size-9 border-2 border-brand bg-brand/20 opacity-95 animate-cursor-pulse shadow-[0_0_15px_color-mix(in_oklab,var(--brand)_50%,transparent)]",
+  hover: "size-10 border-2 border-brand/80 bg-brand/10 opacity-90 animate-cursor-pulse shadow-[0_0_12px_color-mix(in_oklab,var(--brand)_30%,transparent)]",
+  input: "h-7 w-2 rounded-xs border border-brand/60 bg-brand/15 opacity-80",
+  idle: "size-7 border border-brand/50 bg-brand/5 opacity-60 animate-cursor-pulse",
+};
+
+const DOT_CLASS: Record<Mode, string> = {
+  down: "size-3 animate-cursor-blink shadow-[0_0_16px_color-mix(in_oklab,var(--brand)_95%,transparent)]",
+  hover: "size-2.5 shadow-[0_0_10px_color-mix(in_oklab,var(--brand)_80%,transparent)]",
+  input: "h-4 w-1 rounded-full animate-cursor-blink shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_80%,transparent)]",
+  idle: "size-2 shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_60%,transparent)]",
+};
+
 const checkPointerEnabled = () => {
   if (typeof window === "undefined") return false;
   const isFinePointer = window.matchMedia("(pointer: fine)").matches;
@@ -100,6 +121,8 @@ export function CustomCursor() {
 
     const onMouseMove = (e: MouseEvent) => {
       mousePos.current = { x: e.clientX, y: e.clientY };
+      // Appearing: start the ring at the pointer, not where it was last drawn.
+      if (!visibleRef.current) followerPos.current = { ...mousePos.current };
       showCursor();
       if (!animId) animId = requestAnimationFrame(loop);
 
@@ -112,7 +135,7 @@ export function CustomCursor() {
           )
         );
         const isTextInput = Boolean(
-          target.closest("input, textarea, [contenteditable='true'], .cm-content")
+          target.closest(`${TEXT_INPUT}, textarea, [contenteditable='true'], .cm-content`)
         );
 
         setIsHovering(isInteractive && !isTextInput);
@@ -187,6 +210,8 @@ export function CustomCursor() {
 
   if (!enabled) return null;
 
+  const mode: Mode = isDown ? "down" : isHovering ? "hover" : isInput ? "input" : "idle";
+
   return (
     <div
       aria-hidden="true"
@@ -211,14 +236,7 @@ export function CustomCursor() {
         style={{ transform: "translate3d(-200px, -200px, 0)" }}
       >
         <div
-          className={`-translate-x-1/2 -translate-y-1/2 rounded-full transition-[width,height,background-color,border-color,opacity] duration-200 ease-out ${isDown
-            ? "size-9 border-2 border-brand bg-brand/20 opacity-95 animate-cursor-pulse shadow-[0_0_15px_color-mix(in_oklab,var(--brand)_50%,transparent)]"
-            : isHovering
-              ? "size-10 border-2 border-brand/80 bg-brand/10 opacity-90 animate-cursor-pulse shadow-[0_0_12px_color-mix(in_oklab,var(--brand)_30%,transparent)]"
-              : isInput
-                ? "h-7 w-2 rounded-xs border border-brand/60 bg-brand/15 opacity-80"
-                : "size-7 border border-brand/50 bg-brand/5 opacity-60 animate-cursor-pulse"
-            }`}
+          className={`-translate-x-1/2 -translate-y-1/2 rounded-full transition-[width,height,background-color,border-color,opacity] duration-200 ease-out ${RING_CLASS[mode]}`}
         />
       </div>
 
@@ -229,14 +247,7 @@ export function CustomCursor() {
         style={{ transform: "translate3d(-200px, -200px, 0)" }}
       >
         <div
-          className={`-translate-x-1/2 -translate-y-1/2 rounded-full bg-brand transition-[width,height,border-radius] duration-150 ${isDown
-            ? "size-3 animate-cursor-blink shadow-[0_0_16px_color-mix(in_oklab,var(--brand)_95%,transparent)]"
-            : isHovering
-              ? "size-2.5 shadow-[0_0_10px_color-mix(in_oklab,var(--brand)_80%,transparent)]"
-              : isInput
-                ? "h-4 w-1 rounded-full animate-cursor-blink shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_80%,transparent)]"
-                : "size-2 shadow-[0_0_8px_color-mix(in_oklab,var(--brand)_60%,transparent)]"
-            }`}
+          className={`-translate-x-1/2 -translate-y-1/2 rounded-full bg-brand transition-[width,height,border-radius] duration-150 ${DOT_CLASS[mode]}`}
         />
       </div>
     </div>

@@ -41,7 +41,7 @@ export const PreviewBuilding = ({
       <div className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 text-center">
         <div className="relative grid size-16 place-items-center rounded-2xl border border-border/70 bg-card shadow-xl shadow-brand/5">
           <span className="absolute inset-0 animate-ping rounded-2xl bg-brand/20 motion-reduce:animate-none opacity-60" />
-          <CodenayaLogo size={36} blinking={true} />
+          <CodenayaLogo size={36} blinking={true} decorative />
         </div>
         <div className="flex flex-col items-center gap-1">
           <p className="text-sm font-medium text-foreground">Building your app</p>
