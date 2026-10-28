@@ -11,16 +11,27 @@ const modules = import.meta.glob("./**/*.ts");
 const ADMIN = { subject: "user_admin", email: "admin@example.com", emailVerified: true };
 const OTHER = { subject: "user_other", email: "other@example.com", emailVerified: true };
 
+const INTERNAL_KEY = "test-internal-key";
 const MODEL = {
   id: "openai/gpt-5.4-mini",
   name: "GPT-5.4 mini",
   vendor: "openai",
+  provider: "openrouter" as const,
+  providerModelId: "openai/gpt-5.4-mini",
   vision: true,
   tools: "reported" as const,
-  inputUsdPerMTok: 0.25,
-  outputUsdPerMTok: 2,
+  pricing: { mode: "blended" as const, usdPerMTok: 0.69 },
+  access: "everyone" as const,
+  hidden: false,
 };
-const SAVE = { provider: "openrouter" as const, models: [MODEL], defaultModelId: MODEL.id };
+const SAVE = {
+  internalKey: INTERNAL_KEY,
+  models: [MODEL],
+  defaultModelId: MODEL.id,
+  utilityModelId: MODEL.id,
+  confirmRiskyPrices: false,
+  request: { requestId: "req_1" },
+};
 const PAGE = { paginationOpts: { numItems: 10, cursor: null } };
 
 const setup = () => convexTest(schema, modules);
@@ -30,6 +41,7 @@ const expectNotFound = (promise: Promise<unknown>) =>
 
 beforeEach(() => {
   vi.stubEnv("ADMIN_EMAIL", "admin@example.com");
+  vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", INTERNAL_KEY);
 });
 
 afterEach(() => {
@@ -42,14 +54,14 @@ describe("requireAdmin", () => {
     const admin = t.withIdentity(ADMIN);
 
     expect(await admin.query(api.admin.isAdmin, {})).toBe(true);
-    await admin.mutation(api.platformModels.save, SAVE);
+    await admin.mutation(api.platformCatalog.save, SAVE);
 
-    const audit = await admin.query(api.platformModels.listAudit, PAGE);
+    const audit = await admin.query(api.admin.listAudit, PAGE);
     expect(audit.page).toHaveLength(1);
     expect(audit.page[0]).toMatchObject({
       actorId: ADMIN.subject,
       actorEmail: ADMIN.email,
-      action: "platformModels.save",
+      action: "platformCatalog.save",
     });
   });
 
@@ -58,15 +70,15 @@ describe("requireAdmin", () => {
     const other = t.withIdentity(OTHER);
 
     expect(await other.query(api.admin.isAdmin, {})).toBe(false);
-    await expectNotFound(other.mutation(api.platformModels.save, SAVE));
-    await expectNotFound(other.query(api.platformModels.listAudit, PAGE));
-    await expectNotFound(other.query(api.platformModels.getForAdmin, { provider: "openrouter" }));
+    await expectNotFound(other.mutation(api.platformCatalog.save, SAVE));
+    await expectNotFound(other.query(api.admin.listAudit, PAGE));
+    await expectNotFound(other.query(api.platformCatalog.getForAdmin, {}));
   });
 
   test("signed out is not admin", async () => {
     const t = setup();
     expect(await t.query(api.admin.isAdmin, {})).toBe(false);
-    await expectNotFound(t.mutation(api.platformModels.save, SAVE));
+    await expectNotFound(t.mutation(api.platformCatalog.save, SAVE));
   });
 
   test("an unverified admin email is not admin", async () => {
@@ -74,7 +86,7 @@ describe("requireAdmin", () => {
     const unverified = t.withIdentity({ ...ADMIN, emailVerified: false });
 
     expect(await unverified.query(api.admin.isAdmin, {})).toBe(false);
-    await expectNotFound(unverified.mutation(api.platformModels.save, SAVE));
+    await expectNotFound(unverified.mutation(api.platformCatalog.save, SAVE));
     // A missing claim counts as unverified too.
     expect(
       await t.withIdentity({ ...ADMIN, emailVerified: undefined }).query(api.admin.isAdmin, {}),
@@ -87,7 +99,7 @@ describe("requireAdmin", () => {
     const admin = t.withIdentity(ADMIN);
 
     expect(await admin.query(api.admin.isAdmin, {})).toBe(false);
-    await expectNotFound(admin.mutation(api.platformModels.save, SAVE));
+    await expectNotFound(admin.mutation(api.platformCatalog.save, SAVE));
   });
 
   test("case and whitespace variants of the email match", async () => {
@@ -110,7 +122,7 @@ describe("ADMIN_USER_ID pin", () => {
     expect(await t.withIdentity(ADMIN).query(api.admin.isAdmin, {})).toBe(true);
     const impostor = t.withIdentity({ ...ADMIN, subject: "user_impostor" });
     expect(await impostor.query(api.admin.isAdmin, {})).toBe(false);
-    await expectNotFound(impostor.mutation(api.platformModels.save, SAVE));
+    await expectNotFound(impostor.mutation(api.platformCatalog.save, SAVE));
     await expectNotFound(impostor.query(api.admin.listAudit, PAGE));
   });
 
@@ -124,7 +136,6 @@ describe("ADMIN_USER_ID pin", () => {
 });
 
 describe("listAudit", () => {
-  const INTERNAL_KEY = "test-internal-key";
   const CATALOG_MODEL = {
     id: "a",
     name: "A",
@@ -139,7 +150,6 @@ describe("listAudit", () => {
   };
 
   test("returns the request and structured changes, bounded", async () => {
-    vi.stubEnv("CODENAYA_CONVEX_INTERNAL_KEY", INTERNAL_KEY);
     const admin = setup().withIdentity(ADMIN);
     await admin.mutation(api.platformCatalog.save, {
       internalKey: INTERNAL_KEY,

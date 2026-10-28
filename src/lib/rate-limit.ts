@@ -268,12 +268,6 @@ export const ADMIN_MODELS_FETCH_RATE_LIMIT: RateLimitConfig = {
   windowMs: 60_000,
 };
 
-/** Switching the platform provider is one settings write; admin only. */
-export const ADMIN_PROVIDER_SWITCH_RATE_LIMIT: RateLimitConfig = {
-  scope: "admin-provider-switch",
-  limit: 10,
-  windowMs: 60_000,
-};
 
 /** Standard 429 response with a `Retry-After` header. */
 export function rateLimitedResponse(result: RateLimitResult): Response {

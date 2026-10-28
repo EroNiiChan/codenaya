@@ -7,7 +7,6 @@ import {
   addModels,
   draftProblems,
   fromListed,
-  isRiskyPrice,
   parsePrice,
   removeModel,
   reroute,
@@ -16,6 +15,7 @@ import {
   togglePriceMode,
   toSaveBody,
 } from "./catalog-draft";
+import { riskyPriceModelIds } from "./platform-models";
 
 const row = (overrides: Partial<DraftModel> = {}): DraftModel => ({
   id: "m",
@@ -193,14 +193,23 @@ describe("catalog draft", () => {
 });
 
 describe("risky prices", () => {
-  it("flags a new $0 and a move of more than half the saved price", () => {
-    expect(isRiskyPrice(undefined, 0)).toBe(true);
-    expect(isRiskyPrice(4, 0)).toBe(true);
-    expect(isRiskyPrice(0, 0)).toBe(false);
-    expect(isRiskyPrice(10, 15)).toBe(false);
-    expect(isRiskyPrice(10, 15.01)).toBe(true);
-    expect(isRiskyPrice(10, 4.99)).toBe(true);
-    expect(isRiskyPrice(undefined, 3)).toBe(false);
+  it("flags a new or changed $0 and a move of more than half the saved price", () => {
+    const priced = (id: string, usdPerMTok: number) => ({
+      id,
+      pricing: { mode: "blended" as const, usdPerMTok },
+    });
+    const saved = [priced("free", 0), priced("ten", 10), priced("four", 4)];
+    expect(
+      riskyPriceModelIds(saved, [
+        priced("free", 0), // unchanged $0: no prompt
+        priced("ten", 15), // +50%: fine
+        priced("four", 0), // now free
+        priced("new", 0), // new and free
+        priced("new2", 3), // new and priced
+      ]),
+    ).toEqual(["four", "new"]);
+    expect(riskyPriceModelIds(saved, [priced("ten", 15.01)])).toEqual(["ten"]);
+    expect(riskyPriceModelIds(saved, [priced("ten", 4.99)])).toEqual(["ten"]);
   });
 
   it("names the draft's risky models against the saved catalog, by blended price", () => {

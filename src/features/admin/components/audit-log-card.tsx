@@ -78,8 +78,7 @@ const ChangeDetails = ({ entry }: { entry: AuditDetails }) => {
 /** Every admin change, newest first. */
 export const AuditLogCard = () => {
   const { results, status, loadMore } = usePaginatedQuery(
-    // Integration: switch to api.admin.listAudit (same args, plus the detail fields).
-    api.platformModels.listAudit,
+    api.admin.listAudit,
     {},
     { initialNumItems: PAGE_SIZE },
   );

@@ -4,7 +4,12 @@ import {
   blendPrices,
   blendedUsdPerMTok,
 } from "../ai-providers/catalog";
-import { type FetchedModel, MAX_USD_PER_MTOK, type PlatformProviderId } from "./platform-models";
+import {
+  type FetchedModel,
+  MAX_USD_PER_MTOK,
+  type PlatformProviderId,
+  riskyPriceModelIds,
+} from "./platform-models";
 
 /**
  * The /admin editor's unsaved copy of the platform catalog (ADR 0010), and the
@@ -13,13 +18,6 @@ import { type FetchedModel, MAX_USD_PER_MTOK, type PlatformProviderId } from "./
  * didn't say, and Save stays blocked until the admin confirms it. The checks
  * mirror `POST /api/admin/catalog` and `platformCatalog.save`, which decide.
  */
-
-/**
- * A price change over this share of the saved price needs a confirm, as does a
- * new $0 price. Mirrors the rule `platformCatalog.save` enforces.
- */
-// Integration: import RISKY_PRICE_CHANGE_RATIO from ./platform-models once the backend adds it.
-const RISKY_PRICE_CHANGE_RATIO = 0.5;
 
 /** A model as `GET /api/admin/models` lists it. */
 export interface ListedModel extends FetchedModel {
@@ -204,17 +202,15 @@ export const toSaveBody = (draft: Draft, confirmRiskyPrices: boolean): CatalogSa
   })),
 });
 
-/** A new $0 price, or a change of more than `RISKY_PRICE_CHANGE_RATIO` from the saved one. */
-export const isRiskyPrice = (before: number | undefined, after: number) =>
-  after === 0
-    ? before !== 0
-    : before !== undefined && before > 0 && Math.abs(after - before) / before > RISKY_PRICE_CHANGE_RATIO;
-
-/** Names of the draft's models whose price needs a confirm before saving. */
+/**
+ * Names of the draft's models whose price needs a confirm before saving: the
+ * same rule `platformCatalog.save` enforces (`riskyPriceModelIds`).
+ */
 export function riskyModelNames(draft: Draft, saved: SavedCatalog | null): string[] {
-  const before = new Map(saved?.models.map((m) => [m.id, blendedUsdPerMTok(m.pricing)]));
-  return draft.models.flatMap((model) => {
+  const priced = draft.models.flatMap((model) => {
     const pricing = toPricing(model);
-    return pricing && isRiskyPrice(before.get(model.id), blendedUsdPerMTok(pricing)) ? [model.name] : [];
+    return pricing ? [{ id: model.id, name: model.name, pricing }] : [];
   });
+  const risky = new Set(riskyPriceModelIds(saved?.models ?? [], priced));
+  return priced.filter((model) => risky.has(model.id)).map((model) => model.name);
 }
