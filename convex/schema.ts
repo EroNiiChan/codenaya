@@ -548,11 +548,6 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   /**
-   * The admin's model selection for one platform provider, saved from /admin.
-   * One bounded doc per provider (at most MAX_PLATFORM_MODELS models). No doc
-   * means users get the provider's curated catalog.
-   */
-  /**
    * The platform model catalog (ADR 0010): every model users may run on
    * Codenaya's keys, each with its own provider route and price. A single
    * bounded doc (at most MAX_PLATFORM_MODELS models), read once per send. None
