@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { MAX_CHECKPOINTS_PER_PROJECT } from "./checkpoints";
+import { withContents } from "./fileContents";
 import { deleteProjectBatch } from "./projectCascade";
 import schema from "./schema";
 
@@ -72,10 +73,14 @@ const snapshot = (t: T, projectId: Id<"projects">, messageId: Id<"messages">, la
 /** The project's files as `path → content`, folders as `path/`. */
 const tree = (t: T, projectId: Id<"projects">) =>
   t.run(async (ctx) => {
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .collect();
+    const files = await withContents(
+      ctx,
+      projectId,
+      await ctx.db
+        .query("files")
+        .withIndex("by_project", (q) => q.eq("projectId", projectId))
+        .collect(),
+    );
     const byId = new Map(files.map((file) => [file._id, file]));
     const pathOf = (id: Id<"files">): string => {
       const file = byId.get(id)!;
@@ -135,6 +140,41 @@ describe("checkpoints", () => {
 
     await alice.mutation(api.checkpoints.restore, { checkpointId: first });
     expect((await tree(t, projectId))["index.html"]).toBe("<h1>v1</h1>");
+  });
+
+  test("restores a path that turned binary or text, leaving no stray content rows (#412)", async () => {
+    vi.useFakeTimers();
+    const { t, alice } = setup();
+    const { projectId, conversationId, index } = await seedProject(t);
+    const scope = { internalKey: INTERNAL_KEY, projectId };
+    const blob = () => t.run((ctx) => ctx.storage.store(new Blob(["png"])));
+    const logo = await t.mutation(api.system.createBinaryFile, { ...scope, name: "logo.png", storageId: await blob() });
+    const before = await tree(t, projectId);
+    await snapshot(t, projectId, await addRun(t, projectId, conversationId));
+
+    await t.mutation(api.system.deleteFile, { ...scope, fileId: index });
+    await t.mutation(api.system.createBinaryFile, { ...scope, name: "index.html", storageId: await blob() });
+    await t.mutation(api.system.deleteFile, { ...scope, fileId: logo });
+    await t.mutation(api.system.createFile, { ...scope, name: "logo.png", content: "not a png" });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const [checkpoint] = await alice.query(api.checkpoints.list, { projectId });
+    await alice.mutation(api.checkpoints.restore, { checkpointId: checkpoint._id });
+
+    expect(await tree(t, projectId)).toEqual(before);
+    const { files, rows } = await t.run(async (ctx) => ({
+      files: await ctx.db.query("files").collect(),
+      rows: await ctx.db.query("fileContents").collect(),
+    }));
+    // Each text file's text lives in exactly one place (legacy field or row); no row outlives its file.
+    const rowFileIds = new Set(rows.map((row) => row.fileId));
+    expect(rowFileIds.size).toBe(rows.length);
+    for (const file of files) {
+      const isText = file.type === "file" && !file.storageId;
+      expect(Number(rowFileIds.has(file._id)) + Number(file.content !== undefined)).toBe(isText ? 1 : 0);
+      rowFileIds.delete(file._id);
+    }
+    expect(rowFileIds.size).toBe(0);
   });
 
   test(`keeps the newest ${MAX_CHECKPOINTS_PER_PROJECT} per project`, async () => {

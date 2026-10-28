@@ -19,7 +19,7 @@ import {
 } from "@/features/ai-providers/registry";
 import {
   platformModels,
-  resolvePlatformModel,
+  resolvePickableModel,
 } from "@/features/ai-providers/platform";
 import {
   fromChoiceValue,
@@ -28,7 +28,10 @@ import {
 import {
   useAiProviderKeys,
   usePlatformModelsOrCatalog,
+  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
+import { opusRunsLeft } from "@/features/promotions/github-promo";
+import { usePromoClaim } from "@/features/promotions/hooks/use-promo";
 
 import type { AgentModelChoice } from "../agent-models";
 
@@ -44,9 +47,10 @@ interface AgentModelSelectProps {
 }
 
 /**
- * Codenaya's models plus one group per active key the user brought. A key
- * that has since been marked invalid stays listed while it is selected, so the
- * current choice still shows (and the run explains what is wrong).
+ * Codenaya's models, the promo models the user claimed (ADR 0009), and one
+ * group per active key the user brought. A key that has since been marked
+ * invalid stays listed while it is selected, so the current choice still
+ * shows (and the run explains what is wrong).
  */
 export const AgentModelSelect = ({
   value,
@@ -59,6 +63,8 @@ export const AgentModelSelect = ({
   );
   const selectedKey = keys.find((key) => key._id === value.keyId);
   const platform = usePlatformModelsOrCatalog();
+  const promoModels = usePromoModels(platform) ?? [];
+  const promoClaim = usePromoClaim();
 
   return (
     <PromptInputSelect
@@ -80,7 +86,9 @@ export const AgentModelSelect = ({
         <TooltipContent>
           {selectedKey
             ? runModelLabel(value.modelId, selectedKey)
-            : runModelLabel(resolvePlatformModel(platform.provider, platform.config, value.modelId))}
+            : runModelLabel(
+                resolvePickableModel(platform.provider, platform.config, promoModels, value.modelId),
+              )}
         </TooltipContent>
       </Tooltip>
       <PromptInputSelectContent position="popper" align="start" className="max-h-80">
@@ -97,6 +105,23 @@ export const AgentModelSelect = ({
             </PromptInputSelectItem>
           ))}
         </SelectGroup>
+        {promoClaim && promoModels.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Free promotion</SelectLabel>
+            {promoModels.map((model) => (
+              <PromptInputSelectItem
+                key={model.id}
+                value={toChoiceValue({ modelId: model.id })}
+                data-tag={
+                  model.kind === "opus" ? `${opusRunsLeft(promoClaim)} runs left` : "Unlimited"
+                }
+                className={TAGGED_ITEM}
+              >
+                {model.label}
+              </PromptInputSelectItem>
+            ))}
+          </SelectGroup>
+        )}
         {keyGroups.map((key) => (
           <SelectGroup key={key._id}>
             <SelectLabel>

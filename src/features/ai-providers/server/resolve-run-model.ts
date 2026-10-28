@@ -4,7 +4,14 @@ import { z } from "zod";
 import { convex } from "@/lib/convex-client";
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
-import { resolvePlatformModel } from "../platform";
+import {
+  PROMO_REFUSAL_MESSAGES,
+  type PromoModelKind,
+  type PromoRunRefusal,
+  promoRunRefusal,
+} from "@/features/promotions/github-promo";
+
+import { promoOnlyModels, resolvePlatformModel } from "../platform";
 import {
   modelAcceptsImages,
   modelIdsFor,
@@ -100,6 +107,10 @@ const visionRequired = (label: string) =>
  * (/admin, else its catalog) fall back to its default, and a platform without
  * a key is refused; a BYOK choice must name a key the caller owns and a model
  * that key's provider offers. With `withImages`, the model must accept images.
+ *
+ * A promo model (ADR 0009) needs the caller's claim with a run left. The check
+ * changes nothing; `promoKind` tells `takePromoRun` which run to take once the
+ * send is known to go.
  */
 export async function validateModelChoice({
   internalKey,
@@ -111,17 +122,26 @@ export async function validateModelChoice({
   userId: string;
   model: ModelChoiceInput;
   withImages?: boolean;
-}): Promise<RunModelChoice> {
+}): Promise<RunModelChoice & { promoKind?: PromoModelKind }> {
   const { keyId, modelId } = toChoice(model);
   if (!keyId) {
     const { provider, config } = await activePlatform(internalKey);
     if (!isPlatformConfigured(provider)) {
       throw new ModelChoiceError(AI_NOT_CONFIGURED_MESSAGE, 503, "ai_not_configured");
     }
-    const model = resolvePlatformModel(provider, config, modelId);
+    const promoModel = promoOnlyModels(provider, config).find((m) => m.id === modelId);
+    const model = promoModel ?? resolvePlatformModel(provider, config, modelId);
     const label = runModelLabel(model);
     if (withImages && !model.vision) {
       throw visionRequired(label);
+    }
+    if (promoModel) {
+      const claim = await convex.query(api.promoClaims.getForServer, { internalKey, userId });
+      const refusal = claim ? promoRunRefusal(claim, promoModel, Date.now()) : "not_claimed";
+      if (refusal) {
+        throw promoRefused(refusal);
+      }
+      return { modelId: model.id, label, promoKind: promoModel.kind };
     }
     return { modelId: model.id, label };
   }
@@ -152,30 +172,91 @@ export async function validateModelChoice({
 
 /**
  * `validateModelChoice` for route handlers: a refused choice comes back as the
- * JSON error response to return.
+ * JSON error response to return. `runModel` is what the message records;
+ * `promoKind` goes to `takePromoRun`.
  *
- *   const { runModel, rejected } = await requireModelChoice({ ... });
+ *   const { runModel, promoKind, rejected } = await requireModelChoice({ ... });
  *   if (rejected) return rejected;
  */
 export async function requireModelChoice(
   args: Parameters<typeof validateModelChoice>[0],
 ): Promise<
-  | { runModel: RunModelChoice; rejected?: undefined }
-  | { runModel?: undefined; rejected: NextResponse }
+  | { runModel: RunModelChoice; promoKind?: PromoModelKind; rejected?: undefined }
+  | { runModel?: undefined; promoKind?: undefined; rejected: NextResponse }
 > {
   try {
-    return { runModel: await validateModelChoice(args) };
+    const { promoKind, ...runModel } = await validateModelChoice(args);
+    return { runModel, promoKind };
   } catch (error) {
     if (error instanceof ModelChoiceError) {
-      return {
-        rejected: NextResponse.json(
-          { error: error.message, ...(error.code ? { code: error.code } : {}) },
-          { status: error.status },
-        ),
-      };
+      return { rejected: modelChoiceErrorResponse(error) };
     }
     throw error;
   }
+}
+
+const modelChoiceErrorResponse = (error: ModelChoiceError) =>
+  NextResponse.json(
+    { error: error.message, ...(error.code ? { code: error.code } : {}) },
+    { status: error.status },
+  );
+
+const promoRefused = (refusal: PromoRunRefusal | "not_claimed") =>
+  new ModelChoiceError(PROMO_REFUSAL_MESSAGES[refusal], 403, `promo_${refusal}`);
+
+/**
+ * A promo run a send took. `refund` gives it back when the send fails before
+ * its agent run starts; it never throws, so it can't replace the route's own
+ * error response (a failed refund is logged and the run stays used).
+ */
+export interface PromoRun {
+  refund: () => Promise<void>;
+}
+
+const NO_PROMO_RUN: PromoRun = { refund: async () => {} };
+
+/**
+ * Takes the promo run (ADR 0009) a validated choice needs, in one Convex
+ * transaction, so two sends racing for the last Opus run can't both pass.
+ * Call it after the route's ownership checks and before it creates anything;
+ * without a `promoKind` it takes nothing. A refusal comes back as the
+ * response to return.
+ *
+ *   const { promoRun, rejected } = await takePromoRun({ internalKey, userId, promoKind });
+ *   if (rejected) return rejected;
+ *   try { ...create and dispatch; on a failed dispatch, await promoRun.refund()... }
+ *   catch (error) { await promoRun.refund(); throw error; }
+ */
+export async function takePromoRun({
+  internalKey,
+  userId,
+  promoKind,
+}: {
+  internalKey: string;
+  userId: string;
+  promoKind: PromoModelKind | undefined;
+}): Promise<
+  | { promoRun: PromoRun; rejected?: undefined }
+  | { promoRun?: undefined; rejected: NextResponse }
+> {
+  if (!promoKind) {
+    return { promoRun: NO_PROMO_RUN };
+  }
+
+  const args = { internalKey, userId, kind: promoKind };
+  const refusal = await convex.mutation(api.promoClaims.takeRun, args);
+  if (refusal) {
+    return { rejected: modelChoiceErrorResponse(promoRefused(refusal)) };
+  }
+  return {
+    promoRun: {
+      refund: async () => {
+        await convex.mutation(api.promoClaims.refundRun, args).catch((error: unknown) => {
+          console.error("[promo] couldn't refund a promo run", error);
+        });
+      },
+    },
+  };
 }
 
 /** A run's key could not be used. `message` is written as the assistant reply. */
@@ -229,7 +310,16 @@ export async function resolveRunModel({
     if (!isPlatformConfigured(provider)) {
       throw new ProviderKeyError(AI_NOT_CONFIGURED_MESSAGE);
     }
-    const modelId = resolvePlatformModel(provider, config, choice.modelId).id;
+    const promoModel = promoOnlyModels(provider, config).find((m) => m.id === choice.modelId);
+    // The send took the run and checked the end date; the run re-checks only
+    // the claim, so a run queued just before the end still goes ahead.
+    if (
+      promoModel &&
+      !(await convex.query(api.promoClaims.hasClaimForProjectOwner, { internalKey, projectId }))
+    ) {
+      throw new ProviderKeyError(PROMO_REFUSAL_MESSAGES.not_claimed);
+    }
+    const modelId = promoModel?.id ?? resolvePlatformModel(provider, config, choice.modelId).id;
     return {
       coding: (temperature) => platformAgentModel(provider, modelId, temperature),
       title: (temperature) => platformAgentModel(provider, platformTitleModel(provider), temperature),

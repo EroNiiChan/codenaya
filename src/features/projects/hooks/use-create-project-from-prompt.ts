@@ -9,6 +9,7 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { detectCredential } from "@/features/integrations/credential-guard";
 import { useAgentModel } from "@/features/conversations/hooks/use-agent-model";
 import type { StarterTemplateId } from "@/features/templates/templates";
+import { isPromoRefusalCode } from "@/features/promotions/github-promo";
 
 const CREDENTIAL_ERROR =
   "Remove credentials from the prompt. Create the project first, then add the MCP connection through Integrations.";
@@ -63,8 +64,8 @@ export const useCreateProjectFromPrompt = () => {
             toast.error(body.error ?? CREDENTIAL_ERROR);
             return false;
           }
-          // Platform AI has no key; nothing was created.
-          if (body.code === "ai_not_configured" && body.error) {
+          // Platform AI has no key, or a promo model can't run; nothing was created.
+          if ((body.code === "ai_not_configured" || isPromoRefusalCode(body.code)) && body.error) {
             toast.error(body.error);
             return false;
           }

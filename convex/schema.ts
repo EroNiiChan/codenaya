@@ -126,7 +126,8 @@ export default defineSchema({
     parentId: v.optional(v.id("files")),
     name: v.string(),
     type: v.union(v.literal("file"), v.literal("folder")),
-    content: v.optional(v.string()), // Text files only
+    // Legacy: text moved to `fileContents` (#412); kept until the backfill has run everywhere.
+    content: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")), // Binary files only
     updatedAt: v.number(),
   })
@@ -134,6 +135,19 @@ export default defineSchema({
     .index("by_parent", ["parentId"])
     .index("by_project_and_parent_and_name", ["projectId", "parentId", "name"])
     .index("by_storageId", ["storageId"]),
+
+  /**
+   * A text file's content, kept out of `files` so listing a project reads only
+   * metadata (#412). One row per text file; see `convex/fileContents.ts`.
+   */
+  fileContents: defineTable({
+    fileId: v.id("files"),
+    // Lets project-wide reads and cascades use one index range.
+    projectId: v.id("projects"),
+    content: v.string(),
+  })
+    .index("by_file", ["fileId"])
+    .index("by_project", ["projectId"]),
 
   /**
    * The project's files just before an agent run (#43), restorable from the
@@ -462,6 +476,22 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_provider", ["userId", "provider"]),
+
+  /**
+   * A claim of the GitHub launch promotion (ADR 0009). One per user, and one
+   * per GitHub account, so a GitHub account linked to several Codenaya users
+   * claims only once. The counter lives here: only its owner's sends touch it.
+   */
+  promoClaims: defineTable({
+    userId: v.string(),
+    githubUserId: v.number(),
+    githubLogin: v.string(),
+    githubCreatedAt: v.number(),
+    opusRunsUsed: v.number(),
+    claimedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_githubUserId", ["githubUserId"]),
 
   /** The user's default model. No `defaultKeyId` means the Codenaya platform key. */
   userAiPreferences: defineTable({
