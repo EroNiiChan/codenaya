@@ -117,12 +117,10 @@ const MODEL_FIELDS = [
 const ROUTE_FIELDS: readonly string[] = ["provider", "providerModelId"];
 const SUMMARIZED_FIELDS: readonly string[] = [...ROUTE_FIELDS, "pricing", "access", "hidden"];
 
-const fieldValue = (model: CatalogModel, field: (typeof MODEL_FIELDS)[number]) =>
-  field === "pricing"
-    ? priceLabel(model.pricing)
-    : model[field] === undefined
-      ? undefined
-      : String(model[field]);
+const fieldValue = (model: CatalogModel, field: (typeof MODEL_FIELDS)[number]) => {
+  if (field === "pricing") return priceLabel(model.pricing);
+  return model[field] === undefined ? undefined : String(model[field]);
+};
 
 /**
  * The structured audit changes from `before` to `after` (one per changed field
@@ -299,6 +297,67 @@ const MIGRATION_ACTOR: Admin = { id: "system:migration", email: "system:migratio
  * active provider (`platformSettings`, else `fallbackProvider`). No-op when a
  * catalog exists. Run with `npx convex run platformCatalog:migrateFromProviderConfigs`.
  */
+/**
+ * The GitHub promo's models (ADR 0009), which the old setup added for claimants
+ * on top of the selection: the migration seeds them so claimants keep them.
+ * Prices are OpenRouter's at migration time; the admin can re-route them (e.g.
+ * to the Anthropic key) and reprice in /admin.
+ */
+const PROMO_SEEDS: Partial<Record<CatalogModel["provider"], CatalogModel[]>> = {
+  openrouter: [
+    {
+      id: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      vendor: "Anthropic",
+      provider: "openrouter",
+      providerModelId: "anthropic/claude-opus-5.5",
+      vision: true,
+      tools: "reported",
+      pricing: { mode: "split", inputUsdPerMTok: 4, outputUsdPerMTok: 20 },
+      access: "promo_counted",
+      hidden: false,
+    },
+    {
+      id: "anthropic/claude-sonnet-5.5",
+      name: "Claude Sonnet 5.5",
+      vendor: "Anthropic",
+      provider: "openrouter",
+      providerModelId: "anthropic/claude-sonnet-5.5",
+      vision: true,
+      tools: "reported",
+      pricing: { mode: "split", inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
+      access: "promo_unlimited",
+      hidden: false,
+    },
+  ],
+  anthropic: [
+    {
+      id: "claude-opus-5-5",
+      name: "Claude Opus 5.5",
+      vendor: "Anthropic",
+      provider: "anthropic",
+      providerModelId: "claude-opus-5-5",
+      vision: false,
+      tools: "reported",
+      pricing: { mode: "split", inputUsdPerMTok: 4, outputUsdPerMTok: 20 },
+      access: "promo_counted",
+      hidden: false,
+    },
+    {
+      id: "claude-sonnet-5-5",
+      name: "Claude Sonnet 5.5",
+      vendor: "Anthropic",
+      provider: "anthropic",
+      providerModelId: "claude-sonnet-5-5",
+      vision: false,
+      tools: "reported",
+      pricing: { mode: "split", inputUsdPerMTok: 2, outputUsdPerMTok: 10 },
+      access: "promo_unlimited",
+      hidden: false,
+    },
+  ],
+};
+
 export const migrateFromProviderConfigs = internalMutation({
   args: {
     fallbackProvider: platformProviderValidator,
@@ -314,18 +373,22 @@ export const migrateFromProviderConfigs = internalMutation({
       .unique();
     if (!config) return "nothing to migrate";
 
+    const migrated = config.models.map(({ inputUsdPerMTok, outputUsdPerMTok, ...model }) => ({
+      ...model,
+      provider,
+      providerModelId: model.id,
+      pricing:
+        inputUsdPerMTok === outputUsdPerMTok
+          ? { mode: "blended" as const, usdPerMTok: inputUsdPerMTok }
+          : { mode: "split" as const, inputUsdPerMTok, outputUsdPerMTok },
+      access: "everyone" as const,
+      hidden: false,
+    }));
+    // A promo model the selection already offered everyone stays as it was.
+    const listed = new Set(migrated.map((m) => m.id));
+    const promo = (PROMO_SEEDS[provider] ?? []).filter((m) => !listed.has(m.id));
     const catalog: Catalog = {
-      models: config.models.map(({ inputUsdPerMTok, outputUsdPerMTok, ...model }) => ({
-        ...model,
-        provider,
-        providerModelId: model.id,
-        pricing:
-          inputUsdPerMTok === outputUsdPerMTok
-            ? { mode: "blended" as const, usdPerMTok: inputUsdPerMTok }
-            : { mode: "split" as const, inputUsdPerMTok, outputUsdPerMTok },
-        access: "everyone" as const,
-        hidden: false,
-      })),
+      models: [...migrated, ...promo],
       defaultModelId: config.defaultModelId,
       utilityModelId: config.defaultModelId,
     };
@@ -336,7 +399,9 @@ export const migrateFromProviderConfigs = internalMutation({
     });
 
     const { changes } = diffCatalog(null, catalog);
-    const summary = `migrated ${catalog.models.length} ${provider} models, default ${catalog.defaultModelId}`;
+    const summary =
+      `migrated ${migrated.length} ${provider} models (+${promo.length} promo), ` +
+      `default ${catalog.defaultModelId}`;
     await writeAudit(ctx, MIGRATION_ACTOR, "platformCatalog.migrate", summary, { changes });
     return summary;
   },

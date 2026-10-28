@@ -109,10 +109,15 @@ describe("resolveEditorModel", () => {
       });
     });
 
-    it("returns null when the utility route's provider has no key, whatever others have", async () => {
+    it("falls back to the default model's route when the utility route has no key", async () => {
       vi.stubEnv("ANTHROPIC_API_KEY", "");
       vi.spyOn(console, "error").mockImplementation(() => {});
 
+      expect((await resolve())?.model).toEqual({
+        byok: { provider: "openrouter", apiKey: "sk-or-platform", model: "x-ai/grok-4.7" },
+      });
+
+      vi.stubEnv("OPENROUTER_API_KEY", "");
       expect(await resolve()).toBeNull();
     });
   });

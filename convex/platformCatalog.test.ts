@@ -349,7 +349,7 @@ describe("platformCatalog.migrateFromProviderConfigs", () => {
       await ctx.db.insert("platformSettings", { activeProvider: "groq", ...meta });
     });
 
-    expect(await migrate()).toBe("migrated 2 groq models, default flat");
+    expect(await migrate()).toBe("migrated 2 groq models (+0 promo), default flat");
     const { contextLength, vision, tools } = legacy("x", 0, 0);
     const route = { provider: "groq" as const, access: "everyone" as const, hidden: false };
     expect(await t.query(api.platformCatalog.getForAdmin, {})).toMatchObject({
@@ -380,7 +380,7 @@ describe("platformCatalog.migrateFromProviderConfigs", () => {
     expect(row).toMatchObject({
       actorId: "system:migration",
       action: "platformCatalog.migrate",
-      summary: "migrated 2 groq models, default flat",
+      summary: "migrated 2 groq models (+0 promo), default flat",
     });
     expect(row.changes?.map((c) => c.field)).toEqual([
       "model:split",
@@ -391,5 +391,31 @@ describe("platformCatalog.migrateFromProviderConfigs", () => {
 
     expect(await migrate()).toBe("already migrated");
     expect(await auditRows(t)).toHaveLength(1);
+  });
+
+  test("seeds the GitHub promo's models on a Claude provider, keeping listed ones", async () => {
+    const t = asAdmin();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("platformModelConfigs", {
+        provider: "openrouter",
+        models: [legacy("cheap", 1, 1), legacy("anthropic/claude-sonnet-5.5", 2, 10)],
+        defaultModelId: "cheap",
+        updatedAt: 1,
+        updatedBy: ADMIN.subject,
+      });
+    });
+
+    expect(
+      await t.mutation(internal.platformCatalog.migrateFromProviderConfigs, {
+        fallbackProvider: "openrouter",
+      }),
+    ).toBe("migrated 2 openrouter models (+1 promo), default cheap");
+    const models = (await t.query(api.platformCatalog.getForAdmin, {}))?.models ?? [];
+    // Sonnet was already offered to everyone, so it stays that way.
+    expect(models.map((m) => [m.id, m.access])).toEqual([
+      ["cheap", "everyone"],
+      ["anthropic/claude-sonnet-5.5", "everyone"],
+      ["anthropic/claude-opus-5.5", "promo_counted"],
+    ]);
   });
 });

@@ -46,7 +46,9 @@ admin panel. Only OpenRouter's models API returns prices.
   (`NEXT_PUBLIC_AI_PROVIDER`, `AI_PROVIDERS[p]`), as today, mapped into the same
   shape with that provider as every route.
 - **Migration**: `platformCatalog.migrateFromProviderConfigs` copies the active
-  provider's saved selection (split prices kept) into the catalog once. The
+  provider's saved selection (split prices kept) into the catalog once, and on
+  OpenRouter or Anthropic seeds the promo's Opus/Sonnet 5.5 with promo access
+  (unless already listed), so claimants keep them across the deploy. The
   deprecated `platformModelConfigs` / `platformSettings` tables are dropped in a
   follow-up after prod has migrated.
 

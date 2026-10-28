@@ -39,8 +39,11 @@ export const blendedUsdPerMTok = (pricing: ModelPricing) =>
     : blendPrices(pricing.inputUsdPerMTok, pricing.outputUsdPerMTok);
 
 /** The promo run kind a model's access takes, or null for everyone's models. */
-export const promoKindOf = (access: ModelAccess) =>
-  access === "promo_counted" ? ("opus" as const) : access === "promo_unlimited" ? ("sonnet" as const) : null;
+export const promoKindOf = (access: ModelAccess) => {
+  if (access === "promo_counted") return "opus" as const;
+  if (access === "promo_unlimited") return "sonnet" as const;
+  return null;
+};
 
 /** The caller's standing in the GitHub promotion (ADR 0009). */
 export interface PromoStanding {

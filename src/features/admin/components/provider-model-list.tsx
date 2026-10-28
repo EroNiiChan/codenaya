@@ -161,6 +161,37 @@ export const ProviderModelList = ({
     );
   });
 
+
+  const renderList = () => {
+    if (!models) {
+      return (
+        <div className="space-y-2" aria-label="Loading models">
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="h-11 w-full" />
+          ))}
+        </div>
+      );
+    }
+    if (visible.length === 0) {
+      return <p className="py-8 text-center text-sm text-muted-foreground">No models match.</p>;
+    }
+    return (
+      <ScrollArea className="h-[min(24rem,50vh)] rounded-md border">
+        {mode === "multiple" ? (
+          <ul className="divide-y">{rows}</ul>
+        ) : (
+          <RadioGroup
+            value={[...selected][0] ?? ""}
+            onValueChange={(id) => onSelect(visible.find((m) => m.id === id)!, true)}
+            aria-label="Model"
+            className="gap-0"
+          >
+            <ul className="divide-y">{rows}</ul>
+          </RadioGroup>
+        )}
+      </ScrollArea>
+    );
+  };
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -181,30 +212,7 @@ export const ProviderModelList = ({
         </Button>
       </div>
 
-      {!models ? (
-        <div className="space-y-2" aria-label="Loading models">
-          {Array.from({ length: 5 }, (_, i) => (
-            <Skeleton key={i} className="h-11 w-full" />
-          ))}
-        </div>
-      ) : visible.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">No models match.</p>
-      ) : (
-        <ScrollArea className="h-[min(24rem,50vh)] rounded-md border">
-          {mode === "multiple" ? (
-            <ul className="divide-y">{rows}</ul>
-          ) : (
-            <RadioGroup
-              value={[...selected][0] ?? ""}
-              onValueChange={(id) => onSelect(visible.find((m) => m.id === id)!, true)}
-              aria-label="Model"
-              className="gap-0"
-            >
-              <ul className="divide-y">{rows}</ul>
-            </RadioGroup>
-          )}
-        </ScrollArea>
-      )}
+      {renderList()}
       {models && (
         <p className="text-xs text-muted-foreground tabular-nums">
           Showing {visible.length} of {models.length}

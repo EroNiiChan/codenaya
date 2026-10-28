@@ -2,7 +2,7 @@ import type { LanguageModel } from "ai";
 import { NextResponse } from "next/server";
 
 import { convex } from "@/lib/convex-client";
-import { utilityModel } from "../platform";
+import { resolveCatalogModel, utilityModel } from "../platform";
 import { AI_PROVIDERS, PROVIDER_KEY_ERROR_CODE, modelIdsFor } from "../registry";
 import { buildAiSdkModel } from "./ai-sdk-model";
 import {
@@ -61,10 +61,11 @@ export async function resolveEditorModel({
   ]);
 
   if (!byok) {
-    const utility = utilityModel(catalog);
-    return isPlatformConfigured(utility.provider)
-      ? { model: platformEditorModel(utility) }
-      : null;
+    // A keyless utility route falls back to the default model, as titles do.
+    const model = [utilityModel(catalog), resolveCatalogModel(catalog, undefined)].find((m) =>
+      isPlatformConfigured(m.provider),
+    );
+    return model ? { model: platformEditorModel(model) } : null;
   }
 
   const { key, modelId } = byok;
