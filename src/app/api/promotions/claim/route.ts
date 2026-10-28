@@ -20,6 +20,7 @@ import { api } from "../../../../../convex/_generated/api";
 
 const CLAIM_ERROR_STATUS: Record<PromoClaimErrorCode, number> = {
   github_not_linked: 400,
+  github_unavailable: 502,
   github_too_new: 403,
   github_already_used: 409,
   already_claimed: 409,
@@ -67,13 +68,7 @@ export async function POST() {
   } catch (error) {
     // GitHub down, rate-limited or slow: nothing was claimed, so a retry is safe.
     console.error("[promo] GitHub account lookup failed", error);
-    return NextResponse.json(
-      {
-        error: "Couldn't reach GitHub to check your account. Please try again.",
-        code: "github_unavailable",
-      },
-      { status: 502 },
-    );
+    return claimError("github_unavailable");
   }
   if (!account) {
     return claimError("github_not_linked");

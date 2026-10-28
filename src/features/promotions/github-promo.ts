@@ -93,6 +93,7 @@ export const isPromoRefusalCode = (code: string | undefined) =>
 /** Why `POST /api/promotions/claim` refused; the page branches on these. */
 export type PromoClaimErrorCode =
   | "github_not_linked"
+  | "github_unavailable"
   | "github_too_new"
   | "github_already_used"
   | "already_claimed"
@@ -100,6 +101,7 @@ export type PromoClaimErrorCode =
 
 export const PROMO_CLAIM_ERROR_MESSAGES: Record<PromoClaimErrorCode, string> = {
   github_not_linked: "Connect your GitHub account to claim.",
+  github_unavailable: "Couldn't reach GitHub to check your account. Please try again.",
   github_too_new: `This promotion is for GitHub accounts at least ${MIN_GITHUB_ACCOUNT_AGE_DAYS} days old.`,
   github_already_used: "This GitHub account was already used to claim the promotion.",
   already_claimed: "You've already claimed the promotion.",
