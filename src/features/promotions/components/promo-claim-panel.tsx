@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 
 import {
   PROMO_CLAIM_ERROR_MESSAGES,
+  type PromoClaimErrorCode,
   PROMO_ENDS_LABEL,
   PROMO_OPUS_RUN_LIMIT,
   opusRunsLeft,
@@ -23,12 +24,13 @@ import { PromoStep } from "./promo-view";
 
 const FALLBACK_ERROR = "Couldn't claim the promotion. Please try again.";
 
-const claimErrorMessage = async (error: unknown) => {
-  if (!(error instanceof HTTPError)) return FALLBACK_ERROR;
+/** The claim route's `{ error, code }`, or a generic message. */
+const claimRefusal = async (error: unknown) => {
+  if (!(error instanceof HTTPError)) return { message: FALLBACK_ERROR };
   const body = await error.response
-    .json<{ error?: string }>()
-    .catch(() => ({ error: undefined }));
-  return body.error ?? FALLBACK_ERROR;
+    .json<{ error?: string; code?: PromoClaimErrorCode }>()
+    .catch(() => ({ error: undefined, code: undefined }));
+  return { message: body.error ?? FALLBACK_ERROR, code: body.code };
 };
 
 /**
@@ -42,6 +44,8 @@ export const PromoClaimPanel = () => {
   const active = usePromoActive();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Clerk lists GitHub as linked, but GitHub refused its token (revoked).
+  const [githubRefused, setGithubRefused] = useState(false);
 
   if (!isLoaded || claim === undefined) {
     return (
@@ -92,9 +96,11 @@ export const PromoClaimPanel = () => {
     );
   }
 
-  const github = user?.externalAccounts.find(
-    (account) => account.provider === "github" && account.verification?.status === "verified",
-  );
+  const github = githubRefused
+    ? undefined
+    : user?.externalAccounts.find(
+        (account) => account.provider === "github" && account.verification?.status === "verified",
+      );
 
   const connectGithub = async () => {
     if (!user) return;
@@ -102,7 +108,8 @@ export const PromoClaimPanel = () => {
     setError(null);
     try {
       const redirectUrl = window.location.href;
-      // A link left unfinished earlier is retried rather than added twice.
+      // An existing link (unfinished, or its token revoked) is re-authorized,
+      // not added twice.
       const pending = user.externalAccounts.find((account) => account.provider === "github");
       const account = pending
         ? await pending.reauthorize({ redirectUrl })
@@ -123,7 +130,10 @@ export const PromoClaimPanel = () => {
       await claimPromo();
       toast.success("Claimed! Claude Opus 5.5 is in your model menu.");
     } catch (claimError) {
-      setError(await claimErrorMessage(claimError));
+      const refusal = await claimRefusal(claimError);
+      setError(refusal.message);
+      // Connecting again re-authorizes the existing link.
+      if (refusal.code === "github_not_linked") setGithubRefused(true);
     } finally {
       setBusy(false);
     }

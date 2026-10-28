@@ -158,6 +158,18 @@ describe.each(routes)("POST /api/$name", ({ call, successBody, failureBody, rate
       expect(calledFn("promoClaims:refundRun")).toEqual([]);
     });
 
+    it("gives the run back when creating the send throws", async () => {
+      const create = mocks.mutation.getMockImplementation()!;
+      mocks.mutation.mockImplementation(async (ref, args) => {
+        if (args.role === "user") throw new Error("Convex timeout");
+        return create(ref, args);
+      });
+
+      await expect(call(undefined, OPUS)).rejects.toThrow("Convex timeout");
+      expect(calledFn("promoClaims:refundRun").map(([, args]) => args)).toEqual([runArgs]);
+      expect(mocks.inngestSend).not.toHaveBeenCalled();
+    });
+
     it("gives the run back when dispatch fails", async () => {
       mocks.inngestSend.mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:8288"));
 

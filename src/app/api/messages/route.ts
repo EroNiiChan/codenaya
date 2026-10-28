@@ -78,7 +78,7 @@ export async function POST(request: Request) {
   }
 
   // Independent reads, in parallel: each Convex round-trip delays the send.
-  const [{ runModel, rejected }, { found: conversation, notFound }] =
+  const [{ runModel, promoKind, rejected }, { found: conversation, notFound }] =
     await Promise.all([
       requireModelChoice({
         internalKey,
@@ -105,90 +105,96 @@ export async function POST(request: Request) {
   const { promoRun, rejected: promoRejected } = await takePromoRun({
     internalKey,
     userId,
-    runModel,
+    promoKind,
   });
 
   if (promoRejected) {
     return promoRejected;
   }
 
-  const projectId = conversation.projectId;
+  // A send that fails before its agent run starts gives its promo run back.
+  try {
+    const projectId = conversation.projectId;
 
-  // Find all processing messages in this project
-  const processingMessages = await convex.query(
-    api.system.getProcessingMessages,
-    {
-      internalKey,
-      projectId,
-    }
-  );
-
-  if (processingMessages.length > 0) {
-    // Cancel all processing messages
-    await Promise.all(
-      processingMessages.map((msg) =>
-        cancelProcessingMessage({ internalKey, messageId: msg._id })
-      )
+    // Find all processing messages in this project
+    const processingMessages = await convex.query(
+      api.system.getProcessingMessages,
+      {
+        internalKey,
+        projectId,
+      }
     );
-  }
 
-  // Create user message
-  await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversation._id,
-    projectId,
-    role: "user",
-    content: message,
-    // Only sent with images: only the sender's own uploads can be attached.
-    ...(images?.length
-      ? { images: images as Id<"_storage">[], ownerId: userId }
-      : {}),
-  });
+    if (processingMessages.length > 0) {
+      // Cancel all processing messages
+      await Promise.all(
+        processingMessages.map((msg) =>
+          cancelProcessingMessage({ internalKey, messageId: msg._id })
+        )
+      );
+    }
 
-  // Create assistant message placeholder with processing status
-  const assistantMessageId = await convex.mutation(
-    api.system.createMessage,
-    {
+    // Create user message
+    await convex.mutation(api.system.createMessage, {
       internalKey,
       conversationId: conversation._id,
       projectId,
-      role: "assistant",
-      content: "",
-      status: "processing",
-      runModel,
-      mode,
-    }
-  );
+      role: "user",
+      content: message,
+      // Only sent with images: only the sender's own uploads can be attached.
+      ...(images?.length
+        ? { images: images as Id<"_storage">[], ownerId: userId }
+        : {}),
+    });
 
-  // Trigger the configured message processor (Inngest or Vercel Workflow)
-  const dispatch = await dispatchProcessMessageOrFail({
-    internalKey,
-    messageId: assistantMessageId,
-    conversationId: conversation._id,
-    projectId,
-    ownerId: userId,
-    message,
-    model: runModel,
-    mode,
-  });
-
-  if (!dispatch) {
-    // The user retries from the chat; that send takes its own run.
-    await promoRun.refund();
-    return NextResponse.json(
+    // Create assistant message placeholder with processing status
+    const assistantMessageId = await convex.mutation(
+      api.system.createMessage,
       {
-        error: DISPATCH_FAILED_ERROR,
-        code: "dispatch_failed",
-        messageId: assistantMessageId,
-      },
-      { status: 502 },
+        internalKey,
+        conversationId: conversation._id,
+        projectId,
+        role: "assistant",
+        content: "",
+        status: "processing",
+        runModel,
+        mode,
+      }
     );
-  }
 
-  return NextResponse.json({
-    success: true,
-    backend: dispatch.backend,
-    eventId: dispatch.eventId,
-    messageId: assistantMessageId,
-  });
+    // Trigger the configured message processor (Inngest or Vercel Workflow)
+    const dispatch = await dispatchProcessMessageOrFail({
+      internalKey,
+      messageId: assistantMessageId,
+      conversationId: conversation._id,
+      projectId,
+      ownerId: userId,
+      message,
+      model: runModel,
+      mode,
+    });
+
+    if (!dispatch) {
+      // The user retries from the chat; that send takes its own run.
+      await promoRun.refund();
+      return NextResponse.json(
+        {
+          error: DISPATCH_FAILED_ERROR,
+          code: "dispatch_failed",
+          messageId: assistantMessageId,
+        },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      backend: dispatch.backend,
+      eventId: dispatch.eventId,
+      messageId: assistantMessageId,
+    });
+  } catch (error) {
+    await promoRun.refund();
+    throw error;
+  }
 };

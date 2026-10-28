@@ -265,9 +265,18 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "anthropic/claude-opus-5.5",
       label: "Codenaya · Claude Opus 5.5",
+      promoKind: "opus",
     });
     expect(mocks.query).toHaveBeenCalledWith(expect.anything(), { internalKey: "ik", userId: "user_1" });
     expect(mocks.mutation).not.toHaveBeenCalled();
+
+    // Routes get the kind apart from what the message records.
+    expect(
+      await requireModelChoice({ internalKey: "ik", userId: "user_1", model: "anthropic/claude-sonnet-5.5" }),
+    ).toEqual({
+      runModel: { modelId: "anthropic/claude-sonnet-5.5", label: "Codenaya · Claude Sonnet 5.5" },
+      promoKind: "sonnet",
+    });
   });
 
   it("refuses with the claim's reason instead of falling back", async () => {
@@ -315,41 +324,42 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
 });
 
 describe("takePromoRun (send routes, ADR 0009)", () => {
-  const take = (modelId: string, keyId?: string) =>
-    takePromoRun({
-      internalKey: "ik",
-      userId: "user_1",
-      runModel: { modelId, label: "x", ...(keyId ? { keyId: keyId as never } : {}) },
-    });
+  const take = (promoKind?: "opus" | "sonnet") =>
+    takePromoRun({ internalKey: "ik", userId: "user_1", promoKind });
+  const args = { internalKey: "ik", userId: "user_1", kind: "opus" };
 
-  it("takes nothing for other models, BYOK, or promo models offered to everyone", async () => {
-    await (await take("google/gemini-3.8-flash")).promoRun?.refund();
-    await (await take("anthropic/claude-opus-5.5", "key_1")).promoRun?.refund();
-    await (await take("anthropic/claude-opus-5.5")).promoRun?.refund();
+  it("takes nothing for a choice that isn't a promo model", async () => {
+    await (await take()).promoRun?.refund();
 
     expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
-  it("takes the run, and refunds the same kind for a send that can't dispatch", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+  it("takes the run, and a refund gives back the same kind", async () => {
     mocks.mutation.mockResolvedValue(null);
 
-    const { promoRun, rejected } = await take("anthropic/claude-opus-5.5");
+    const { promoRun, rejected } = await take("opus");
     expect(rejected).toBeUndefined();
     await promoRun?.refund();
 
-    const args = { internalKey: "ik", userId: "user_1", kind: "opus" };
     expect(mocks.mutation).toHaveBeenNthCalledWith(1, expect.anything(), args);
     expect(mocks.mutation).toHaveBeenNthCalledWith(2, expect.anything(), args);
   });
 
   it("answers a lost race for the last run with the refusal", async () => {
-    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
     mocks.mutation.mockResolvedValue("opus_used_up");
 
-    const { rejected } = await take("anthropic/claude-opus-5.5");
+    const { rejected } = await take("opus");
     expect(rejected?.status).toBe(403);
     expect(await rejected?.json()).toMatchObject({ code: "promo_opus_used_up" });
+  });
+
+  it("logs a failed refund instead of throwing over the route's response", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.mutation.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("Convex down"));
+
+    const { promoRun } = await take("opus");
+    await expect(promoRun?.refund()).resolves.toBeUndefined();
+    expect(logged).toHaveBeenCalled();
   });
 });
 

@@ -29,11 +29,13 @@ parallel sends and an event-key holder naming any model.
   admin already offers everyone needs no claim and uses no run.
 - **The send checks, then takes the run once it is known to go.**
   `validateModelChoice` only reads the claim (`promoClaims.getForServer`) and
-  refuses early. After the route's ownership checks and before it creates
-  anything, `takePromoRun` calls `promoClaims.takeRun`, which checks the claim
-  and the end and, for Opus, counts the run in the same transaction, so two
-  sends can't both take the last run. A send whose dispatch fails gets the run
-  back (`refundRun`), so retrying from the chat costs one run. A refusal is a
+  refuses early, and returns the promo kind it validated. After the route's
+  ownership checks and before it creates anything, `takePromoRun` calls
+  `promoClaims.takeRun` with that kind, which checks the claim and the end
+  and, for Opus, counts the run in the same transaction, so two sends can't
+  both take the last run. A send that fails before its agent run starts
+  (a thrown error or a failed dispatch) gets the run back (`refundRun`), so
+  retrying from the chat costs one run. A refusal is a
   403 with `code: promo_*` and a message, not a silent fallback to another
   model, which would surprise someone who picked Opus.
 - **The run re-checks the claim, not the count or the clock.**
@@ -54,10 +56,12 @@ parallel sends and an event-key holder naming any model.
 
 ## Consequences
 
-- Each promo send does two extra reads and a mutation; each promo run one
+- Each promo send does one extra read and one mutation; each promo run one
   query. Other sends do nothing extra.
-- A send that throws between `takeRun` and dispatch (a Convex outage) keeps
-  the run used. Only the caller's own runs are at stake.
+- If the refund itself fails (Convex unreachable), it is logged and the run
+  stays used. Only the caller's own runs are at stake.
+- The picker drops Opus once its runs are used, so a stored Opus choice
+  falls back to the user's default instead of being refused on every send.
 - Sonnet is uncapped until the end, so its cost is open-ended for that window.
 - After the promotion, delete `features/promotions`, `promoClaims` and the
   `promoOnlyModels` hooks in `resolve-run-model.ts`, the picker and the banner.

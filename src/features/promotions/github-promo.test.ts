@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROMO_ENDS_AT,
+  PROMO_ENDS_LABEL,
   PROMO_OPUS_RUN_LIMIT,
   isGithubAccountOldEnough,
   isPromoActive,
-  isPromoModelId,
   isPromoRefusalCode,
   opusRunsLeft,
   promoModelsFor,
@@ -19,6 +19,7 @@ describe("github promo rules", () => {
     expect(new Date(PROMO_ENDS_AT).toISOString()).toBe("2026-11-01T00:00:00.000Z");
     expect(isPromoActive(PROMO_ENDS_AT - 1)).toBe(true);
     expect(isPromoActive(PROMO_ENDS_AT)).toBe(false);
+    expect(PROMO_ENDS_LABEL).toBe("Nov 1, 00:00 UTC");
   });
 
   it("needs a GitHub account at least 365 days old", () => {
@@ -43,9 +44,7 @@ describe("github promo rules", () => {
   it("offers Opus and Sonnet only on providers that serve Claude", () => {
     expect(promoModelsFor("openrouter").map((m) => m.kind)).toEqual(["opus", "sonnet"]);
     expect(promoModelsFor("groq")).toEqual([]);
-    expect(isPromoModelId("claude-opus-5-5")).toBe(true);
-    expect(isPromoModelId("anthropic/claude-sonnet-5.5")).toBe(true);
-    expect(isPromoModelId("anthropic/claude-fable-5.1")).toBe(false);
+    expect(promoModelsFor("anthropic").map((m) => m.id)).toEqual(["claude-opus-5-5", "claude-sonnet-5-5"]);
   });
 
   it("recognises the send routes' refusal codes", () => {

@@ -1,6 +1,7 @@
 import ky, { HTTPError } from "ky";
 import { useMutation, useQuery } from "convex/react";
 
+import { opusRunsLeft } from "@/features/promotions/github-promo";
 import { usePromoActive, usePromoClaim } from "@/features/promotions/hooks/use-promo";
 
 import {
@@ -38,15 +39,18 @@ export const usePlatformModelsOrCatalog = (): ActivePlatform =>
 
 /**
  * The promotion's models the user may pick on top of the platform's (ADR
- * 0009): only with a claim, while the promotion runs. Undefined while the
- * platform or the claim is loading.
+ * 0009): only with a claim, while the promotion runs, and Opus only while it
+ * has runs left, so a stored Opus choice falls back instead of being refused
+ * on every send. Undefined while the platform or the claim is loading.
  */
 export const usePromoModels = (platform: ActivePlatform | undefined) => {
   const claim = usePromoClaim();
   const active = usePromoActive();
   if (!platform || claim === undefined) return undefined;
   if (!claim || !active) return [];
-  return promoOnlyModels(platform.provider, platform.config);
+  return promoOnlyModels(platform.provider, platform.config).filter(
+    (model) => model.kind !== "opus" || opusRunsLeft(claim) > 0,
+  );
 };
 
 export const useRemoveAiProviderKey = () => useMutation(api.aiProviders.remove);
