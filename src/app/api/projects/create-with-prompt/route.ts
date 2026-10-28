@@ -12,6 +12,7 @@ import { DEFAULT_CONVERSATION_TITLE } from "@/features/conversations/constants";
 import {
   modelChoiceSchema,
   requireModelChoice,
+  takePromoRun,
 } from "@/features/ai-providers/server/resolve-run-model";
 
 import { convex } from "@/lib/convex-client";
@@ -87,6 +88,17 @@ export async function POST(request: Request) {
     return rejected;
   }
 
+  // Before anything is created (ADR 0009).
+  const { promoRun, rejected: promoRejected } = await takePromoRun({
+    internalKey,
+    userId,
+    runModel,
+  });
+
+  if (promoRejected) {
+    return promoRejected;
+  }
+
   // Name it after its template, or generate a random name
   const projectName = template?.id ?? generateProjectName();
 
@@ -142,6 +154,8 @@ export async function POST(request: Request) {
   // The project exists either way: return its id so the client can open it
   // and the user can retry from the chat.
   if (!dispatch) {
+    // A retry from the chat takes its own run.
+    await promoRun.refund();
     return NextResponse.json(
       { error: DISPATCH_FAILED_ERROR, code: "dispatch_failed", projectId },
       { status: 502 },

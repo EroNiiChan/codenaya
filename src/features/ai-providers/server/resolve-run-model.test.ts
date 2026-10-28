@@ -25,6 +25,7 @@ import {
   isProviderKeyRejection,
   requireModelChoice,
   resolveRunModel,
+  takePromoRun,
   validateModelChoice,
 } from "./resolve-run-model";
 
@@ -257,24 +258,21 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
   const validate = (model: string, withImages = false) =>
     validateModelChoice({ internalKey: "ik", userId: "user_1", model, withImages });
 
-  it("takes a promo run for a model the platform selection lacks", async () => {
+  it("accepts a claimant's promo model the selection lacks, without taking a run", async () => {
     mocks.platform.mockReturnValue(OPENROUTER_SAVED);
-    mocks.mutation.mockResolvedValue(null);
+    mocks.query.mockResolvedValue({ opusRunsUsed: 3 });
 
     expect(await validate("anthropic/claude-opus-5.5")).toEqual({
       modelId: "anthropic/claude-opus-5.5",
       label: "Codenaya · Claude Opus 5.5",
     });
-    expect(mocks.mutation).toHaveBeenCalledWith(expect.anything(), {
-      internalKey: "ik",
-      userId: "user_1",
-      kind: "opus",
-    });
+    expect(mocks.query).toHaveBeenCalledWith(expect.anything(), { internalKey: "ik", userId: "user_1" });
+    expect(mocks.mutation).not.toHaveBeenCalled();
   });
 
   it("refuses with the claim's reason instead of falling back", async () => {
     mocks.platform.mockReturnValue(OPENROUTER_SAVED);
-    mocks.mutation.mockResolvedValue("opus_used_up");
+    mocks.query.mockResolvedValue({ opusRunsUsed: 20 });
 
     const { rejected } = await requireModelChoice({
       internalKey: "ik",
@@ -286,9 +284,15 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
       code: "promo_opus_used_up",
       error: expect.stringContaining("Sonnet 5.5 is still free"),
     });
+
+    mocks.query.mockResolvedValue(null);
+    await expect(validate("anthropic/claude-sonnet-5.5")).rejects.toMatchObject({
+      status: 403,
+      code: "promo_not_claimed",
+    });
   });
 
-  it("checks images before taking a run", async () => {
+  it("checks images before reading the claim", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
     mocks.platform.mockReturnValue({
       provider: "anthropic",
@@ -299,14 +303,53 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
     });
 
     await expect(validate("claude-opus-5-5", true)).rejects.toMatchObject({ status: 400 });
-    expect(mocks.mutation).not.toHaveBeenCalled();
+    expect(mocks.query).not.toHaveBeenCalled();
   });
 
-  it("takes no run when the selection already offers the model to everyone", async () => {
+  it("needs no claim when the selection already offers the model to everyone", async () => {
     expect(await validate("anthropic/claude-opus-5.5")).toMatchObject({
       modelId: "anthropic/claude-opus-5.5",
     });
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+});
+
+describe("takePromoRun (send routes, ADR 0009)", () => {
+  const take = (modelId: string, keyId?: string) =>
+    takePromoRun({
+      internalKey: "ik",
+      userId: "user_1",
+      runModel: { modelId, label: "x", ...(keyId ? { keyId: keyId as never } : {}) },
+    });
+
+  it("takes nothing for other models, BYOK, or promo models offered to everyone", async () => {
+    await (await take("google/gemini-3.8-flash")).promoRun?.refund();
+    await (await take("anthropic/claude-opus-5.5", "key_1")).promoRun?.refund();
+    await (await take("anthropic/claude-opus-5.5")).promoRun?.refund();
+
     expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
+  it("takes the run, and refunds the same kind for a send that can't dispatch", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.mutation.mockResolvedValue(null);
+
+    const { promoRun, rejected } = await take("anthropic/claude-opus-5.5");
+    expect(rejected).toBeUndefined();
+    await promoRun?.refund();
+
+    const args = { internalKey: "ik", userId: "user_1", kind: "opus" };
+    expect(mocks.mutation).toHaveBeenNthCalledWith(1, expect.anything(), args);
+    expect(mocks.mutation).toHaveBeenNthCalledWith(2, expect.anything(), args);
+  });
+
+  it("answers a lost race for the last run with the refusal", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.mutation.mockResolvedValue("opus_used_up");
+
+    const { rejected } = await take("anthropic/claude-opus-5.5");
+    expect(rejected?.status).toBe(403);
+    expect(await rejected?.json()).toMatchObject({ code: "promo_opus_used_up" });
   });
 });
 

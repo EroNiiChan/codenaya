@@ -108,7 +108,7 @@ export const ConversationSidebar = ({
   // A key still loading (or gone) is left to the server to check.
   const modelKeys = useAiProviderKeys();
   const platform = usePlatformModelsOrCatalog();
-  const promoModels = usePromoModels(platform);
+  const promoModels = usePromoModels(platform) ?? [];
   const modelKey = modelKeys?.find((key) => key._id === agentModel.keyId);
   const acceptsImages = !agentModel.keyId
     ? resolvePickableModel(platform.provider, platform.config, promoModels, agentModel.modelId)

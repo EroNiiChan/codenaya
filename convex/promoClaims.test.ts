@@ -145,6 +145,29 @@ describe("takeRun", () => {
   });
 });
 
+describe("getForServer and refundRun", () => {
+  test("report the count, and a refund gives back one Opus run", async () => {
+    const t = setup();
+    const read = () =>
+      t.query(api.promoClaims.getForServer, { internalKey: INTERNAL_KEY, userId: ALICE });
+    const refund = (kind: "opus" | "sonnet") =>
+      t.mutation(api.promoClaims.refundRun, { internalKey: INTERNAL_KEY, userId: ALICE, kind });
+
+    expect(await read()).toBeNull();
+    await claim(t, ALICE);
+    await takeRun(t, ALICE, "opus");
+    await takeRun(t, ALICE, "opus");
+    expect(await read()).toEqual({ opusRunsUsed: 2 });
+
+    await refund("sonnet");
+    expect(await read()).toEqual({ opusRunsUsed: 2 });
+    await refund("opus");
+    await refund("opus");
+    await refund("opus");
+    expect(await read()).toEqual({ opusRunsUsed: 0 });
+  });
+});
+
 describe("hasClaimForProjectOwner", () => {
   test("answers for the project's owner", async () => {
     const t = setup();

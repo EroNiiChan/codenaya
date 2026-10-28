@@ -90,16 +90,16 @@ function setModel(model: AgentModelChoice) {
 /**
  * Whether a choice can still be sent: one of the platform provider's models,
  * a promo model the user claimed, or a model of one of the user's keys. While
- * either list is loading the choice is kept; the server validates it either way.
+ * any of the lists is loading the choice is kept; the server validates it either way.
  */
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
   platform: ActivePlatform | undefined,
-  promoModels: readonly PromoModel[],
+  promoModels: readonly PromoModel[] | undefined,
 ) {
   if (!choice.keyId) {
-    if (!platform) return true;
+    if (!platform || !promoModels) return true;
     return [...platformModels(platform.provider, platform.config), ...promoModels].some(
       (m) => m.id === choice.modelId,
     );

@@ -4,7 +4,12 @@ import { z } from "zod";
 import { convex } from "@/lib/convex-client";
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
-import { PROMO_REFUSAL_MESSAGES } from "@/features/promotions/github-promo";
+import {
+  PROMO_REFUSAL_MESSAGES,
+  type PromoRunRefusal,
+  isPromoModelId,
+  promoRunRefusal,
+} from "@/features/promotions/github-promo";
 
 import { promoOnlyModels, resolvePlatformModel } from "../platform";
 import {
@@ -103,8 +108,8 @@ const visionRequired = (label: string) =>
  * a key is refused; a BYOK choice must name a key the caller owns and a model
  * that key's provider offers. With `withImages`, the model must accept images.
  *
- * A promo model (ADR 0009) needs the caller's claim, and an Opus one takes one
- * of their promo runs here: call this once per send, just before creating it.
+ * A promo model (ADR 0009) needs the caller's claim with a run left. The check
+ * changes nothing: `takePromoRun` takes the run once the send is known to go.
  */
 export async function validateModelChoice({
   internalKey,
@@ -130,14 +135,10 @@ export async function validateModelChoice({
       throw visionRequired(label);
     }
     if (promoModel) {
-      // After the vision check, so a refused send doesn't use a run.
-      const refusal = await convex.mutation(api.promoClaims.takeRun, {
-        internalKey,
-        userId,
-        kind: promoModel.kind,
-      });
+      const claim = await convex.query(api.promoClaims.getForServer, { internalKey, userId });
+      const refusal = claim ? promoRunRefusal(claim, promoModel, Date.now()) : "not_claimed";
       if (refusal) {
-        throw new ModelChoiceError(PROMO_REFUSAL_MESSAGES[refusal], 403, `promo_${refusal}`);
+        throw promoRefused(refusal);
       }
     }
     return { modelId: model.id, label };
@@ -184,15 +185,73 @@ export async function requireModelChoice(
     return { runModel: await validateModelChoice(args) };
   } catch (error) {
     if (error instanceof ModelChoiceError) {
-      return {
-        rejected: NextResponse.json(
-          { error: error.message, ...(error.code ? { code: error.code } : {}) },
-          { status: error.status },
-        ),
-      };
+      return { rejected: modelChoiceErrorResponse(error) };
     }
     throw error;
   }
+}
+
+const modelChoiceErrorResponse = (error: ModelChoiceError) =>
+  NextResponse.json(
+    { error: error.message, ...(error.code ? { code: error.code } : {}) },
+    { status: error.status },
+  );
+
+const promoRefused = (refusal: PromoRunRefusal | "not_claimed") =>
+  new ModelChoiceError(PROMO_REFUSAL_MESSAGES[refusal], 403, `promo_${refusal}`);
+
+/** A promo run a send took; `refund` gives it back when the send can't dispatch. */
+export interface PromoRun {
+  refund: () => Promise<void>;
+}
+
+const NO_PROMO_RUN: PromoRun = { refund: async () => {} };
+
+/**
+ * Takes the promo run (ADR 0009) a validated choice needs, in one Convex
+ * transaction, so two sends racing for the last Opus run can't both pass.
+ * Call it after the route's ownership checks and before it creates anything;
+ * other choices take nothing. A refusal comes back as the response to return.
+ *
+ *   const { promoRun, rejected } = await takePromoRun({ ... });
+ *   if (rejected) return rejected;
+ *   ...
+ *   if (!dispatch) await promoRun.refund();
+ */
+export async function takePromoRun({
+  internalKey,
+  userId,
+  runModel,
+}: {
+  internalKey: string;
+  userId: string;
+  runModel: RunModelChoice;
+}): Promise<
+  | { promoRun: PromoRun; rejected?: undefined }
+  | { promoRun?: undefined; rejected: NextResponse }
+> {
+  // Most sends: no extra read.
+  if (runModel.keyId || !isPromoModelId(runModel.modelId)) {
+    return { promoRun: NO_PROMO_RUN };
+  }
+  const { provider, config } = await activePlatform(internalKey);
+  const promoModel = promoOnlyModels(provider, config).find((m) => m.id === runModel.modelId);
+  if (!promoModel) {
+    return { promoRun: NO_PROMO_RUN };
+  }
+
+  const args = { internalKey, userId, kind: promoModel.kind };
+  const refusal = await convex.mutation(api.promoClaims.takeRun, args);
+  if (refusal) {
+    return { rejected: modelChoiceErrorResponse(promoRefused(refusal)) };
+  }
+  return {
+    promoRun: {
+      refund: async () => {
+        await convex.mutation(api.promoClaims.refundRun, args);
+      },
+    },
+  };
 }
 
 /** A run's key could not be used. `message` is written as the assistant reply. */

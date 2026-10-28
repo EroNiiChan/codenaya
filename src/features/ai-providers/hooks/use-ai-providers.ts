@@ -38,12 +38,14 @@ export const usePlatformModelsOrCatalog = (): ActivePlatform =>
 
 /**
  * The promotion's models the user may pick on top of the platform's (ADR
- * 0009): only with a claim, while the promotion runs. Empty while loading.
+ * 0009): only with a claim, while the promotion runs. Undefined while the
+ * platform or the claim is loading.
  */
 export const usePromoModels = (platform: ActivePlatform | undefined) => {
   const claim = usePromoClaim();
   const active = usePromoActive();
-  if (!platform || !claim || !active) return [];
+  if (!platform || claim === undefined) return undefined;
+  if (!claim || !active) return [];
   return promoOnlyModels(platform.provider, platform.config);
 };
 

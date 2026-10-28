@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   PROMO_ENDS_AT,
   PROMO_OPUS_RUN_LIMIT,
-  findPromoModel,
   isGithubAccountOldEnough,
   isPromoActive,
+  isPromoModelId,
   isPromoRefusalCode,
   opusRunsLeft,
   promoModelsFor,
@@ -42,9 +42,10 @@ describe("github promo rules", () => {
 
   it("offers Opus and Sonnet only on providers that serve Claude", () => {
     expect(promoModelsFor("openrouter").map((m) => m.kind)).toEqual(["opus", "sonnet"]);
-    expect(findPromoModel("anthropic", "claude-opus-5-5")?.kind).toBe("opus");
     expect(promoModelsFor("groq")).toEqual([]);
-    expect(findPromoModel("openrouter", "claude-opus-5-5")).toBeUndefined();
+    expect(isPromoModelId("claude-opus-5-5")).toBe(true);
+    expect(isPromoModelId("anthropic/claude-sonnet-5.5")).toBe(true);
+    expect(isPromoModelId("anthropic/claude-fable-5.1")).toBe(false);
   });
 
   it("recognises the send routes' refusal codes", () => {

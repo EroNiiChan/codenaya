@@ -48,8 +48,9 @@ const PROMO_MODELS: Partial<Record<string, readonly PromoModel[]>> = {
 export const promoModelsFor = (provider: string): readonly PromoModel[] =>
   PROMO_MODELS[provider] ?? [];
 
-export const findPromoModel = (provider: string, modelId: string) =>
-  promoModelsFor(provider).find((model) => model.id === modelId);
+/** Whether `modelId` is a promo model on any provider: a check before any read. */
+export const isPromoModelId = (modelId: string) =>
+  Object.values(PROMO_MODELS).some((models) => models?.some((model) => model.id === modelId));
 
 export const isPromoActive = (now: number) => now < PROMO_ENDS_AT;
 

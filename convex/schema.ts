@@ -477,7 +477,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_and_provider", ["userId", "provider"]),
 
-  /** The user's default model. No `defaultKeyId` means the Codenaya platform key. */
   /**
    * A claim of the GitHub launch promotion (ADR 0009). One per user, and one
    * per GitHub account, so a GitHub account linked to several Codenaya users
@@ -494,6 +493,7 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_githubUserId", ["githubUserId"]),
 
+  /** The user's default model. No `defaultKeyId` means the Codenaya platform key. */
   userAiPreferences: defineTable({
     userId: v.string(),
     defaultKeyId: v.optional(v.id("aiProviderKeys")),

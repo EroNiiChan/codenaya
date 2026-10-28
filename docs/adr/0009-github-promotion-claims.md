@@ -27,10 +27,14 @@ parallel sends and an event-key holder naming any model.
 - **Promo models are added on top of the selection, only for claimants.**
   `promoOnlyModels` lists the promo models the selection lacks; a model the
   admin already offers everyone needs no claim and uses no run.
-- **The send takes the run.** `validateModelChoice` calls `promoClaims.takeRun`,
-  which checks the claim and the end and, for Opus, counts the run in the same
-  transaction, so two sends can't both take the last run. A refusal is a 403
-  with `code: promo_*` and a message; it is not a silent fallback to another
+- **The send checks, then takes the run once it is known to go.**
+  `validateModelChoice` only reads the claim (`promoClaims.getForServer`) and
+  refuses early. After the route's ownership checks and before it creates
+  anything, `takePromoRun` calls `promoClaims.takeRun`, which checks the claim
+  and the end and, for Opus, counts the run in the same transaction, so two
+  sends can't both take the last run. A send whose dispatch fails gets the run
+  back (`refundRun`), so retrying from the chat costs one run. A refusal is a
+  403 with `code: promo_*` and a message, not a silent fallback to another
   model, which would surprise someone who picked Opus.
 - **The run re-checks the claim, not the count or the clock.**
   `resolveRunModel` asks `promoClaims.hasClaimForProjectOwner`; the send
@@ -50,9 +54,10 @@ parallel sends and an event-key holder naming any model.
 
 ## Consequences
 
-- Each promo send does one extra Convex mutation; each promo run one query.
-- A send refused after `takeRun` (e.g. a conversation the caller doesn't own)
-  still used a run. Only the caller's own runs are at stake.
+- Each promo send does two extra reads and a mutation; each promo run one
+  query. Other sends do nothing extra.
+- A send that throws between `takeRun` and dispatch (a Convex outage) keeps
+  the run used. Only the caller's own runs are at stake.
 - Sonnet is uncapped until the end, so its cost is open-ended for that window.
 - After the promotion, delete `features/promotions`, `promoClaims` and the
   `promoOnlyModels` hooks in `resolve-run-model.ts`, the picker and the banner.

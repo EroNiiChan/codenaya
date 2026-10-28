@@ -13,6 +13,7 @@ import { detectCredential } from "@/features/integrations/credential-guard";
 import {
   modelChoiceSchema,
   requireModelChoice,
+  takePromoRun,
 } from "@/features/ai-providers/server/resolve-run-model";
 import {
   DISPATCH_FAILED_ERROR,
@@ -100,6 +101,17 @@ export async function POST(request: Request) {
     return notFound;
   }
 
+  // After the ownership check and before anything changes (ADR 0009).
+  const { promoRun, rejected: promoRejected } = await takePromoRun({
+    internalKey,
+    userId,
+    runModel,
+  });
+
+  if (promoRejected) {
+    return promoRejected;
+  }
+
   const projectId = conversation.projectId;
 
   // Find all processing messages in this project
@@ -161,6 +173,8 @@ export async function POST(request: Request) {
   });
 
   if (!dispatch) {
+    // The user retries from the chat; that send takes its own run.
+    await promoRun.refund();
     return NextResponse.json(
       {
         error: DISPATCH_FAILED_ERROR,

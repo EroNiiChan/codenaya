@@ -63,7 +63,7 @@ export const AgentModelSelect = ({
   );
   const selectedKey = keys.find((key) => key._id === value.keyId);
   const platform = usePlatformModelsOrCatalog();
-  const promoModels = usePromoModels(platform);
+  const promoModels = usePromoModels(platform) ?? [];
   const promoClaim = usePromoClaim();
 
   return (
