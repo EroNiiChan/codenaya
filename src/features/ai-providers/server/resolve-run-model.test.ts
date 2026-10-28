@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
+  mutation: vi.fn(),
   platform: vi.fn(),
   openProviderKey: vi.fn(),
   lookup: vi.fn(),
@@ -9,7 +10,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/convex-client", async () => {
   const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
-  return { convex: { query: withEnvPlatform(mocks.query, mocks.platform) } };
+  return {
+    convex: { query: withEnvPlatform(mocks.query, mocks.platform), mutation: mocks.mutation },
+  };
 });
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
 vi.mock("node:dns/promises", () => ({ lookup: mocks.lookup }));
@@ -22,6 +25,7 @@ import {
   isProviderKeyRejection,
   requireModelChoice,
   resolveRunModel,
+  takePromoRun,
   validateModelChoice,
 } from "./resolve-run-model";
 
@@ -54,6 +58,15 @@ const GROQ_SAVED = {
       { id: "qwen/qwen3-32b", name: "Qwen3 32B", vendor: "qwen", vision: true },
     ],
     defaultModelId: "llama-3.3-70b-versatile",
+  },
+};
+
+/** The admin saved one OpenRouter model, so Claude needs the promotion (ADR 0009). */
+const OPENROUTER_SAVED = {
+  provider: "openrouter",
+  config: {
+    models: [{ id: "google/gemini-3.8-flash", name: "Gemini 3.8 Flash", vendor: "google", vision: true }],
+    defaultModelId: "google/gemini-3.8-flash",
   },
 };
 
@@ -241,6 +254,115 @@ describe("validateModelChoice (API route)", () => {
   });
 });
 
+describe("validateModelChoice: promo models (ADR 0009)", () => {
+  const validate = (model: string, withImages = false) =>
+    validateModelChoice({ internalKey: "ik", userId: "user_1", model, withImages });
+
+  it("accepts a claimant's promo model the selection lacks, without taking a run", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.query.mockResolvedValue({ opusRunsUsed: 3 });
+
+    expect(await validate("anthropic/claude-opus-5.5")).toEqual({
+      modelId: "anthropic/claude-opus-5.5",
+      label: "Codenaya · Claude Opus 5.5",
+      promoKind: "opus",
+    });
+    expect(mocks.query).toHaveBeenCalledWith(expect.anything(), { internalKey: "ik", userId: "user_1" });
+    expect(mocks.mutation).not.toHaveBeenCalled();
+
+    // Routes get the kind apart from what the message records.
+    expect(
+      await requireModelChoice({ internalKey: "ik", userId: "user_1", model: "anthropic/claude-sonnet-5.5" }),
+    ).toEqual({
+      runModel: { modelId: "anthropic/claude-sonnet-5.5", label: "Codenaya · Claude Sonnet 5.5" },
+      promoKind: "sonnet",
+    });
+  });
+
+  it("refuses with the claim's reason instead of falling back", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.query.mockResolvedValue({ opusRunsUsed: 20 });
+
+    const { rejected } = await requireModelChoice({
+      internalKey: "ik",
+      userId: "user_1",
+      model: "anthropic/claude-opus-5.5",
+    });
+    expect(rejected?.status).toBe(403);
+    expect(await rejected?.json()).toMatchObject({
+      code: "promo_opus_used_up",
+      error: expect.stringContaining("Sonnet 5.5 is still free"),
+    });
+
+    mocks.query.mockResolvedValue(null);
+    await expect(validate("anthropic/claude-sonnet-5.5")).rejects.toMatchObject({
+      status: 403,
+      code: "promo_not_claimed",
+    });
+  });
+
+  it("checks images before reading the claim", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue({
+      provider: "anthropic",
+      config: {
+        models: [{ id: "claude-fable-5-1", name: "Claude Fable 5.1", vendor: "anthropic", vision: false }],
+        defaultModelId: "claude-fable-5-1",
+      },
+    });
+
+    await expect(validate("claude-opus-5-5", true)).rejects.toMatchObject({ status: 400 });
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+
+  it("needs no claim when the selection already offers the model to everyone", async () => {
+    expect(await validate("anthropic/claude-opus-5.5")).toMatchObject({
+      modelId: "anthropic/claude-opus-5.5",
+    });
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+});
+
+describe("takePromoRun (send routes, ADR 0009)", () => {
+  const take = (promoKind?: "opus" | "sonnet") =>
+    takePromoRun({ internalKey: "ik", userId: "user_1", promoKind });
+  const args = { internalKey: "ik", userId: "user_1", kind: "opus" };
+
+  it("takes nothing for a choice that isn't a promo model", async () => {
+    await (await take()).promoRun?.refund();
+
+    expect(mocks.mutation).not.toHaveBeenCalled();
+  });
+
+  it("takes the run, and a refund gives back the same kind", async () => {
+    mocks.mutation.mockResolvedValue(null);
+
+    const { promoRun, rejected } = await take("opus");
+    expect(rejected).toBeUndefined();
+    await promoRun?.refund();
+
+    expect(mocks.mutation).toHaveBeenNthCalledWith(1, expect.anything(), args);
+    expect(mocks.mutation).toHaveBeenNthCalledWith(2, expect.anything(), args);
+  });
+
+  it("answers a lost race for the last run with the refusal", async () => {
+    mocks.mutation.mockResolvedValue("opus_used_up");
+
+    const { rejected } = await take("opus");
+    expect(rejected?.status).toBe(403);
+    expect(await rejected?.json()).toMatchObject({ code: "promo_opus_used_up" });
+  });
+
+  it("logs a failed refund instead of throwing over the route's response", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.mutation.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("Convex down"));
+
+    const { promoRun } = await take("opus");
+    await expect(promoRun?.refund()).resolves.toBeUndefined();
+    expect(logged).toHaveBeenCalled();
+  });
+});
+
 describe("resolveRunModel (agent run)", () => {
   const resolve = (choice: { keyId?: string; modelId: string }) =>
     resolveRunModel({ internalKey: "ik", projectId: "p1" as never, choice });
@@ -282,6 +404,25 @@ describe("resolveRunModel (agent run)", () => {
       authKey: "gsk-platform",
     });
     expect(target(run.coding()).url).toContain("api.groq.com/openai/v1");
+  });
+
+  it("runs a promo model for a project whose owner claimed", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.query.mockResolvedValue(true);
+
+    const run = await resolve({ modelId: "anthropic/claude-sonnet-5.5" });
+
+    expect(target(run.coding(0.3)).id).toBe("anthropic/claude-sonnet-5.5");
+  });
+
+  it("ends a promo run with a pointer to /promo when the owner hasn't claimed", async () => {
+    mocks.platform.mockReturnValue(OPENROUTER_SAVED);
+    mocks.query.mockResolvedValue(false);
+
+    const error = await resolve({ modelId: "anthropic/claude-opus-5.5" }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ProviderKeyError);
+    expect((error as Error).message).toContain("/promo");
   });
 
   it("ends a platform run with a clear reply when the provider has no key", async () => {

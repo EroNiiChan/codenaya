@@ -1,3 +1,4 @@
+import { type PromoModel, promoModelsFor } from "../promotions/github-promo";
 import { AI_PROVIDERS, type ProviderModel } from "./registry";
 
 /**
@@ -73,6 +74,18 @@ export function platformModels(
 }
 
 /**
+ * The promotion's models (ADR 0009) that the platform selection doesn't
+ * already offer everyone: these need a claim. Empty on providers without Claude.
+ */
+export function promoOnlyModels(
+  provider: PlatformProviderId,
+  config: PlatformModelConfig | null,
+): readonly PromoModel[] {
+  const listed = new Set(platformModels(provider, config).map((model) => model.id));
+  return promoModelsFor(provider).filter((model) => !listed.has(model.id));
+}
+
+/**
  * The model a platform run uses: the requested one if it is listed, else the
  * configured default, else the catalog default. An unknown, removed or
  * other-provider id never runs, so a crafted request can't pick its model.
@@ -92,3 +105,13 @@ export function resolvePlatformModel(
     models[0]!
   );
 }
+
+/** `resolvePlatformModel`, plus the promo models the user may pick (`usePromoModels`). */
+export const resolvePickableModel = (
+  provider: PlatformProviderId,
+  config: PlatformModelConfig | null,
+  promoModels: readonly PromoModel[],
+  requestedId: string | undefined,
+): ProviderModel =>
+  promoModels.find((model) => model.id === requestedId) ??
+  resolvePlatformModel(provider, config, requestedId);
