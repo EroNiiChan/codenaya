@@ -1,12 +1,14 @@
 "use client";
 
+import { Fragment } from "react";
 import { usePaginatedQuery } from "convex/react";
 import { format, formatDistanceToNow } from "date-fns";
-import { HistoryIcon } from "lucide-react";
+import { ChevronDownIcon, HistoryIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Empty,
   EmptyDescription,
@@ -26,12 +28,57 @@ import {
 } from "@/components/ui/table";
 
 import { api } from "../../../../convex/_generated/api";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 
 const PAGE_SIZE = 20;
+
+// Rows before ADR 0010 have none of these.
+type AuditDetails = Pick<Doc<"adminAuditLog">, "_id" | "changes" | "requestId" | "ip" | "userAgent">;
+
+/** Before → after per field, and the request that made the change. */
+const ChangeDetails = ({ entry }: { entry: AuditDetails }) => {
+  if (!entry.changes?.length && !entry.requestId) return null;
+  return (
+    <Collapsible className="mt-1">
+      <CollapsibleTrigger asChild>
+        <Button variant="link" className="group h-auto gap-1 p-0 text-xs">
+          Details
+          <ChevronDownIcon className="size-3 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2">
+        {!!entry.changes?.length && (
+          <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1">
+            {entry.changes.map((change, i) => (
+              <Fragment key={i}>
+                <dt className="truncate font-mono text-muted-foreground" title={change.field}>
+                  {change.field}
+                </dt>
+                <dd className="break-words">
+                  <span className="text-muted-foreground line-through">{change.before ?? "—"}</span>
+                  {" → "}
+                  <span>{change.after ?? "—"}</span>
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
+        {entry.requestId && (
+          <p className="break-all text-muted-foreground">
+            Request <span className="font-mono">{entry.requestId}</span>
+            {entry.ip && ` · ${entry.ip}`}
+            {entry.userAgent && ` · ${entry.userAgent}`}
+          </p>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
 
 /** Every admin change, newest first. */
 export const AuditLogCard = () => {
   const { results, status, loadMore } = usePaginatedQuery(
+    // Integration: switch to api.admin.listAudit (same args, plus the detail fields).
     api.platformModels.listAudit,
     {},
     { initialNumItems: PAGE_SIZE },
@@ -84,7 +131,10 @@ export const AuditLogCard = () => {
                   {entry.action}
                 </Badge>
               </TableCell>
-              <TableCell className="text-xs break-words whitespace-normal">{entry.summary}</TableCell>
+              <TableCell className="text-xs break-words whitespace-normal">
+                {entry.summary}
+                <ChangeDetails entry={entry} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

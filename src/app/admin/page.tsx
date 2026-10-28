@@ -6,7 +6,7 @@ import { AuditLogCard } from "@/features/admin/components/audit-log-card";
 import { ModelsTab } from "@/features/admin/components/models-tab";
 import { PLATFORM_PROVIDER_IDS, platformProviderId } from "@/features/ai-providers/platform";
 import { AI_PROVIDERS } from "@/features/ai-providers/registry";
-import { PLATFORM_KEY_ENV, platformKeyOrNull } from "@/features/ai-providers/server/platform-model";
+import { platformKeyOrNull } from "@/features/ai-providers/server/platform-model";
 
 export const metadata: Metadata = { title: "Admin", robots: { index: false } };
 
@@ -20,7 +20,6 @@ const AdminPage = async () => {
   const providers = PLATFORM_PROVIDER_IDS.map((id) => ({
     id,
     label: AI_PROVIDERS[id].label,
-    keyEnvVar: PLATFORM_KEY_ENV[id],
     keyConfigured: platformKeyOrNull(id) !== null,
   }));
 
@@ -29,7 +28,7 @@ const AdminPage = async () => {
       <header className="space-y-1">
         <h1 className="text-xl font-semibold tracking-tight">Admin</h1>
         <p className="text-sm text-muted-foreground">
-          The AI provider and models behind the Codenaya key.
+          The models behind the Codenaya key, the provider each runs on, and what they cost.
         </p>
       </header>
 
@@ -39,7 +38,7 @@ const AdminPage = async () => {
           <TabsTrigger value="audit">Audit log</TabsTrigger>
         </TabsList>
         <TabsContent value="models" className="space-y-6">
-          <ModelsTab providers={providers} fallbackProvider={platformProviderId()} />
+          <ModelsTab providers={providers} fallbackProviderLabel={AI_PROVIDERS[platformProviderId()].label} />
         </TabsContent>
         <TabsContent value="audit">
           <AuditLogCard />
