@@ -27,6 +27,7 @@ import type * as platformModels from "../platformModels.js";
 import type * as projectCascade from "../projectCascade.js";
 import type * as projectCopy from "../projectCopy.js";
 import type * as projects from "../projects.js";
+import type * as promoClaims from "../promoClaims.js";
 import type * as showcase from "../showcase.js";
 import type * as skills from "../skills.js";
 import type * as stats from "../stats.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   projectCascade: typeof projectCascade;
   projectCopy: typeof projectCopy;
   projects: typeof projects;
+  promoClaims: typeof promoClaims;
   showcase: typeof showcase;
   skills: typeof skills;
   stats: typeof stats;
