@@ -15,20 +15,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import type { DraftModel } from "../catalog-draft";
 import type { CatalogDraft } from "../hooks/use-catalog-draft";
 import { MAX_PLATFORM_MODELS, type PlatformProviderId } from "../platform-models";
 import { AddModelsDialog } from "./add-models-dialog";
 import { CatalogRow } from "./catalog-row";
+import { ModelSheet } from "./model-sheet";
 import type { ProviderOption } from "./provider-picker";
 import { RouteDialog } from "./route-dialog";
-
-const COLUMNS = ["Model", "Provider", "Price", "Vision", "Tools", "Access", "Hidden", "Default", "Utility", "Test"];
 
 export const CatalogCard = ({
   draft,
@@ -46,7 +44,10 @@ export const CatalogCard = ({
 }) => {
   const [pendingRemove, setPendingRemove] = useState<DraftModel | null>(null);
   const [rerouting, setRerouting] = useState<DraftModel | null>(null);
+  // By id, so the sheet shows the draft's live values.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const models = draft.draft?.models ?? [];
+  const editing = models.find((m) => m.id === editingId) ?? null;
   const label = (id: PlatformProviderId) => providers.find((p) => p.id === id)?.label ?? id;
 
   const renderBody = () => {
@@ -73,44 +74,25 @@ export const CatalogCard = ({
       );
     }
     return (
-      // Wide on purpose: the table scrolls sideways on small screens.
-      <Table className="min-w-[78rem]">
-        <TableHeader>
-          <TableRow>
-            {COLUMNS.map((column) => (
-              <TableHead key={column}>{column}</TableHead>
-            ))}
-            <TableHead className="w-10">
-              <span className="sr-only">Remove</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {models.map((model) => (
-            <CatalogRow
-              key={model.id}
-              model={model}
-              draft={draft}
-              providerLabel={label(model.provider)}
-              isDefault={model.id === draft.draft?.defaultModelId}
-              isUtility={model.id === draft.draft?.utilityModelId}
-              onReroute={() => setRerouting(model)}
-              onRemove={() => setPendingRemove(model)}
-            />
-          ))}
-        </TableBody>
-      </Table>
+      <ul aria-label="Catalog models" className="divide-y">
+        {models.map((model) => (
+          <CatalogRow
+            key={model.id}
+            model={model}
+            providerLabel={label(model.provider)}
+            isDefault={model.id === draft.draft?.defaultModelId}
+            isUtility={model.id === draft.draft?.utilityModelId}
+            onEdit={() => setEditingId(model.id)}
+          />
+        ))}
+      </ul>
     );
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Models</CardTitle>
-        <CardDescription>
-          What users can pick on the Codenaya key, the provider that serves each, and what it
-          costs us in USD per 1M tokens (input and output blended 3:1, or apart under Advanced).
-        </CardDescription>
+        <CardTitle>Catalog</CardTitle>
         <CardAction className="flex items-center gap-2">
           {models.length > 0 && (
             <Badge variant="outline" className="tabular-nums">
@@ -132,6 +114,15 @@ export const CatalogCard = ({
         )}
         {renderBody()}
       </CardContent>
+
+      <ModelSheet
+        model={editing}
+        draft={draft}
+        providerLabel={editing ? label(editing.provider) : ""}
+        onReroute={() => setRerouting(editing)}
+        onRemove={() => setPendingRemove(editing)}
+        onClose={() => setEditingId(null)}
+      />
 
       <RouteDialog
         model={rerouting}
@@ -158,7 +149,15 @@ export const CatalogCard = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => pendingRemove && draft.remove(pendingRemove.id)}>Remove</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingRemove) return;
+                draft.remove(pendingRemove.id);
+                setEditingId(null);
+              }}
+            >
+              Remove
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

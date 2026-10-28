@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -25,18 +26,14 @@ interface ProviderKeyStatus extends ProviderOption {
 }
 
 const ProviderKeys = ({ providers }: { providers: ProviderKeyStatus[] }) => (
-  <section aria-label="Provider keys" className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-    <span className="text-muted-foreground">Provider keys</span>
+  <section aria-label="Provider keys" className="flex flex-wrap items-center gap-2 text-sm">
+    <span className="mr-1 text-muted-foreground">Provider keys</span>
     {providers.map((p) => (
-      <span key={p.id} className="flex items-center gap-1.5">
-        {p.keyConfigured ? (
-          <CircleCheckIcon className="size-4" aria-hidden="true" />
-        ) : (
-          <CircleDashedIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-        )}
+      <Badge key={p.id} variant="outline" className={p.keyConfigured ? undefined : "text-muted-foreground"}>
+        {p.keyConfigured ? <CircleCheckIcon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />}
         {p.label}
-        <span className="text-muted-foreground">{p.keyConfigured ? "set" : "not set"}</span>
-      </span>
+        {p.keyConfigured ? <span className="sr-only">set</span> : <span>not set</span>}
+      </Badge>
     ))}
   </section>
 );

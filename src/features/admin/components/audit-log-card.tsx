@@ -7,7 +7,7 @@ import { ChevronDownIcon, HistoryIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Empty,
@@ -41,7 +41,7 @@ const ChangeDetails = ({ entry }: { entry: AuditDetails }) => {
   return (
     <Collapsible className="mt-1">
       <CollapsibleTrigger asChild>
-        <Button variant="link" className="group h-auto gap-1 p-0 text-xs">
+        <Button variant="link" className="group h-auto gap-1 p-0 text-xs has-[>svg]:px-0">
           Details
           <ChevronDownIcon className="size-3 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
         </Button>
@@ -111,27 +111,32 @@ export const AuditLogCard = () => {
         <TableHeader>
           <TableRow>
             <TableHead className="w-28 sm:w-36">When</TableHead>
-            <TableHead className="hidden w-48 md:table-cell">Who</TableHead>
-            <TableHead className="hidden w-40 sm:table-cell">Action</TableHead>
+            <TableHead className="hidden w-48 lg:table-cell">Who</TableHead>
+            <TableHead className="hidden w-40 md:table-cell">Action</TableHead>
             <TableHead>Change</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {results.map((entry) => (
-            <TableRow key={entry._id} className="align-top">
+            <TableRow key={entry._id} className="[&>td]:align-top">
               <TableCell className="text-xs text-muted-foreground">
                 <time dateTime={new Date(entry.at).toISOString()} title={format(entry.at, "PPpp")}>
                   {formatDistanceToNow(entry.at, { addSuffix: true })}
                 </time>
               </TableCell>
-              <TableCell className="hidden truncate text-xs md:table-cell">{entry.actorEmail}</TableCell>
-              <TableCell className="hidden sm:table-cell">
-                <Badge variant="outline" className="font-mono">
+              <TableCell className="hidden truncate text-xs lg:table-cell">{entry.actorEmail}</TableCell>
+              <TableCell className="hidden md:table-cell">
+                <Badge variant="outline" className="block max-w-full truncate font-mono" title={entry.action}>
                   {entry.action}
                 </Badge>
               </TableCell>
               <TableCell className="text-xs break-words whitespace-normal">
                 {entry.summary}
+                {/* Who and Action have no column on narrow screens. */}
+                <p className="mt-1 break-all text-muted-foreground lg:hidden">
+                  {entry.actorEmail}
+                  <span className="block font-mono md:hidden">{entry.action}</span>
+                </p>
                 <ChangeDetails entry={entry} />
               </TableCell>
             </TableRow>
@@ -143,10 +148,6 @@ export const AuditLogCard = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Audit log</CardTitle>
-        <CardDescription>Who changed what, written with every save.</CardDescription>
-      </CardHeader>
       <CardContent className="space-y-4">
         {renderBody()}
         {(status === "CanLoadMore" || status === "LoadingMore") && (

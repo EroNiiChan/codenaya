@@ -55,8 +55,7 @@ test("the admin sees the model catalog", async ({ page }) => {
   await signInWithTicket(page, admin.id);
 
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Models" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Models" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Provider keys" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add models" })).toBeVisible();
 
@@ -67,6 +66,8 @@ test("the admin sees the model catalog", async ({ page }) => {
   });
   expect(crossSite.status()).toBe(403);
 
-  await page.getByRole("tab", { name: "Audit log" }).click();
-  await expect(page.getByText("Who changed what")).toBeVisible();
+  // The section nav renders as a sidebar or as tabs, depending on width.
+  await page.getByRole("navigation", { name: "Admin" }).filter({ visible: true }).getByRole("link", { name: "Audit log" }).click();
+  await expect(page).toHaveURL(/\/admin\/audit$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Audit log" })).toBeVisible();
 });
