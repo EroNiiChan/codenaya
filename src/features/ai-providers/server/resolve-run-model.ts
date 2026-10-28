@@ -4,7 +4,9 @@ import { z } from "zod";
 import { convex } from "@/lib/convex-client";
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
-import { resolvePlatformModel } from "../platform";
+import { PROMO_REFUSAL_MESSAGES } from "@/features/promotions/github-promo";
+
+import { promoOnlyModels, resolvePlatformModel } from "../platform";
 import {
   modelAcceptsImages,
   modelIdsFor,
@@ -100,6 +102,9 @@ const visionRequired = (label: string) =>
  * (/admin, else its catalog) fall back to its default, and a platform without
  * a key is refused; a BYOK choice must name a key the caller owns and a model
  * that key's provider offers. With `withImages`, the model must accept images.
+ *
+ * A promo model (ADR 0009) needs the caller's claim, and an Opus one takes one
+ * of their promo runs here: call this once per send, just before creating it.
  */
 export async function validateModelChoice({
   internalKey,
@@ -118,10 +123,22 @@ export async function validateModelChoice({
     if (!isPlatformConfigured(provider)) {
       throw new ModelChoiceError(AI_NOT_CONFIGURED_MESSAGE, 503, "ai_not_configured");
     }
-    const model = resolvePlatformModel(provider, config, modelId);
+    const promoModel = promoOnlyModels(provider, config).find((m) => m.id === modelId);
+    const model = promoModel ?? resolvePlatformModel(provider, config, modelId);
     const label = runModelLabel(model);
     if (withImages && !model.vision) {
       throw visionRequired(label);
+    }
+    if (promoModel) {
+      // After the vision check, so a refused send doesn't use a run.
+      const refusal = await convex.mutation(api.promoClaims.takeRun, {
+        internalKey,
+        userId,
+        kind: promoModel.kind,
+      });
+      if (refusal) {
+        throw new ModelChoiceError(PROMO_REFUSAL_MESSAGES[refusal], 403, `promo_${refusal}`);
+      }
     }
     return { modelId: model.id, label };
   }
@@ -229,7 +246,16 @@ export async function resolveRunModel({
     if (!isPlatformConfigured(provider)) {
       throw new ProviderKeyError(AI_NOT_CONFIGURED_MESSAGE);
     }
-    const modelId = resolvePlatformModel(provider, config, choice.modelId).id;
+    const promoModel = promoOnlyModels(provider, config).find((m) => m.id === choice.modelId);
+    // The send took the run and checked the end date; the run re-checks only
+    // the claim, so a run queued just before the end still goes ahead.
+    if (
+      promoModel &&
+      !(await convex.query(api.promoClaims.hasClaimForProjectOwner, { internalKey, projectId }))
+    ) {
+      throw new ProviderKeyError(PROMO_REFUSAL_MESSAGES.not_claimed);
+    }
+    const modelId = promoModel?.id ?? resolvePlatformModel(provider, config, choice.modelId).id;
     return {
       coding: (temperature) => platformAgentModel(provider, modelId, temperature),
       title: (temperature) => platformAgentModel(provider, platformTitleModel(provider), temperature),

@@ -11,7 +11,9 @@ import {
   useAiPreferences,
   useAiProviderKeys,
   usePlatformModels,
+  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
+import type { PromoModel } from "@/features/promotions/github-promo";
 import type { AiProviderKeySummary } from "../../../../convex/aiProviders";
 
 import type { AgentModelChoice } from "../agent-models";
@@ -87,17 +89,20 @@ function setModel(model: AgentModelChoice) {
 
 /**
  * Whether a choice can still be sent: one of the platform provider's models,
- * or a model of one of the user's keys. While either list is loading the
- * choice is kept; the server validates it either way.
+ * a promo model the user claimed, or a model of one of the user's keys. While
+ * either list is loading the choice is kept; the server validates it either way.
  */
 function isAvailable(
   choice: AgentModelChoice,
   keys: AiProviderKeySummary[] | undefined,
   platform: ActivePlatform | undefined,
+  promoModels: readonly PromoModel[],
 ) {
   if (!choice.keyId) {
     if (!platform) return true;
-    return platformModels(platform.provider, platform.config).some((m) => m.id === choice.modelId);
+    return [...platformModels(platform.provider, platform.config), ...promoModels].some(
+      (m) => m.id === choice.modelId,
+    );
   }
   if (!keys) return true;
   const key = keys.find((k) => k._id === choice.keyId);
@@ -119,6 +124,7 @@ export function useAgentModel() {
   const keys = useAiProviderKeys();
   const preferences = useAiPreferences();
   const platform = usePlatformModels();
+  const promoModels = usePromoModels(platform);
   const fallback = platform ?? { provider: platformProviderId(), config: null };
 
   const preferred: AgentModelChoice | null = preferences
@@ -131,7 +137,7 @@ export function useAgentModel() {
   const model =
     [stored, preferred].find(
       (choice): choice is AgentModelChoice =>
-        choice !== null && isAvailable(choice, keys, platform),
+        choice !== null && isAvailable(choice, keys, platform, promoModels),
     ) ?? { modelId: resolvePlatformModel(fallback.provider, fallback.config, undefined).id };
 
   return [model, setModel] as const;

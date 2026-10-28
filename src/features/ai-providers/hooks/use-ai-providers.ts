@@ -1,7 +1,14 @@
 import ky, { HTTPError } from "ky";
 import { useMutation, useQuery } from "convex/react";
 
-import { type ActivePlatform, platformConfigFrom, platformProviderId } from "../platform";
+import { usePromoActive, usePromoClaim } from "@/features/promotions/hooks/use-promo";
+
+import {
+  type ActivePlatform,
+  platformConfigFrom,
+  platformProviderId,
+  promoOnlyModels,
+} from "../platform";
 import type { AiProviderId } from "../registry";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -28,6 +35,17 @@ export const usePlatformModels = (): ActivePlatform | undefined => {
 /** `usePlatformModels`, showing the env provider's catalog until it loads. */
 export const usePlatformModelsOrCatalog = (): ActivePlatform =>
   usePlatformModels() ?? { provider: platformProviderId(), config: null };
+
+/**
+ * The promotion's models the user may pick on top of the platform's (ADR
+ * 0009): only with a claim, while the promotion runs. Empty while loading.
+ */
+export const usePromoModels = (platform: ActivePlatform | undefined) => {
+  const claim = usePromoClaim();
+  const active = usePromoActive();
+  if (!platform || !claim || !active) return [];
+  return promoOnlyModels(platform.provider, platform.config);
+};
 
 export const useRemoveAiProviderKey = () => useMutation(api.aiProviders.remove);
 

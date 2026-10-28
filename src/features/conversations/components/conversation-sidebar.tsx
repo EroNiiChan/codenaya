@@ -39,10 +39,12 @@ import { useProjectIntegrations } from "@/features/integrations/components/proje
 import {
   useAiProviderKeys,
   usePlatformModelsOrCatalog,
+  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
 import { modelAcceptsImages } from "@/features/ai-providers/registry";
-import { resolvePlatformModel } from "@/features/ai-providers/platform";
+import { resolvePickableModel } from "@/features/ai-providers/platform";
 import { detectCredential } from "@/features/integrations/credential-guard";
+import { isPromoRefusalCode } from "@/features/promotions/github-promo";
 import { useEditor } from "@/features/editor/hooks/use-editor";
 import { useFiles } from "@/features/projects/hooks/use-files";
 import {
@@ -106,9 +108,11 @@ export const ConversationSidebar = ({
   // A key still loading (or gone) is left to the server to check.
   const modelKeys = useAiProviderKeys();
   const platform = usePlatformModelsOrCatalog();
+  const promoModels = usePromoModels(platform);
   const modelKey = modelKeys?.find((key) => key._id === agentModel.keyId);
   const acceptsImages = !agentModel.keyId
-    ? resolvePlatformModel(platform.provider, platform.config, agentModel.modelId).vision === true
+    ? resolvePickableModel(platform.provider, platform.config, promoModels, agentModel.modelId)
+        .vision === true
     : !modelKey || modelAcceptsImages(agentModel.modelId, modelKey);
   const [
     selectedConversationId,
@@ -280,8 +284,9 @@ export const ConversationSidebar = ({
           openIntegrations();
           return "blocked";
         }
-        // Platform AI has no key: nothing was saved, so keep the draft.
-        if (body.code === "ai_not_configured" && body.error) {
+        // Platform AI has no key, or a promo model can't run (ADR 0009):
+        // nothing was saved, so keep the draft.
+        if ((body.code === "ai_not_configured" || isPromoRefusalCode(body.code)) && body.error) {
           toast.error(body.error);
           return "blocked";
         }
