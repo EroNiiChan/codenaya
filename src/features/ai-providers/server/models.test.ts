@@ -27,7 +27,7 @@ describe("buildAgentKitModel", () => {
     expect(model.options.defaultParameters).toBeUndefined();
   });
 
-  it("sets max_tokens for Anthropic, which requires it", () => {
+  it("sets max_tokens for Anthropic, which requires it, and never temperature, which it rejects", () => {
     const model = buildAgentKitModel({
       provider: "anthropic",
       apiKey: "sk-ant-test",
@@ -36,10 +36,7 @@ describe("buildAgentKitModel", () => {
     });
     expect(model.format).toBe("anthropic");
     expect(model.url).toBe("https://api.anthropic.com/v1/messages");
-    expect(model.options.defaultParameters).toEqual({
-      max_tokens: ANTHROPIC_MAX_TOKENS,
-      temperature: 0,
-    });
+    expect(model.options.defaultParameters).toEqual({ max_tokens: ANTHROPIC_MAX_TOKENS });
   });
 
   it("uses the stored base URL for a custom endpoint", () => {
