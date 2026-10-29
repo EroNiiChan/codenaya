@@ -76,7 +76,8 @@ describe("processMessage credit metering", () => {
     ]);
 
     const records = usageRecords();
-    expect(records).toHaveLength(2);
+    // One per inference, then the final one that catches up a failed last record.
+    expect(records).toHaveLength(3);
     expect(records[0]).toEqual({
       internalKey: "ik",
       messageId: "m1",
@@ -87,6 +88,7 @@ describe("processMessage credit metering", () => {
     });
     expect(records[1]).toMatchObject({ inputTokens: 1_900, outputTokens: 1_100 });
     expect(records[1].costUsd).toBeCloseTo(0.021, 10);
+    expect(records[2]).toEqual(records[1]);
   });
 
   it("still finishes the run when recording usage fails", async () => {

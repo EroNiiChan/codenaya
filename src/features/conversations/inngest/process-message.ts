@@ -238,16 +238,12 @@ export const processMessage = inngest.createFunction(
     //
     // Running totals, rebuilt from the memoized inferences on every replay, so
     // each record step sends the run's total so far: a retried step changes
-    // nothing, and one that failed is caught up by the next.
+    // nothing, and one that failed is caught up by the next (or the final one).
     const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
     let usageRecords = 0;
-    const recordUsage = async (raw: string | undefined, pricing: ModelPricing | undefined) => {
-      const tokens = usageOfResponse(raw);
-      usage.inputTokens += tokens.inputTokens;
-      usage.outputTokens += tokens.outputTokens;
-      usage.costUsd += pricing ? costUsd(pricing, tokens) : 0;
+    const sendUsage = (id: string) => {
       const totals = { ...usage };
-      await step.run(`record-usage-${++usageRecords}`, async () => {
+      return step.run(id, async () => {
         try {
           await convex.mutation(api.credits.recordRunUsage, {
             internalKey,
@@ -259,6 +255,13 @@ export const processMessage = inngest.createFunction(
           console.error("[credits] failed to record run usage", error);
         }
       });
+    };
+    const recordUsage = async (raw: string | undefined, pricing: ModelPricing | undefined) => {
+      const tokens = usageOfResponse(raw);
+      usage.inputTokens += tokens.inputTokens;
+      usage.outputTokens += tokens.outputTokens;
+      usage.costUsd += pricing ? costUsd(pricing, tokens) : 0;
+      await sendUsage(`record-usage-${++usageRecords}`);
     };
 
     // Fetch recent messages for conversation context
@@ -798,6 +801,11 @@ export const processMessage = inngest.createFunction(
         typeof textMessage.content === "string"
           ? textMessage.content
           : textMessage.content.map((c) => c.text).join("");
+    }
+
+    // A failed last record has no later one to catch it up.
+    if (usageRecords > 0) {
+      await sendUsage("record-usage-final");
     }
 
     // Update the assistant message with the response (this also sets status to completed)

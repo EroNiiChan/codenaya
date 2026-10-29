@@ -35,8 +35,9 @@ Constraints:
   inference (the title included) a `record-usage-N` step sends them to
   `credits.recordRunUsage`. The mutation ignores totals that didn't grow and charges
   the account only `creditsForCost(total) − credits already charged`. A retried or
-  replayed step is a no-op, a failed one is caught up by the next, and a cancelled or
-  failed run is charged for what it used. A failure to record is logged and never
+  replayed step is a no-op, and a failed one is caught up by the next, or by the
+  `record-usage-final` step at the end of a finished run. A cancelled or failed run
+  is charged for what it used. A failure to record is logged and never
   fails the run. The owner comes from the message's project, not from the caller.
 - **Cost is the catalog price.** `costUsd(route pricing, tokens)` for the coding model and
   the utility (title) model. `RunModel.metering` carries `source` and both prices. The
