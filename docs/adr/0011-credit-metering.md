@@ -46,7 +46,9 @@ Constraints:
   (`usageOfResponse`: OpenAI chat or Anthropic shape).
 - **Enforced at send.** `validateModelChoice` reads the account in parallel with the
   catalog. A platform model that isn't a promo model is refused with `402` /
-  `insufficient_credits` when the month or the day has nothing left. Promo models
+  `insufficient_credits` when the month or the day has nothing left, but only when
+  `CREDIT_LIMITS_ENFORCED=true`: until billing is live the cap is off and usage is
+  only recorded. Promo models
   (ADR 0009) and BYOK keys are never credit-checked. A run that starts with credits left
   may finish past zero; the next send is refused. The agent run doesn't re-check
   credits: the send is the gate, and an overshoot is bounded by the per-owner
