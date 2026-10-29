@@ -96,14 +96,16 @@ export const catalogModelValidator = v.object({
   hidden: v.boolean(),
 });
 
+/** A credit account's plan (ADR 0011); see `PLANS` in `features/billing/plans.ts`. */
+export const planIdValidator = v.union(v.literal("free"), v.literal("pro"));
+/** Who pays for a run (ADR 0011). Only "platform" runs cost credits. */
+export const runSourceValidator = v.union(v.literal("platform"), v.literal("promo"), v.literal("byok"));
+
 /**
  * The model an assistant message was produced with. `keyId` is set when the
  * run used the user's own key (BYOK), which is what billing reads to charge no
  * credits. `label` is the "provider · model" shown on the run block.
  */
-export const planIdValidator = v.union(v.literal("free"), v.literal("pro"));
-export const runSourceValidator = v.union(v.literal("platform"), v.literal("promo"), v.literal("byok"));
-
 export const runModelValidator = v.object({
   keyId: v.optional(v.id("aiProviderKeys")),
   modelId: v.string(),

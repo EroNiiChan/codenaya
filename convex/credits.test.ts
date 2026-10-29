@@ -102,6 +102,22 @@ describe("credits.recordRunUsage", () => {
     expect(await account(t)).toMatchObject({ periodStartsAt: Date.UTC(2026, 10, 1), periodUsed: 3, dayUsed: 3 });
   });
 
+  test("rejects totals that aren't finite or are negative, and never lowers one", async () => {
+    const t = setup();
+    const messageId = await seedMessage(t);
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      await expect(record(t, messageId, { inputTokens: 1, outputTokens: 1, costUsd: bad })).rejects.toThrow();
+    }
+    expect(await account(t)).toBeNull();
+
+    await record(t, messageId, { inputTokens: 100, outputTokens: 10, costUsd: 0.1 });
+    // Out of order: more input, less output than stored.
+    await record(t, messageId, { inputTokens: 200, outputTokens: 5, costUsd: 0.1 });
+    const [row] = await t.run((ctx) => ctx.db.query("creditLedger").collect());
+    expect(row).toMatchObject({ inputTokens: 200, outputTokens: 10, costUsd: 0.1, credits: 15 });
+    expect(await account(t)).toMatchObject({ periodUsed: 15 });
+  });
+
   test("refuses a wrong internal key", async () => {
     const t = setup();
     const messageId = await seedMessage(t);

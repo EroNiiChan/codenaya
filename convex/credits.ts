@@ -4,6 +4,7 @@ import { creditsForCost, currentUsage } from "../src/features/billing/credits";
 import type { Doc } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
+import { appError } from "./errors";
 import { validateInternalKey } from "./internalKey";
 import { planIdValidator, runSourceValidator } from "./schema";
 
@@ -75,9 +76,9 @@ async function chargeAccount(ctx: MutationCtx, userId: string, credits: number, 
 /**
  * Records an agent run's usage so far: the run's running totals, sent after
  * every inference so a cancelled or failed run is still charged for what it
- * used. Totals replace the row's, and only when they grew, so a retried or
- * replayed step changes nothing. Only the credits the new totals add are
- * charged. The owner comes from the message's project, not the caller.
+ * used. Each total only grows (the row keeps the larger of old and new), so a
+ * retried or replayed step changes nothing. Only the credits the new totals
+ * add are charged. The owner comes from the message's project, not the caller.
  */
 export const recordRunUsage = mutation({
   args: {
@@ -91,6 +92,9 @@ export const recordRunUsage = mutation({
   returns: v.null(),
   handler: async (ctx, { internalKey, messageId, source, ...totals }) => {
     validateInternalKey(internalKey);
+    if (!Object.values(totals).every((n) => Number.isFinite(n) && n >= 0)) {
+      throw appError("INVALID_ARGUMENT", "Usage totals must be finite and not negative");
+    }
     const message = await ctx.db.get("messages", messageId);
     const project = message && (await ctx.db.get("projects", message.projectId));
     // The project was deleted mid-run: nobody left to charge.
@@ -109,9 +113,16 @@ export const recordRunUsage = mutation({
       return null;
     }
 
+    const grown = row
+      ? {
+          inputTokens: Math.max(row.inputTokens, totals.inputTokens),
+          outputTokens: Math.max(row.outputTokens, totals.outputTokens),
+          costUsd: Math.max(row.costUsd, totals.costUsd),
+        }
+      : totals;
     const now = Date.now();
-    const credits = source === "platform" ? creditsForCost(totals.costUsd) : 0;
-    const fields = { ...totals, credits, updatedAt: now };
+    const credits = source === "platform" ? creditsForCost(grown.costUsd) : 0;
+    const fields = { ...grown, credits, updatedAt: now };
     if (row) {
       await ctx.db.patch("creditLedger", row._id, fields);
     } else {

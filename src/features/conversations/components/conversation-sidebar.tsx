@@ -285,7 +285,11 @@ export const ConversationSidebar = ({
         // Platform AI has no key, a promo model can't run (ADR 0009), or the
         // user is out of credits (ADR 0011):
         // nothing was saved, so keep the draft.
-        if ((body.code === "ai_not_configured" || body.code === INSUFFICIENT_CREDITS_CODE || isPromoRefusalCode(body.code)) && body.error) {
+        const refused =
+          body.code === "ai_not_configured" ||
+          body.code === INSUFFICIENT_CREDITS_CODE ||
+          isPromoRefusalCode(body.code);
+        if (refused && body.error) {
           toast.error(body.error);
           return "blocked";
         }

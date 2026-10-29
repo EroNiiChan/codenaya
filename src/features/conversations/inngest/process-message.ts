@@ -308,9 +308,9 @@ export const processMessage = inngest.createFunction(
 
       let output;
       try {
-        let raw;
-        ({ output, raw } = await titleAgent.run(request, { step }));
-        await recordUsage(raw, runModel.metering.title);
+        const result = await titleAgent.run(request, { step });
+        output = result.output;
+        await recordUsage(result.raw, runModel.metering.title);
       } catch (error) {
         return await endRunOnKeyRejection(error);
       }

@@ -67,7 +67,11 @@ export const useCreateProjectFromPrompt = () => {
           }
           // Platform AI has no key, a promo model can't run, or credits ran out;
           // nothing was created.
-          if ((body.code === "ai_not_configured" || body.code === INSUFFICIENT_CREDITS_CODE || isPromoRefusalCode(body.code)) && body.error) {
+          const refused =
+            body.code === "ai_not_configured" ||
+            body.code === INSUFFICIENT_CREDITS_CODE ||
+            isPromoRefusalCode(body.code);
+          if (refused && body.error) {
             toast.error(body.error);
             return false;
           }
