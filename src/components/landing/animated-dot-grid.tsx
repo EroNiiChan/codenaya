@@ -85,7 +85,7 @@ export const AnimatedDotGrid = ({
     let isTabVisible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
     let width = 0;
     let height = 0;
-    let streams: Stream[] = [];
+    const streams: Stream[] = [];
     let lastTime = performance.now();
 
     // Read --brand token dynamically (Issue #417)
@@ -210,7 +210,7 @@ export const AnimatedDotGrid = ({
 
     const render = (now: number) => {
       // Acceptance criteria: stop RAF loop immediately when offscreen/hidden
-      if (!isIntersecting || !isDocVisible || prefersReducedMotion) {
+      if (!isIntersecting || !isTabVisible || prefersReducedMotion) {
         animationFrameId = null;
         return;
       }
@@ -244,12 +244,15 @@ export const AnimatedDotGrid = ({
         }
       }
 
-      // Group streams by column ONCE per frame (Issue #417 performance fix)
-      const streamsByCol = new Map<number, Stream>();
+      // Group streams by column preserving all streams per column
+      const streamsByCol = new Map<number, Stream[]>();
       for (let i = 0; i < streams.length; i++) {
         const s = streams[i];
-        if (!streamsByCol.has(s.col)) {
-          streamsByCol.set(s.col, s);
+        const existing = streamsByCol.get(s.col);
+        if (existing) {
+          existing.push(s);
+        } else {
+          streamsByCol.set(s.col, [s]);
         }
       }
 
@@ -258,7 +261,7 @@ export const AnimatedDotGrid = ({
       // Render grid points
       for (let c = 0; c < cols; c++) {
         const x = c * spacing;
-        const colStream = streamsByCol.get(c);
+        const colStreams = streamsByCol.get(c);
 
         for (let r = 0; r < rows; r++) {
           const y = r * spacing;
@@ -268,21 +271,24 @@ export const AnimatedDotGrid = ({
           let isAccent = (c * 17 + r * 23) % 19 === 0;
           let isHead = false;
 
-          if (colStream) {
-            const headY = colStream.y;
-            const distBehindHead = headY - y;
+          if (colStreams && colStreams.length > 0) {
+            for (let si = 0; si < colStreams.length; si++) {
+              const colStream = colStreams[si];
+              const headY = colStream.y;
+              const distBehindHead = headY - y;
 
-            if (distBehindHead >= -spacing * 0.5 && distBehindHead <= colStream.length) {
-              if (distBehindHead < spacing * 0.8) {
-                isHead = true;
-                alpha = 0.95;
-                radius = 2.4;
-                if (colStream.isAmber) isAccent = true;
-              } else {
-                const progress = 1 - distBehindHead / colStream.length;
-                alpha = Math.max(alpha, 0.12 + progress * 0.65);
-                radius = Math.max(radius, 1.2 + progress * 1.0);
-                if (colStream.isAmber && progress > 0.3) isAccent = true;
+              if (distBehindHead >= -spacing * 0.5 && distBehindHead <= colStream.length) {
+                if (distBehindHead < spacing * 0.8) {
+                  isHead = true;
+                  alpha = 0.95;
+                  radius = 2.4;
+                  if (colStream.isAmber) isAccent = true;
+                } else {
+                  const progress = 1 - distBehindHead / colStream.length;
+                  alpha = Math.max(alpha, 0.12 + progress * 0.65);
+                  radius = Math.max(radius, 1.2 + progress * 1.0);
+                  if (colStream.isAmber && progress > 0.3) isAccent = true;
+                }
               }
             }
           }
