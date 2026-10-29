@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { generateObject } from "ai";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
+import { AI_PROVIDERS } from "../registry";
 import { ANTHROPIC_MAX_TOKENS, buildAgentKitModel } from "./agentkit-model";
 import { buildAiSdkModel } from "./ai-sdk-model";
 
@@ -61,4 +64,43 @@ describe("buildAiSdkModel", () => {
     expect(model.provider).toBe(sdkProvider);
     expect(model.modelId).toBe("m-1");
   });
+});
+
+describe("buildAiSdkModel on Anthropic", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // The editor routes call generateObject. Current Claude models reject a
+  // forced tool_choice, so structured output must go through output_config.
+  it.each(AI_PROVIDERS.anthropic.models.map((model) => model.id))(
+    "asks %s for JSON with output_config, not a forced tool",
+    async (modelId) => {
+      const fetchMock = vi.fn(async () =>
+        Response.json({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: modelId,
+          content: [{ type: "text", text: '{"editedCode":"x"}' }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { object } = await generateObject({
+        model: buildAiSdkModel({ provider: "anthropic", apiKey: "sk-ant-test", model: modelId }),
+        output: "object",
+        schema: z.object({ editedCode: z.string() }),
+        prompt: "Edit",
+      });
+
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      const body = JSON.parse(init.body as string);
+      expect(body.tool_choice).toBeUndefined();
+      expect(body.output_config.format.type).toBe("json_schema");
+      expect(object).toEqual({ editedCode: "x" });
+    },
+  );
 });
