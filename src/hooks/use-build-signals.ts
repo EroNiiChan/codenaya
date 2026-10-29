@@ -35,8 +35,10 @@ export const formatBuildTitle = (
   return baseTitle;
 };
 
-// ─── Web Audio API Synthesizer with Proper Lifecycle & Unlock ──────────
+// ─── Web Audio API Synthesizer with User Gesture Unlock ───────────────
 
+// Standard web audio practice for UI sound effects: keep a single lazily-initialized
+// AudioContext across the session and let the browser manage origin lifecycle.
 let sharedAudioContext: AudioContext | null = null;
 
 export const getAudioContext = (): AudioContext | null => {
@@ -51,13 +53,6 @@ export const getAudioContext = (): AudioContext | null => {
     }
   }
   return sharedAudioContext;
-};
-
-export const closeAudioContext = () => {
-  if (sharedAudioContext && sharedAudioContext.state !== "closed") {
-    sharedAudioContext.close().catch(() => {});
-    sharedAudioContext = null;
-  }
 };
 
 /**
@@ -184,7 +179,17 @@ export const updateFaviconBadge = (status: BuildSignalStatus) => {
   img.src = originalFaviconHref;
 };
 
-// ─── Preferences Hook with Same-Tab and Cross-Tab Reactivity ───────────
+// ─── Preferences Hook with Single Subscription & Snapshot Cache ────────
+
+interface PreferencesSnapshot {
+  soundEnabled: boolean;
+  notifEnabled: boolean;
+}
+
+let cachedPreferencesSnapshot: PreferencesSnapshot = {
+  soundEnabled: false,
+  notifEnabled: false,
+};
 
 const subscribeToStorage = (callback: () => void) => {
   if (typeof window === "undefined") return () => {};
@@ -196,35 +201,28 @@ const subscribeToStorage = (callback: () => void) => {
   };
 };
 
-const getSoundSnapshot = (): boolean => {
-  if (typeof window === "undefined") return false;
+const getPreferencesSnapshot = (): PreferencesSnapshot => {
+  if (typeof window === "undefined") return cachedPreferencesSnapshot;
   try {
-    return localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.SOUND) === "true";
+    const sound = localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.SOUND) === "true";
+    const notif = localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION) === "true";
+    if (
+      cachedPreferencesSnapshot.soundEnabled !== sound ||
+      cachedPreferencesSnapshot.notifEnabled !== notif
+    ) {
+      cachedPreferencesSnapshot = { soundEnabled: sound, notifEnabled: notif };
+    }
   } catch {
-    return false;
+    // Ignore
   }
-};
-
-const getNotifSnapshot = (): boolean => {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION) === "true";
-  } catch {
-    return false;
-  }
+  return cachedPreferencesSnapshot;
 };
 
 export const useBuildSignalPreferences = () => {
-  const soundEnabled = useSyncExternalStore(
+  const { soundEnabled, notifEnabled } = useSyncExternalStore(
     subscribeToStorage,
-    getSoundSnapshot,
-    () => false
-  );
-
-  const notifEnabled = useSyncExternalStore(
-    subscribeToStorage,
-    getNotifSnapshot,
-    () => false
+    getPreferencesSnapshot,
+    () => cachedPreferencesSnapshot
   );
 
   const [permission, setPermission] = useState<
@@ -325,7 +323,7 @@ export const useBuildSignals = ({
   const prevRunRef = useRef<ActiveRun | null | undefined>(activeRun);
   const baseTitleRef = useRef<string>("");
 
-  // Initialize AudioContext user gesture unlock with proper cleanup
+  // Initialize AudioContext user gesture unlock with proper listener cleanup
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -342,7 +340,6 @@ export const useBuildSignals = ({
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
-      closeAudioContext();
     };
   }, []);
 
