@@ -28,14 +28,20 @@ const idKey = (id: string) => compact(id.split("/").pop()!);
  */
 export function referencePriceIndex(models: FetchedModel[]): Map<string, number> {
   const index = new Map<string, number>();
+  // A key two rows price differently is ambiguous: no hint beats a wrong one.
+  const ambiguous = new Set<string>();
   for (const { id, name, inputUsdPerMTok: input, outputUsdPerMTok: output } of models) {
     if (input === undefined || output === undefined) continue;
     const price = Number(blendPrices(input, output).toFixed(6));
     if (price <= 0) continue;
     for (const key of [normalizeModelName(name), idKey(id)]) {
-      if (key && !index.has(key)) index.set(key, price);
+      if (!key) continue;
+      const known = index.get(key);
+      if (known === undefined) index.set(key, price);
+      else if (known !== price) ambiguous.add(key);
     }
   }
+  for (const key of ambiguous) index.delete(key);
   return index;
 }
 
@@ -56,6 +62,6 @@ export async function fetchReferencePrices(): Promise<Map<string, number>> {
 
 export const withReferencePrices = (models: FetchedModel[], index: Map<string, number>): ListedModel[] =>
   models.map((model) => {
-    const referencePrice = index.get(normalizeModelName(model.name)) ?? index.get(idKey(model.id));
+    const referencePrice = index.get(idKey(model.id)) ?? index.get(normalizeModelName(model.name));
     return referencePrice === undefined ? model : { ...model, referencePrice };
   });

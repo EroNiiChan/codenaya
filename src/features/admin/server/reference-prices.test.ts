@@ -44,6 +44,23 @@ describe("reference prices", () => {
     expect(models.map((m) => m.referencePrice)).toEqual([8, 0.2, undefined, undefined]);
   });
 
+  it("prefers the id key and drops a name two rows price differently", () => {
+    const row = (id: string, name: string, price: number) => ({
+      id, name, vendor: "x", vision: false, tools: true, inputUsdPerMTok: price, outputUsdPerMTok: price,
+    });
+    const index = referencePriceIndex([row("x/fast-a", "X: Fast", 1), row("x/fast-b", "X: Fast", 2)]);
+
+    const models = withReferencePrices(
+      [
+        { id: "fast-b", name: "Fast", vendor: "x", vision: null, tools: null },
+        { id: "fast-c", name: "Fast", vendor: "x", vision: null, tools: null },
+      ],
+      index,
+    );
+
+    expect(models.map((m) => m.referencePrice)).toEqual([2, undefined]);
+  });
+
   it("fetches OpenRouter's public list without a key", async () => {
     const fetchMock = vi
       .fn()

@@ -18,28 +18,36 @@ export const MAX_MODEL_VENDOR_LENGTH = 60;
 /** USD per 1M tokens. Far above any real price; catches a per-token value pasted ×1e6. */
 export const MAX_USD_PER_MTOK = 1000;
 
-/** A blended price moving more than this fraction from the saved one needs confirming. */
+/** A price moving more than this fraction from the saved one needs confirming. */
 export const RISKY_PRICE_CHANGE_RATIO = 0.5;
+
+const isBigChange = (price: number, before: number) =>
+  Math.abs(price - before) > RISKY_PRICE_CHANGE_RATIO * before;
 
 /**
  * Ids of the models whose price needs `confirmRiskyPrices` (ADR 0010): a new
  * or changed $0 blended price, or one more than `RISKY_PRICE_CHANGE_RATIO`
- * away from the saved price of the same id. An unchanged price never asks
+ * away from the saved price of the same id (blended, or either side of two
+ * split prices, so $4/$20 → $8/$8 asks too). An unchanged price never asks
  * again, so free models don't prompt on every save.
  */
 export const riskyPriceModelIds = (
   saved: readonly Pick<CatalogModel, "id" | "pricing">[],
   models: readonly Pick<CatalogModel, "id" | "pricing">[],
 ): string[] => {
-  const savedPrices = new Map(saved.map((m) => [m.id, blendedUsdPerMTok(m.pricing)]));
+  const savedPricing = new Map(saved.map((m) => [m.id, m.pricing]));
   return models
-    .filter((model) => {
-      const price = blendedUsdPerMTok(model.pricing);
-      const before = savedPrices.get(model.id);
-      if (price === before) return false;
+    .filter(({ id, pricing }) => {
+      const price = blendedUsdPerMTok(pricing);
+      const before = savedPricing.get(id);
+      if (price === 0) return !before || blendedUsdPerMTok(before) !== 0;
+      if (!before) return false;
+      if (isBigChange(price, blendedUsdPerMTok(before))) return true;
       return (
-        price === 0 ||
-        (before !== undefined && Math.abs(price - before) > RISKY_PRICE_CHANGE_RATIO * before)
+        pricing.mode === "split" &&
+        before.mode === "split" &&
+        (isBigChange(pricing.inputUsdPerMTok, before.inputUsdPerMTok) ||
+          isBigChange(pricing.outputUsdPerMTok, before.outputUsdPerMTok))
       );
     })
     .map((model) => model.id);

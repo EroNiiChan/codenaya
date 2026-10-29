@@ -8,7 +8,7 @@ import {
   riskyPriceModelIds,
 } from "../src/features/admin/platform-models";
 import type { CatalogModel, ModelPricing } from "../src/features/ai-providers/catalog";
-import { MAX_MODEL_ID_LENGTH } from "../src/features/ai-providers/registry";
+import { AI_PROVIDERS, MAX_MODEL_ID_LENGTH } from "../src/features/ai-providers/registry";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
 import { type Admin, type AuditChange, requireAdmin, writeAudit } from "./admin";
@@ -77,6 +77,10 @@ function assertValidCatalog({ models, defaultModelId, utilityModelId }: Catalog)
     }
     if (!pricesOf(model.pricing).every(isPrice)) {
       throw invalid(`Prices for ${model.id} must be between $0 and $${MAX_USD_PER_MTOK} per 1M tokens`);
+    }
+    // AgentKit's Anthropic adapter is text-only, so images would never reach it.
+    if (model.provider === "anthropic" && model.vision) {
+      throw invalid(`${model.id} can't accept images on the Anthropic route`);
     }
   }
   // Every user's runs may land on these, so they must be open to everyone. The
@@ -375,6 +379,8 @@ export const migrateFromProviderConfigs = internalMutation({
 
     const migrated = config.models.map(({ inputUsdPerMTok, outputUsdPerMTok, ...model }) => ({
       ...model,
+      // Same rule `save` enforces: the Anthropic route is text-only.
+      vision: model.vision && provider !== "anthropic",
       provider,
       providerModelId: model.id,
       pricing:
@@ -390,10 +396,12 @@ export const migrateFromProviderConfigs = internalMutation({
     const promo = (PROMO_SEEDS[provider] ?? [])
       .filter((m) => !listed.has(m.id))
       .slice(0, Math.max(0, MAX_PLATFORM_MODELS - migrated.length));
+    // Titles ran on the provider's `titleModel`; keep it when the selection had it.
+    const titleModelId = AI_PROVIDERS[provider].titleModel;
     const catalog: Catalog = {
       models: [...migrated, ...promo],
       defaultModelId: config.defaultModelId,
-      utilityModelId: config.defaultModelId,
+      utilityModelId: migrated.some((m) => m.id === titleModelId) ? titleModelId! : config.defaultModelId,
     };
     await ctx.db.insert("platformCatalog", {
       ...catalog,

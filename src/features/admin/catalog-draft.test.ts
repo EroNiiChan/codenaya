@@ -212,6 +212,14 @@ describe("risky prices", () => {
     expect(riskyPriceModelIds(saved, [priced("ten", 4.99)])).toEqual(["ten"]);
   });
 
+  it("flags a big move in either split price even when the blend holds", () => {
+    const split = (inputUsdPerMTok: number, outputUsdPerMTok: number) => [
+      { id: "s", pricing: { mode: "split" as const, inputUsdPerMTok, outputUsdPerMTok } },
+    ];
+    expect(riskyPriceModelIds(split(4, 20), split(8, 8))).toEqual(["s"]); // both $8 blended
+    expect(riskyPriceModelIds(split(4, 20), split(5, 25))).toEqual([]);
+  });
+
   it("names the draft's risky models against the saved catalog, by blended price", () => {
     const saved = toSaveBody(draftOf([row({ id: "a", price: "8" }), row({ id: "b", price: "8" })]), false);
     const draft = draftOf([

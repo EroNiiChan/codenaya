@@ -131,6 +131,7 @@ describe("platformCatalog.save validation", () => {
     ["a price over $1000/M", [model("a", { pricing: { mode: "blended", usdPerMTok: 1001 } })], {}],
     ["a fractional context length", [model("a", { contextLength: 1.5 })], {}],
     ["an empty name", [model("a", { name: " " })], {}],
+    ["images on the Anthropic route", [model("a", { provider: "anthropic", vision: true })], {}],
     ["a default that isn't listed", [model("a")], { defaultModelId: "b" }],
     ["a hidden default", [model("a", { hidden: true }), model("b")], { utilityModelId: "b" }],
     [
@@ -392,6 +393,26 @@ describe("platformCatalog.migrateFromProviderConfigs", () => {
 
     expect(await migrate()).toBe("already migrated");
     expect(await auditRows(t)).toHaveLength(1);
+  });
+
+  test("keeps the provider's title model as the utility model, text-only on Anthropic", async () => {
+    const t = asAdmin();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("platformModelConfigs", {
+        provider: "anthropic",
+        models: [legacy("claude-sonnet-4-5", 3, 15), legacy("claude-haiku-4-5", 1, 5)],
+        defaultModelId: "claude-sonnet-4-5",
+        updatedAt: 1,
+        updatedBy: ADMIN.subject,
+      });
+    });
+
+    await t.mutation(internal.platformCatalog.migrateFromProviderConfigs, {
+      fallbackProvider: "anthropic",
+    });
+    const catalog = await t.query(api.platformCatalog.getForAdmin, {});
+    expect(catalog?.utilityModelId).toBe("claude-haiku-4-5");
+    expect(catalog?.models.some((m) => m.vision)).toBe(false);
   });
 
   test("seeds promo models only into the room a full selection leaves", async () => {
