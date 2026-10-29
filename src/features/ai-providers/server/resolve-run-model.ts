@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { convex } from "@/lib/convex-client";
+import {
+  CREDIT_REFUSAL_MESSAGES,
+  INSUFFICIENT_CREDITS_CODE,
+  type RunSource,
+  creditRefusal,
+} from "@/features/billing/credits";
+import { PLANS } from "@/features/billing/plans";
 import type { AgentModelChoice } from "@/features/conversations/agent-models";
 
 import {
@@ -11,7 +18,7 @@ import {
   promoRunRefusal,
 } from "@/features/promotions/github-promo";
 
-import { promoKindOf } from "../catalog";
+import { type ModelPricing, promoKindOf } from "../catalog";
 import {
   type PlatformProviderId,
   type RoutedModel,
@@ -92,7 +99,7 @@ export interface RunModelChoice {
 export class ModelChoiceError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 403 | 503,
+    readonly status: 400 | 402 | 403 | 503,
     readonly code?: string,
   ) {
     super(message);
@@ -121,7 +128,8 @@ const platformRunLabel = (model: RoutedModel) => runModelLabel({ id: model.id, l
  *
  * A promo model (ADR 0009) needs the caller's claim with a run left. The check
  * changes nothing; `promoKind` tells `takePromoRun` which run to take once the
- * send is known to go.
+ * send is known to go. Any other platform model needs credits left (ADR 0011);
+ * a run that starts with some may end past zero, and the next send is refused.
  */
 export async function validateModelChoice({
   internalKey,
@@ -136,7 +144,11 @@ export async function validateModelChoice({
 }): Promise<RunModelChoice & { promoKind?: PromoModelKind }> {
   const { keyId, modelId } = toChoice(model);
   if (!keyId) {
-    const model = resolveCatalogModel(await platformCatalog(internalKey), modelId);
+    const [catalog, account] = await Promise.all([
+      platformCatalog(internalKey),
+      convex.query(api.credits.getForServer, { internalKey, userId }),
+    ]);
+    const model = resolveCatalogModel(catalog, modelId);
     if (!isPlatformConfigured(model.provider)) {
       throw new ModelChoiceError(AI_NOT_CONFIGURED_MESSAGE, 503, "ai_not_configured");
     }
@@ -152,6 +164,10 @@ export async function validateModelChoice({
         throw promoRefused(refusal);
       }
       return { ...choice, promoKind };
+    }
+    const refusal = creditRefusal(PLANS[account?.plan ?? "free"], account, Date.now());
+    if (refusal) {
+      throw new ModelChoiceError(CREDIT_REFUSAL_MESSAGES[refusal], 402, INSUFFICIENT_CREDITS_CODE);
     }
     return choice;
   }
@@ -294,6 +310,11 @@ export interface RunModel {
    * as a step.
    */
   checkKey?: () => Promise<{ rejected: boolean }>;
+  /**
+   * Who pays (ADR 0011), and the catalog prices the run's usage is charged
+   * at. No price (the env catalog, BYOK) records tokens at $0.
+   */
+  metering: { source: RunSource; coding?: ModelPricing; title?: ModelPricing };
 }
 
 /**
@@ -336,6 +357,11 @@ export async function resolveRunModel({
     return {
       coding: (temperature) => platformAgentModel(model.provider, model.providerModelId, temperature),
       title: (temperature) => platformAgentModel(title.provider, title.providerModelId, temperature),
+      metering: {
+        source: promoKindOf(model.access) ? "promo" : "platform",
+        coding: model.pricing,
+        title: title.pricing,
+      },
     };
   }
 
@@ -391,6 +417,7 @@ export async function resolveRunModel({
     key: { _id: key._id, userId: key.userId, label: key.label },
     coding: (temperature) => build(choice.modelId, temperature),
     title: (temperature) => build(titleModel, temperature),
+    metering: { source: "byok" },
     // Only a definite refusal counts: an unreachable provider is left for the
     // inference itself to retry.
     checkKey: async () => {

@@ -43,6 +43,7 @@ import {
 import { modelAcceptsImages } from "@/features/ai-providers/registry";
 import { resolveCatalogModel } from "@/features/ai-providers/platform";
 import { detectCredential } from "@/features/integrations/credential-guard";
+import { INSUFFICIENT_CREDITS_CODE } from "@/features/billing/credits";
 import { isPromoRefusalCode } from "@/features/promotions/github-promo";
 import { useEditor } from "@/features/editor/hooks/use-editor";
 import { useFiles } from "@/features/projects/hooks/use-files";
@@ -281,9 +282,10 @@ export const ConversationSidebar = ({
           openIntegrations();
           return "blocked";
         }
-        // Platform AI has no key, or a promo model can't run (ADR 0009):
+        // Platform AI has no key, a promo model can't run (ADR 0009), or the
+        // user is out of credits (ADR 0011):
         // nothing was saved, so keep the draft.
-        if ((body.code === "ai_not_configured" || isPromoRefusalCode(body.code)) && body.error) {
+        if ((body.code === "ai_not_configured" || body.code === INSUFFICIENT_CREDITS_CODE || isPromoRefusalCode(body.code)) && body.error) {
           toast.error(body.error);
           return "blocked";
         }

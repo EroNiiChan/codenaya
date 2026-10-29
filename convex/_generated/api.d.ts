@@ -14,6 +14,7 @@ import type * as auth from "../auth.js";
 import type * as chatImages from "../chatImages.js";
 import type * as checkpoints from "../checkpoints.js";
 import type * as conversations from "../conversations.js";
+import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
 import type * as envVars from "../envVars.js";
 import type * as errors from "../errors.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   chatImages: typeof chatImages;
   checkpoints: typeof checkpoints;
   conversations: typeof conversations;
+  credits: typeof credits;
   crons: typeof crons;
   envVars: typeof envVars;
   errors: typeof errors;

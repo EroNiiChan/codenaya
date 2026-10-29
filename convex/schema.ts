@@ -101,6 +101,9 @@ export const catalogModelValidator = v.object({
  * run used the user's own key (BYOK), which is what billing reads to charge no
  * credits. `label` is the "provider · model" shown on the run block.
  */
+export const planIdValidator = v.union(v.literal("free"), v.literal("pro"));
+export const runSourceValidator = v.union(v.literal("platform"), v.literal("promo"), v.literal("byok"));
+
 export const runModelValidator = v.object({
   keyId: v.optional(v.id("aiProviderKeys")),
   modelId: v.string(),
@@ -538,6 +541,39 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_githubUserId", ["githubUserId"]),
+
+  /**
+   * A user's credit usage this month and today (ADR 0011). Created on the first
+   * metered run; none means nothing used. Periods reset lazily on the next read
+   * or charge (`currentUsage` in `features/billing/credits.ts`).
+   */
+  creditAccounts: defineTable({
+    userId: v.string(),
+    plan: planIdValidator,
+    periodStartsAt: v.number(),
+    periodUsed: v.number(),
+    dayStartsAt: v.number(),
+    dayUsed: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  /**
+   * One row per agent run: its running token and cost totals and the credits
+   * charged so far. Every run is recorded, BYOK and promo runs at 0 credits.
+   * Charges set totals rather than add to them, so a retried step is a no-op.
+   */
+  creditLedger: defineTable({
+    userId: v.string(),
+    messageId: v.id("messages"),
+    source: runSourceValidator,
+    model: v.string(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    costUsd: v.number(),
+    credits: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_messageId", ["messageId"])
+    .index("by_userId", ["userId"]),
 
   /** The user's default model. No `defaultKeyId` means the Codenaya platform key. */
   userAiPreferences: defineTable({

@@ -18,11 +18,15 @@ export type PlatformProviderId = (typeof PLATFORM_PROVIDER_IDS)[number];
 /** Today's behaviour, used when the env is unset or invalid. */
 export const DEFAULT_PLATFORM_PROVIDER: PlatformProviderId = "openrouter";
 
-/** A catalog model with its route, as platform runs resolve it. No price. */
+/**
+ * A catalog model with its route, as platform runs resolve it. `pricing` is
+ * set on a saved catalog and missing on the env's curated one.
+ */
 export type RoutedModel = Pick<
   CatalogModel,
   "id" | "name" | "vendor" | "vision" | "provider" | "providerModelId" | "access" | "hidden"
->;
+> &
+  Partial<Pick<CatalogModel, "pricing">>;
 
 /** The catalog the server routes platform runs with (`platformCatalog.getForServer`). */
 export interface RoutedCatalog {
