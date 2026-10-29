@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   mutation: vi.fn(),
   platform: vi.fn(),
+  account: vi.fn(),
   openProviderKey: vi.fn(),
   lookup: vi.fn(),
 }));
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/convex-client", async () => {
   const { withEnvPlatform } = await import("@/features/ai-providers/server/active-platform.mock");
   return {
-    convex: { query: withEnvPlatform(mocks.query, mocks.platform), mutation: mocks.mutation },
+    convex: { query: withEnvPlatform(mocks.query, mocks.platform, mocks.account), mutation: mocks.mutation },
   };
 });
 vi.mock("./sealed-key", () => ({ openProviderKey: mocks.openProviderKey }));
@@ -417,6 +418,51 @@ describe("validateModelChoice: promo models (ADR 0009)", () => {
   });
 });
 
+describe("validateModelChoice: credits (ADR 0011)", () => {
+  const validate = (model: Parameters<typeof validateModelChoice>[0]["model"]) =>
+    validateModelChoice({ internalKey: "ik", userId: "user_1", model });
+  const now = Date.now();
+  const startOfDay = new Date(now).setUTCHours(0, 0, 0, 0);
+  const startOfMonth = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+  const spentToday = { plan: "free", periodStartsAt: startOfMonth, periodUsed: 60, dayStartsAt: startOfDay, dayUsed: 60 };
+
+  beforeEach(() => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+  });
+
+  it("refuses a platform model with 402 insufficient_credits once today's cap is spent", async () => {
+    mocks.account.mockReturnValue(spentToday);
+
+    const { rejected } = await requireModelChoice({ internalKey: "ik", userId: "user_1", model: "x-ai/grok-4.7" });
+    expect(rejected?.status).toBe(402);
+    expect(await rejected?.json()).toMatchObject({
+      code: "insufficient_credits",
+      error: expect.stringContaining("today's free credits"),
+    });
+
+    mocks.account.mockReturnValue({ ...spentToday, periodUsed: 300 });
+    await expect(validate("x-ai/grok-4.7")).rejects.toMatchObject({
+      status: 402,
+      message: expect.stringContaining("this month's"),
+    });
+  });
+
+  it("lets a spent account run promo models and its own keys", async () => {
+    mocks.account.mockReturnValue(spentToday);
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
+    mocks.query.mockResolvedValue({ opusRunsUsed: 0 });
+    expect(await validate("anthropic/claude-sonnet-5.5")).toMatchObject({ promoKind: "sonnet" });
+
+    mocks.query.mockResolvedValue(openAiKey);
+    expect(await validate({ keyId: "key_1", modelId: "gpt-5.6-luna" })).toMatchObject({ keyId: "key_1" });
+  });
+
+  it("lets yesterday's spent cap run again", async () => {
+    mocks.account.mockReturnValue({ ...spentToday, dayStartsAt: startOfDay - 24 * 60 * 60 * 1000 });
+    expect(await validate("x-ai/grok-4.7")).toMatchObject({ modelId: "x-ai/grok-4.7" });
+  });
+});
+
 describe("takePromoRun (send routes, ADR 0009)", () => {
   const take = (promoKind?: "opus" | "sonnet") =>
     takePromoRun({ internalKey: "ik", userId: "user_1", promoKind });
@@ -542,6 +588,30 @@ describe("resolveRunModel (agent run)", () => {
       ProviderKeyError,
     );
     expect(target((await resolve({ modelId: "x-ai/grok-4.7" })).coding()).id).toBe("x-ai/grok-4.7");
+  });
+
+  it("meters platform runs at the catalog's prices, promo runs as promo, BYOK as byok", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    mocks.platform.mockReturnValue(ROUTED_SAVED);
+    expect((await resolve({ modelId: "x-ai/grok-4.7" })).metering).toEqual({
+      source: "platform",
+      coding: { mode: "blended", usdPerMTok: 1 },
+      title: { mode: "blended", usdPerMTok: 1 },
+    });
+
+    mocks.query.mockResolvedValue(true);
+    expect((await resolve({ modelId: "anthropic/claude-sonnet-5.5" })).metering.source).toBe("promo");
+
+    // The env catalog has no prices: tokens are recorded at $0.
+    mocks.platform.mockReturnValue(null);
+    expect((await resolve({ modelId: "x-ai/grok-4.7" })).metering).toEqual({
+      source: "platform",
+      coding: undefined,
+      title: undefined,
+    });
+
+    mocks.query.mockResolvedValue(openAiKey);
+    expect((await resolve({ keyId: "key_1", modelId: "gpt-5.6-luna" })).metering).toEqual({ source: "byok" });
   });
 
   it("runs a promo model for a project whose owner claimed", async () => {
