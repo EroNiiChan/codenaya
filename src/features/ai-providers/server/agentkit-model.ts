@@ -9,7 +9,9 @@ import { baseUrlFor, type AiProviderId } from "../registry";
  * so they share AgentKit's `openai()` adapter and differ only in `baseUrl`.
  * Anthropic gets its native adapter, which requires `max_tokens` on every
  * request and never gets `temperature`: current Claude models reject it with a
- * 400 (`temperature` is deprecated for this model).
+ * 400 (`temperature` is deprecated for this model). Its response parser is
+ * patched (patches/@inngest+agent-kit+*.patch) to skip `thinking` blocks it
+ * would crash on; drop the patch once AgentKit handles unknown block types.
  */
 
 /** Output cap for Anthropic, which has no default. Enough for large file writes. */
