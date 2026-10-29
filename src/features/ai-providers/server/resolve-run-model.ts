@@ -165,7 +165,10 @@ export async function validateModelChoice({
       }
       return { ...choice, promoKind };
     }
-    const refusal = creditRefusal(PLANS[account?.plan ?? "free"], account, Date.now());
+    // Usage is always recorded; the cap only applies once billing is live (#105).
+    const refusal =
+      process.env.CREDIT_LIMITS_ENFORCED === "true" &&
+      creditRefusal(PLANS[account?.plan ?? "free"], account, Date.now());
     if (refusal) {
       throw new ModelChoiceError(CREDIT_REFUSAL_MESSAGES[refusal], 402, INSUFFICIENT_CREDITS_CODE);
     }

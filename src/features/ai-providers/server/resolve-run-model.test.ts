@@ -428,6 +428,13 @@ describe("validateModelChoice: credits (ADR 0011)", () => {
 
   beforeEach(() => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-platform");
+    vi.stubEnv("CREDIT_LIMITS_ENFORCED", "true");
+  });
+
+  it("lets a spent account run while credit limits aren't enforced", async () => {
+    vi.stubEnv("CREDIT_LIMITS_ENFORCED", "");
+    mocks.account.mockReturnValue({ ...spentToday, periodUsed: 300 });
+    expect(await validate("x-ai/grok-4.7")).toMatchObject({ modelId: "x-ai/grok-4.7" });
   });
 
   it("refuses a platform model with 402 insufficient_credits once today's cap is spent", async () => {
