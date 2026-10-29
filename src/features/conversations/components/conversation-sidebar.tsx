@@ -39,10 +39,9 @@ import { useProjectIntegrations } from "@/features/integrations/components/proje
 import {
   useAiProviderKeys,
   usePlatformModelsOrCatalog,
-  usePromoModels,
 } from "@/features/ai-providers/hooks/use-ai-providers";
 import { modelAcceptsImages } from "@/features/ai-providers/registry";
-import { resolvePickableModel } from "@/features/ai-providers/platform";
+import { resolveCatalogModel } from "@/features/ai-providers/platform";
 import { detectCredential } from "@/features/integrations/credential-guard";
 import { isPromoRefusalCode } from "@/features/promotions/github-promo";
 import { useEditor } from "@/features/editor/hooks/use-editor";
@@ -108,11 +107,9 @@ export const ConversationSidebar = ({
   // A key still loading (or gone) is left to the server to check.
   const modelKeys = useAiProviderKeys();
   const platform = usePlatformModelsOrCatalog();
-  const promoModels = usePromoModels(platform) ?? [];
   const modelKey = modelKeys?.find((key) => key._id === agentModel.keyId);
   const acceptsImages = !agentModel.keyId
-    ? resolvePickableModel(platform.provider, platform.config, promoModels, agentModel.modelId)
-        .vision === true
+    ? resolveCatalogModel(platform, agentModel.modelId).vision
     : !modelKey || modelAcceptsImages(agentModel.modelId, modelKey);
   const [
     selectedConversationId,
