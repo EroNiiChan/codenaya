@@ -4,10 +4,24 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 export type BuildSignalStatus = "idle" | "building" | "done";
 
+export interface ActiveRun {
+  steps?: unknown[];
+  status?: "processing" | "completed" | "cancelled" | string;
+  _id?: string;
+}
+
 export const BUILD_SIGNAL_STORAGE_KEYS = {
   SOUND: "codenaya:build-sound-signal",
   NOTIFICATION: "codenaya:build-tab-notification",
 } as const;
+
+const PREFERENCES_CHANGE_EVENT = "codenaya:build-preferences-changed";
+
+const notifyPreferencesChanged = () => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(PREFERENCES_CHANGE_EVENT));
+  }
+};
 
 /**
  * Format document.title according to active run signal status.
@@ -21,14 +35,13 @@ export const formatBuildTitle = (
   return baseTitle;
 };
 
-// ─── Web Audio API Synthesizer with User Gesture Unlocking ─────────────
+// ─── Web Audio API Synthesizer with Proper Lifecycle & Unlock ──────────
 
 let sharedAudioContext: AudioContext | null = null;
-let isAudioUnlocked = false;
 
-const getAudioContext = (): AudioContext | null => {
+export const getAudioContext = (): AudioContext | null => {
   if (typeof window === "undefined") return null;
-  if (!sharedAudioContext) {
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })
@@ -40,24 +53,11 @@ const getAudioContext = (): AudioContext | null => {
   return sharedAudioContext;
 };
 
-/**
- * Unlocks AudioContext on initial user gesture (click, keydown, pointerdown).
- */
-const initAudioUnlockListener = () => {
-  if (typeof window === "undefined" || isAudioUnlocked) return;
-
-  const unlock = () => {
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-    isAudioUnlocked = true;
-    window.removeEventListener("pointerdown", unlock);
-    window.removeEventListener("keydown", unlock);
-  };
-
-  window.addEventListener("pointerdown", unlock, { passive: true });
-  window.addEventListener("keydown", unlock, { passive: true });
+export const closeAudioContext = () => {
+  if (sharedAudioContext && sharedAudioContext.state !== "closed") {
+    sharedAudioContext.close().catch(() => {});
+    sharedAudioContext = null;
+  }
 };
 
 /**
@@ -105,9 +105,10 @@ export const playBuildDoneChime = () => {
   }
 };
 
-// ─── Dynamic Canvas Favicon Badge ──────────────────────────────────────
+// ─── Dynamic Canvas Favicon Badge with Race-Condition Guard ────────────
 
 let originalFaviconHref: string | null = null;
+let faviconRequestId = 0;
 
 const getFaviconElement = (): HTMLLinkElement | null => {
   if (typeof document === "undefined") return null;
@@ -126,6 +127,8 @@ export const updateFaviconBadge = (status: BuildSignalStatus) => {
     originalFaviconHref = link.href;
   }
 
+  const currentRequestId = ++faviconRequestId;
+
   if (status === "idle") {
     if (originalFaviconHref) {
       link.href = originalFaviconHref;
@@ -136,6 +139,9 @@ export const updateFaviconBadge = (status: BuildSignalStatus) => {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
+    // Discard if another update was triggered while loading
+    if (currentRequestId !== faviconRequestId) return;
+
     try {
       const canvas = document.createElement("canvas");
       canvas.width = 32;
@@ -161,61 +167,96 @@ export const updateFaviconBadge = (status: BuildSignalStatus) => {
       ctx.fillStyle = dotColor;
       ctx.fill();
 
-      link.href = canvas.toDataURL("image/png");
+      if (currentRequestId === faviconRequestId) {
+        link.href = canvas.toDataURL("image/png");
+      }
     } catch {
       // Graceful fallback if canvas is tainted
     }
   };
+
+  img.onerror = () => {
+    if (currentRequestId === faviconRequestId && originalFaviconHref) {
+      link.href = originalFaviconHref;
+    }
+  };
+
   img.src = originalFaviconHref;
 };
 
-// ─── Preferences Hook ──────────────────────────────────────────────────
+// ─── Preferences Hook with Same-Tab and Cross-Tab Reactivity ───────────
 
 const subscribeToStorage = (callback: () => void) => {
   if (typeof window === "undefined") return () => {};
   window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
+  window.addEventListener(PREFERENCES_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(PREFERENCES_CHANGE_EVENT, callback);
+  };
+};
+
+const getSoundSnapshot = (): boolean => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.SOUND) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const getNotifSnapshot = (): boolean => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION) === "true";
+  } catch {
+    return false;
+  }
 };
 
 export const useBuildSignalPreferences = () => {
-  const isClient = useSyncExternalStore(
+  const soundEnabled = useSyncExternalStore(
     subscribeToStorage,
-    () => true,
+    getSoundSnapshot,
     () => false
   );
 
-  const [soundEnabled, setSoundEnabledState] = useState(false);
-  const [notifEnabled, setNotifEnabledState] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  const notifEnabled = useSyncExternalStore(
+    subscribeToStorage,
+    getNotifSnapshot,
+    () => false
+  );
+
+  const [permission, setPermission] = useState<
+    NotificationPermission | "unsupported"
+  >("default");
 
   useEffect(() => {
-    if (!isClient) return;
+    const updatePermission = () => {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setPermission(Notification.permission);
+      } else {
+        setPermission("unsupported");
+      }
+    };
 
-    try {
-      setSoundEnabledState(
-        localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.SOUND) === "true"
-      );
-      setNotifEnabledState(
-        localStorage.getItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION) === "true"
-      );
-    } catch {
-      // Ignore storage errors
-    }
+    updatePermission();
+    window.addEventListener("focus", updatePermission);
+    document.addEventListener("visibilitychange", updatePermission);
 
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setPermission(Notification.permission);
-    } else {
-      setPermission("unsupported");
-    }
-  }, [isClient]);
+    return () => {
+      window.removeEventListener("focus", updatePermission);
+      document.removeEventListener("visibilitychange", updatePermission);
+    };
+  }, []);
 
   const toggleSound = (enabled: boolean) => {
-    setSoundEnabledState(enabled);
     try {
       localStorage.setItem(
         BUILD_SIGNAL_STORAGE_KEYS.SOUND,
         enabled ? "true" : "false"
       );
+      notifyPreferencesChanged();
     } catch {
       // Ignore
     }
@@ -227,23 +268,31 @@ export const useBuildSignalPreferences = () => {
         const res = await Notification.requestPermission();
         setPermission(res);
         if (res !== "granted") {
-          setNotifEnabledState(false);
-          localStorage.setItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION, "false");
+          try {
+            localStorage.setItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION, "false");
+            notifyPreferencesChanged();
+          } catch {
+            // Ignore
+          }
           return;
         }
       } else if (Notification.permission === "denied") {
-        setNotifEnabledState(false);
-        localStorage.setItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION, "false");
+        try {
+          localStorage.setItem(BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION, "false");
+          notifyPreferencesChanged();
+        } catch {
+          // Ignore
+        }
         return;
       }
     }
 
-    setNotifEnabledState(enabled);
     try {
       localStorage.setItem(
         BUILD_SIGNAL_STORAGE_KEYS.NOTIFICATION,
         enabled ? "true" : "false"
       );
+      notifyPreferencesChanged();
     } catch {
       // Ignore
     }
@@ -262,7 +311,7 @@ export const useBuildSignalPreferences = () => {
 
 interface UseBuildSignalsProps {
   projectName?: string;
-  activeRun?: unknown;
+  activeRun?: ActiveRun | null;
   onOpenPreview?: () => void;
 }
 
@@ -273,12 +322,28 @@ export const useBuildSignals = ({
 }: UseBuildSignalsProps) => {
   const { soundEnabled, notifEnabled } = useBuildSignalPreferences();
   const [status, setStatus] = useState<BuildSignalStatus>("idle");
-  const prevRunRef = useRef<unknown>(activeRun);
+  const prevRunRef = useRef<ActiveRun | null | undefined>(activeRun);
   const baseTitleRef = useRef<string>("");
 
-  // Initialize AudioContext user gesture unlock
+  // Initialize AudioContext user gesture unlock with proper cleanup
   useEffect(() => {
-    initAudioUnlockListener();
+    if (typeof window === "undefined") return;
+
+    const unlock = () => {
+      const ctx = getAudioContext();
+      if (ctx && ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+    };
+
+    window.addEventListener("pointerdown", unlock, { passive: true, once: true });
+    window.addEventListener("keydown", unlock, { passive: true, once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      closeAudioContext();
+    };
   }, []);
 
   // Compute and update base document title
