@@ -118,18 +118,17 @@ function generateQRMatrix(text: string): boolean[][] {
   const encoder = new TextEncoder();
   const rawData = encoder.encode(text);
   const dataLen = rawData.length;
-  // Byte mode (4 bits) + Count (8 bits for V1-V9)
-  const bitsNeeded = 4 + 8 + dataLen * 8;
-
   let spec: QRVersionSpec | null = null;
   for (const s of QR_SPECS) {
+    const countBits = s.version >= 10 ? 16 : 8;
+    const bitsNeeded = 4 + countBits + dataLen * 8;
     if (s.totalDataBytes * 8 >= bitsNeeded + 4) {
       spec = s;
       break;
     }
   }
   if (!spec) {
-    throw new Error(`QR: Text exceeds maximum capacity (${dataLen} bytes)`);
+    return [];
   }
 
   const { version, totalDataBytes, ecPerBlock, numBlocks, alignPos } = spec;
@@ -137,7 +136,8 @@ function generateQRMatrix(text: string): boolean[][] {
 
   // 1. Bitstream generation
   const bits: number[] = [0, 1, 0, 0]; // Byte mode indicator
-  for (let i = 7; i >= 0; i--) {
+  const countBits = version >= 10 ? 16 : 8;
+  for (let i = countBits - 1; i >= 0; i--) {
     bits.push((dataLen >> i) & 1);
   }
   for (const b of rawData) {
@@ -172,22 +172,32 @@ function generateQRMatrix(text: string): boolean[][] {
     pIdx++;
   }
 
-  // 2. RS Error Correction per block
-  const blockDcCount = Math.floor(totalDataBytes / numBlocks);
+  // 2. RS Error Correction per block with uneven codeword distribution (ISO/IEC 18004)
+  const shortBlockLen = Math.floor(totalDataBytes / numBlocks);
+  const numLongBlocks = totalDataBytes % numBlocks;
+  const numShortBlocks = numBlocks - numLongBlocks;
+
   const blocksDc: number[][] = [];
   const blocksEc: number[][] = [];
+  let byteOffset = 0;
+
   for (let b = 0; b < numBlocks; b++) {
-    const bDc = dataBytes.slice(b * blockDcCount, (b + 1) * blockDcCount);
+    const bLen = b < numShortBlocks ? shortBlockLen : shortBlockLen + 1;
+    const bDc = dataBytes.slice(byteOffset, byteOffset + bLen);
+    byteOffset += bLen;
     const bEc = rsEncode(bDc, ecPerBlock);
     blocksDc.push(bDc);
     blocksEc.push(bEc);
   }
 
   // 3. Interleaving data and EC codewords
+  const maxDcCount = shortBlockLen + (numLongBlocks > 0 ? 1 : 0);
   const finalCodewords: number[] = [];
-  for (let i = 0; i < blockDcCount; i++) {
+  for (let i = 0; i < maxDcCount; i++) {
     for (let b = 0; b < numBlocks; b++) {
-      finalCodewords.push(blocksDc[b][i]);
+      if (i < blocksDc[b].length) {
+        finalCodewords.push(blocksDc[b][i]);
+      }
     }
   }
   for (let i = 0; i < ecPerBlock; i++) {
@@ -339,6 +349,17 @@ export const QRCode = ({
   const matrix = React.useMemo(() => generateQRMatrix(value), [value]);
   const matrixSize = matrix.length;
   const viewBoxSize = matrixSize + margin * 2;
+
+  if (matrixSize === 0) {
+    return (
+      <div
+        style={{ width: size, height: size }}
+        className={`flex items-center justify-center text-xs text-muted-foreground ${className ?? ""}`}
+      >
+        <span>URL too long for preview</span>
+      </div>
+    );
+  }
 
   const path = React.useMemo(() => {
     let d = \"\";
